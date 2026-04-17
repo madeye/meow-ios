@@ -38,21 +38,55 @@ struct VPhone {
 
     // MARK: Automation primitives (raw socket ops)
 
-    func tap(x: Int, y: Int) throws { fatalError("T-infra: implement when Tart image is baked") }
-    func tap(accessibilityId: String) throws { fatalError("T-infra") }
-    func text(accessibilityId: String) throws -> String { fatalError("T-infra") }
-    func swipe(from: (Int, Int), to: (Int, Int), durationMs: Int = 200) throws { fatalError("T-infra") }
-    func keys(_ text: String) throws { fatalError("T-infra") }
-    func clipboardSet(_ text: String) throws { fatalError("T-infra") }
-    func clipboardGet() throws -> String { fatalError("T-infra") }
-    func screenshot() throws -> Data { fatalError("T-infra") }
-    func homeButton() throws { fatalError("T-infra") }
-    func openURL(_ url: URL) throws { fatalError("T-infra") }
+    func tap(x _: Int, y _: Int) throws {
+        fatalError("T-infra: implement when Tart image is baked")
+    }
+
+    func tap(accessibilityId _: String) throws {
+        fatalError("T-infra")
+    }
+
+    func text(accessibilityId _: String) throws -> String {
+        fatalError("T-infra")
+    }
+
+    func swipe(from _: (Int, Int), to _: (Int, Int), durationMs _: Int = 200) throws {
+        fatalError("T-infra")
+    }
+
+    func keys(_: String) throws {
+        fatalError("T-infra")
+    }
+
+    func clipboardSet(_: String) throws {
+        fatalError("T-infra")
+    }
+
+    func clipboardGet() throws -> String {
+        fatalError("T-infra")
+    }
+
+    func screenshot() throws -> Data {
+        fatalError("T-infra")
+    }
+
+    func homeButton() throws {
+        fatalError("T-infra")
+    }
+
+    func openURL(_: URL) throws {
+        fatalError("T-infra")
+    }
 
     // MARK: Page objects (tests call these, not the primitives above)
 
-    var home: HomeScreen { HomeScreen(phone: self) }
-    var diagnostics: DiagnosticsScreen { DiagnosticsScreen(phone: self) }
+    var home: HomeScreen {
+        HomeScreen(phone: self)
+    }
+
+    var diagnostics: DiagnosticsScreen {
+        DiagnosticsScreen(phone: self)
+    }
 
     struct HomeScreen {
         let phone: VPhone
@@ -73,6 +107,7 @@ struct VPhone {
             static func group(_ groupName: String) -> String {
                 "home.group.\(groupName.identifierSlug)"
             }
+
             static func proxy(group groupName: String, proxy proxyName: String) -> String {
                 "home.proxy.\(groupName.identifierSlug).\(proxyName.identifierSlug)"
             }
@@ -125,17 +160,24 @@ struct VPhone {
             try phone.text(accessibilityId: AccessibilityID.profileName)
         }
 
-        func screenshot() throws -> Data { try phone.screenshot() }
+        func screenshot() throws -> Data {
+            try phone.screenshot()
+        }
     }
 
     struct DiagnosticsScreen {
         let phone: VPhone
-        func navigate() throws { fatalError("T2.6") }
-        func tapRun() throws { fatalError("T2.6") }
+        func navigate() throws {
+            fatalError("T2.6")
+        }
+
+        func tapRun() throws {
+            fatalError("T2.6")
+        }
 
         /// Returns one `Result` per PRD §4.4 check, in the fixed display order.
         /// Parser enforces the frozen `CHECK_NAME: PASS|FAIL(reason)` format.
-        func readResults(timeout: TimeInterval = 20) throws -> [DiagnosticsCheck: DiagnosticsResult] {
+        func readResults(timeout _: TimeInterval = 20) throws -> [DiagnosticsCheck: DiagnosticsResult] {
             fatalError("T2.6")
         }
     }
@@ -147,10 +189,10 @@ enum VPhoneError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .unexpectedStateBadgeText(let raw):
+        case let .unexpectedStateBadgeText(raw):
             let expected = VPhone.HomeScreen.ConnectionState.allCases.map(\.rawValue).joined(separator: "|")
             return "home.badge.state = \"\(raw)\", expected one of {\(expected)} (T4.2 spec)"
-        case .timedOutWaitingForState(let target, let t):
+        case let .timedOutWaitingForState(target, t):
             return "home.badge.state never reached \"\(target.rawValue)\" within \(t)s"
         }
     }

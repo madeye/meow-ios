@@ -65,11 +65,11 @@ struct LogsView: View {
 
     private func color(for type: String) -> Color {
         switch type.lowercased() {
-        case "debug": return .secondary
-        case "info": return .blue
-        case "warning": return .orange
-        case "error": return .red
-        default: return .primary
+        case "debug": .secondary
+        case "info": .blue
+        case "warning": .orange
+        case "error": .red
+        default: .primary
         }
     }
 }

@@ -22,7 +22,8 @@ final class URLProtocolStub: URLProtocol {
         init(statusCode: Int = 200,
              headers: [String: String] = ["Content-Type": "application/json"],
              body: Data = Data(),
-             error: Error? = nil) {
+             error: Error? = nil)
+        {
             self.statusCode = statusCode
             self.headers = headers
             self.body = body
@@ -33,15 +34,27 @@ final class URLProtocolStub: URLProtocol {
     /// Keyed by URL. Wildcards not supported — populate exact URLs per test.
     nonisolated(unsafe) static var responses: [URL: Response] = [:]
 
-    static func reset() { responses.removeAll() }
+    static func reset() {
+        responses.removeAll()
+    }
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    // swiftlint:disable static_over_final_class
+    // NSURLProtocol's canInit/canonicalRequest are class methods; overrides can't switch to static.
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    // swiftlint:enable static_over_final_class
 
     override func startLoading() {
         guard let url = request.url, let response = Self.responses[url] else {
+            let message = "No stub for \(request.url?.absoluteString ?? "nil")"
             let err = NSError(domain: "URLProtocolStub", code: 404,
-                              userInfo: [NSLocalizedDescriptionKey: "No stub for \(request.url?.absoluteString ?? "nil")"])
+                              userInfo: [NSLocalizedDescriptionKey: message])
             client?.urlProtocol(self, didFailWithError: err)
             return
         }

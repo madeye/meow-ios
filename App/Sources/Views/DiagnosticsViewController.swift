@@ -1,8 +1,8 @@
-import UIKit
-import SwiftUI
-import NetworkExtension
 import MeowIPC
 import MeowModels
+import NetworkExtension
+import SwiftUI
+import UIKit
 
 /// UIKit debug panel per PRD §4.4 Diagnostics Surface Contract. Rendered as
 /// a plain `UIViewController` with `UILabel` rows in a vertical stack — not
@@ -18,9 +18,12 @@ final class DiagnosticsViewController: UIViewController {
     private var rowLabels: [DiagnosticsCheck: UILabel] = [:]
     private var currentResults: [DiagnosticsCheck: DiagnosticsResult] = {
         var d: [DiagnosticsCheck: DiagnosticsResult] = [:]
-        for c in DiagnosticsCheck.allCases { d[c] = .fail(reason: "not_run") }
+        for c in DiagnosticsCheck.allCases {
+            d[c] = .fail(reason: "not_run")
+        }
         return d
     }()
+
     private var runButton: UIButton!
     private var isRunning = false
 
@@ -101,8 +104,8 @@ final class DiagnosticsViewController: UIViewController {
 
     private func formattedRow(for check: DiagnosticsCheck) -> String {
         switch currentResults[check] ?? .fail(reason: "missing") {
-        case .pass: return "\(check.rawValue): PASS"
-        case .fail(let reason): return "\(check.rawValue): FAIL(\(reason))"
+        case .pass: "\(check.rawValue): PASS"
+        case let .fail(reason): "\(check.rawValue): FAIL(\(reason))"
         }
     }
 }
@@ -118,7 +121,7 @@ enum DiagnosticsClient {
             dnsOk: .fail("tunnel_not_running"),
             tcpProxyOk: .fail("tunnel_not_running"),
             http204Ok: .fail("tunnel_not_running"),
-            memOk: .fail("tunnel_not_running")
+            memOk: .fail("tunnel_not_running"),
         )
 
         let managers: [NETunnelProviderManager]
@@ -150,8 +153,9 @@ enum DiagnosticsClient {
 /// SwiftUI bridge so the existing Settings Debug section can push to this
 /// view controller without the call-site needing to know about UIKit.
 struct DiagnosticsPanelView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> DiagnosticsViewController {
+    func makeUIViewController(context _: Context) -> DiagnosticsViewController {
         DiagnosticsViewController()
     }
-    func updateUIViewController(_ uiViewController: DiagnosticsViewController, context: Context) {}
+
+    func updateUIViewController(_: DiagnosticsViewController, context _: Context) {}
 }

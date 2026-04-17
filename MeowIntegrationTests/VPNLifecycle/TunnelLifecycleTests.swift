@@ -1,5 +1,5 @@
-import XCTest
 import NetworkExtension
+import XCTest
 
 /// Drives `NETunnelProviderManager` and observes `NEVPNStatusDidChange`.
 /// See TEST_STRATEGY §4.1 for the scenario matrix.
@@ -8,7 +8,7 @@ final class TunnelLifecycleTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testStartTunnelReachesConnectedWithin8s() async throws {
+    func testStartTunnelReachesConnectedWithin8s() throws {
         throw XCTSkip("blocked on T3.3 end-to-end config path")
         // let manager = try await loadManager()
         // try manager.connection.startVPNTunnel()
@@ -16,20 +16,20 @@ final class TunnelLifecycleTests: XCTestCase {
         // XCTAssertEqual(status, .connected)
     }
 
-    func testStopTunnelCleansUpTun() async throws {
+    func testStopTunnelCleansUpTun() throws {
         throw XCTSkip("blocked on T3.3")
         // after stop, `ifconfig` has no utun attributable to us
     }
 
-    func testMalformedConfigTransitionsToDisconnectedWithError() async throws {
+    func testMalformedConfigTransitionsToDisconnectedWithError() throws {
         throw XCTSkip("blocked on T3.3")
     }
 
-    func testAppForceQuitPreservesExtensionSession() async throws {
+    func testAppForceQuitPreservesExtensionSession() throws {
         throw XCTSkip("manual test — requires separate app process")
     }
 
-    func testReconnectAfterSleepWakeWithin10s() async throws {
+    func testReconnectAfterSleepWakeWithin10s() throws {
         throw XCTSkip("manual test — requires device sleep cycle")
     }
 }

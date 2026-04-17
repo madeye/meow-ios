@@ -13,9 +13,9 @@ final class MihomoAPI: @unchecked Sendable {
     init(
         port: Int = 9090,
         secret: String = "",
-        session: URLSession = .shared
+        session: URLSession = .shared,
     ) {
-        self.baseURL = URL(string: "http://127.0.0.1:\(port)")!
+        baseURL = URL(string: "http://127.0.0.1:\(port)")!
         self.secret = secret
         self.session = session
     }
@@ -32,7 +32,8 @@ final class MihomoAPI: @unchecked Sendable {
 
     func testDelay(proxy: String, url: String, timeout: Int = 5000) async throws -> Int {
         struct Resp: Decodable { let delay: Int? }
-        var comps = URLComponents(url: baseURL.appending(path: "/proxies/\(proxy.urlEscaped)/delay"), resolvingAgainstBaseURL: false)!
+        let endpoint = baseURL.appending(path: "/proxies/\(proxy.urlEscaped)/delay")
+        var comps = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             .init(name: "url", value: url),
             .init(name: "timeout", value: String(timeout)),
@@ -91,7 +92,8 @@ final class MihomoAPI: @unchecked Sendable {
                     while !Task.isCancelled {
                         let msg = try await ws.receive()
                         if case let .string(s) = msg,
-                           let entry = LogEntry.from(jsonString: s) {
+                           let entry = LogEntry.from(jsonString: s)
+                        {
                             continuation.yield(entry)
                         }
                     }
@@ -129,7 +131,7 @@ final class MihomoAPI: @unchecked Sendable {
         try throwIfHTTPError(resp)
     }
 
-    private func patchJSON<T: Encodable>(_ path: String, body: T) async throws {
+    private func patchJSON(_ path: String, body: some Encodable) async throws {
         var req = request(for: baseURL.appending(path: path))
         req.httpMethod = "PATCH"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -148,7 +150,7 @@ final class MihomoAPI: @unchecked Sendable {
 
     private func throwIfHTTPError(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { return }
-        guard (200..<300).contains(http.statusCode) else {
+        guard (200 ..< 300).contains(http.statusCode) else {
             throw MihomoAPIError.http(status: http.statusCode)
         }
     }

@@ -12,7 +12,9 @@ public enum DiagnosticsIPC {
     /// Encodes a "please run diagnostics" request as a single-byte tag so the
     /// extension can dispatch without instantiating a codec just for this one
     /// control plane.
-    public static func encodeRequest() -> Data { Data([messageTag]) }
+    public static func encodeRequest() -> Data {
+        Data([messageTag])
+    }
 
     public static func isRequest(_ data: Data) -> Bool {
         data.count == 1 && data[0] == messageTag
@@ -42,7 +44,7 @@ public struct DiagnosticsReport: Codable, Sendable {
         dnsOk: DiagnosticsResultWire,
         tcpProxyOk: DiagnosticsResultWire,
         http204Ok: DiagnosticsResultWire,
-        memOk: DiagnosticsResultWire
+        memOk: DiagnosticsResultWire,
     ) {
         self.tunExists = tunExists
         self.dnsOk = dnsOk

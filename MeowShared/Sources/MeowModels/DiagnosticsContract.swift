@@ -1,25 +1,25 @@
 import Foundation
 
-/// PRD v1.2 §4.4 "Diagnostics Surface Contract" — the OCR-stable text
-/// format used by the Debug Diagnostics Panel (T2.6) and consumed by
-/// the vphone-cli nightly E2E harness (TEST_STRATEGY v1.2 §7).
-///
-/// This file is the single source of truth. All three consumers —
-/// the panel's UIViewController (renders labels), the XCUITest
-/// assertions (`MeowUITests/Flows/E2E5CheckGateTests`), and the OCR
-/// helper (`scripts/assert-ocr.py`, which reads `rawValue` via a
-/// generated header) — must reference these types, not literal
-/// strings. Renaming any case here breaks the build, which is the
-/// point.
+// PRD v1.2 §4.4 "Diagnostics Surface Contract" — the OCR-stable text
+// format used by the Debug Diagnostics Panel (T2.6) and consumed by
+// the vphone-cli nightly E2E harness (TEST_STRATEGY v1.2 §7).
+//
+// This file is the single source of truth. All three consumers —
+// the panel's UIViewController (renders labels), the XCUITest
+// assertions (`MeowUITests/Flows/E2E5CheckGateTests`), and the OCR
+// helper (`scripts/assert-ocr.py`, which reads `rawValue` via a
+// generated header) — must reference these types, not literal
+// strings. Renaming any case here breaks the build, which is the
+// point.
 
 /// Fixed ASCII label keys. Display order equals declaration order and
 /// must match the PRD §4.4 table.
 public enum DiagnosticsCheck: String, CaseIterable, Sendable {
-    case tunExists    = "TUN_EXISTS"
-    case dnsOk        = "DNS_OK"
-    case tcpProxyOk   = "TCP_PROXY_OK"
-    case http204Ok    = "HTTP_204_OK"
-    case memOk        = "MEM_OK"
+    case tunExists = "TUN_EXISTS"
+    case dnsOk = "DNS_OK"
+    case tcpProxyOk = "TCP_PROXY_OK"
+    case http204Ok = "HTTP_204_OK"
+    case memOk = "MEM_OK"
 }
 
 /// Parsed result of one diagnostics row.
@@ -71,7 +71,7 @@ public enum DiagnosticsLabelParser {
 
             if valueStr == "PASS" {
                 out[key] = .pass
-            } else if valueStr.hasPrefix("FAIL(") && valueStr.hasSuffix(")") {
+            } else if valueStr.hasPrefix("FAIL("), valueStr.hasSuffix(")") {
                 let reason = String(valueStr.dropFirst("FAIL(".count).dropLast())
                 out[key] = .fail(reason: reason)
             } else {
@@ -89,10 +89,9 @@ public enum DiagnosticsLabelParser {
     /// unit tests.
     public static func render(_ results: [DiagnosticsCheck: DiagnosticsResult]) -> String {
         DiagnosticsCheck.allCases.map { check in
-            let value: String
-            switch results[check] ?? .fail(reason: "missing") {
-            case .pass: value = "PASS"
-            case .fail(let reason): value = "FAIL(\(reason))"
+            let value = switch results[check] ?? .fail(reason: "missing") {
+            case .pass: "PASS"
+            case let .fail(reason): "FAIL(\(reason))"
             }
             return "\(check.rawValue): \(value)"
         }.joined(separator: "\n")

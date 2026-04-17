@@ -1,5 +1,5 @@
-import Testing
 import Foundation
+import Testing
 
 /// Exercises the Rust tun2socks bridge through the C ABI: start/stop
 /// lifecycle, ingest return codes, and the Swift-owned egress callback.
@@ -16,9 +16,8 @@ import Foundation
 /// `meow_tun_*` are process-global singletons.
 @Suite("tun2socks bridge", .tags(.tunBridge), .serialized)
 struct TunBridgeTests {
-
-    @Test("tun_start attaches a Swift callback and tun_stop unwinds cleanly")
-    func startStopLifecycle() throws {
+    @Test
+    func `tun_start attaches a Swift callback and tun_stop unwinds cleanly`() throws {
         let fixture = try EngineFixture.make()
         defer { fixture.cleanup() }
         try bootEngine(fixture)
@@ -36,14 +35,14 @@ struct TunBridgeTests {
         meow_tun_stop()
     }
 
-    @Test("tun_stop is a no-op when called before any tun_start")
-    func stopIdempotentBeforeStart() {
+    @Test
+    func `tun_stop is a no-op when called before any tun_start`() {
         meow_tun_stop()
         meow_tun_stop()
     }
 
-    @Test("tun_ingest returns -1 while tun2socks is stopped")
-    func ingestBeforeStartReturnsError() {
+    @Test
+    func `tun_ingest returns -1 while tun2socks is stopped`() {
         meow_tun_stop()
         let packet = minimalIPv4UDP()
         let rc = packet.withUnsafeBufferPointer { buf -> Int32 in
@@ -52,8 +51,8 @@ struct TunBridgeTests {
         #expect(rc == -1)
     }
 
-    @Test("tun_ingest queues a well-formed IP packet when tun2socks is running")
-    func ingestWithTunRunning() throws {
+    @Test
+    func `tun_ingest queues a well-formed IP packet when tun2socks is running`() throws {
         let fixture = try EngineFixture.make()
         defer { fixture.cleanup() }
         try bootEngine(fixture)
@@ -72,8 +71,8 @@ struct TunBridgeTests {
         #expect(rc == 0)
     }
 
-    @Test("tun_start → tun_stop → tun_start allows a clean restart cycle")
-    func restartCycle() throws {
+    @Test
+    func `tun_start → tun_stop → tun_start allows a clean restart cycle`() throws {
         let fixture = try EngineFixture.make()
         defer { fixture.cleanup() }
         try bootEngine(fixture)
@@ -116,7 +115,7 @@ private final class EgressSink: @unchecked Sendable {
 private let tunEgressCallback: @convention(c) (
     UnsafeMutableRawPointer?,
     UnsafePointer<UInt8>?,
-    UInt
+    UInt,
 ) -> Void = { ctx, data, len in
     guard let ctx, data != nil, len > 0 else { return }
     Unmanaged<EgressSink>.fromOpaque(ctx).takeUnretainedValue().record()

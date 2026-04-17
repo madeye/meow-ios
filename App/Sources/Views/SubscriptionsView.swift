@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct SubscriptionsView: View {
     @Environment(SubscriptionService.self) private var service

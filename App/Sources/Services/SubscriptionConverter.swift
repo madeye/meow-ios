@@ -11,7 +11,7 @@ protocol SubscriptionConverter: Sendable {
 /// Default converter: forwards the body to the Rust FFI.
 struct ClashYAMLConverter: SubscriptionConverter {
     func convert(_ body: Data) async throws -> String {
-        return try body.withUnsafeBytes { raw -> String in
+        try body.withUnsafeBytes { raw -> String in
             guard let base = raw.baseAddress else {
                 throw SubscriptionError.decodeFailed
             }

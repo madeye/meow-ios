@@ -1,0 +1,7 @@
+--swiftversion 6.2
+
+--exclude .build
+--exclude build
+--exclude MeowShared/.build
+--exclude MeowShared/.swiftpm
+--exclude MeowCore/Frameworks

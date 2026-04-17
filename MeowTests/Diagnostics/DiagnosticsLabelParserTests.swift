@@ -1,5 +1,5 @@
-import Testing
 import MeowModels
+import Testing
 
 /// Unit tests for the PRD §4.4 Diagnostics Surface Contract parser.
 ///
@@ -10,9 +10,8 @@ import MeowModels
 /// rows) fails the parser before it reaches the nightly gate.
 @Suite("PRD §4.4 diagnostics label parser")
 struct DiagnosticsLabelParserTests {
-
-    @Test("accepts all-PASS in canonical order")
-    func allPassCanonical() throws {
+    @Test
+    func `accepts all-PASS in canonical order`() throws {
         let input = """
         TUN_EXISTS: PASS
         DNS_OK: PASS
@@ -27,8 +26,8 @@ struct DiagnosticsLabelParserTests {
         }
     }
 
-    @Test("parses FAIL(<reason>) with ASCII reason")
-    func failWithReason() throws {
+    @Test
+    func `parses FAIL(<reason>) with ASCII reason`() throws {
         let input = """
         TUN_EXISTS: PASS
         DNS_OK: FAIL(timeout)
@@ -44,8 +43,8 @@ struct DiagnosticsLabelParserTests {
         #expect(results[.memOk] == .fail(reason: "mem=17mb>=15mb"))
     }
 
-    @Test("rejects missing keys — gate must not pass on partial output")
-    func missingKeyFails() {
+    @Test
+    func `rejects missing keys — gate must not pass on partial output`() {
         let input = """
         TUN_EXISTS: PASS
         DNS_OK: PASS
@@ -57,8 +56,8 @@ struct DiagnosticsLabelParserTests {
         }
     }
 
-    @Test("rejects unknown key — Dev must not silently add a 6th row")
-    func unknownKeyFails() {
+    @Test
+    func `rejects unknown key — Dev must not silently add a 6th row`() {
         let input = """
         TUN_EXISTS: PASS
         DNS_OK: PASS
@@ -72,8 +71,8 @@ struct DiagnosticsLabelParserTests {
         }
     }
 
-    @Test("rejects localised PASS — label must stay ASCII uppercase")
-    func localisedPassFails() {
+    @Test
+    func `rejects localised PASS — label must stay ASCII uppercase`() {
         let input = """
         TUN_EXISTS: Pass
         DNS_OK: PASS
@@ -86,8 +85,8 @@ struct DiagnosticsLabelParserTests {
         }
     }
 
-    @Test("rejects emoji-adorned key — label prefix must be ASCII only")
-    func emojiKeyFails() {
+    @Test
+    func `rejects emoji-adorned key — label prefix must be ASCII only`() {
         let input = """
         ✅TUN_EXISTS: PASS
         DNS_OK: PASS
@@ -100,8 +99,8 @@ struct DiagnosticsLabelParserTests {
         }
     }
 
-    @Test("rejects duplicate key")
-    func duplicateKeyFails() {
+    @Test
+    func `rejects duplicate key`() {
         let input = """
         TUN_EXISTS: PASS
         TUN_EXISTS: FAIL(engine_not_running)
@@ -115,8 +114,8 @@ struct DiagnosticsLabelParserTests {
         }
     }
 
-    @Test("tolerates trailing whitespace on a row")
-    func trailingWhitespaceTolerated() throws {
+    @Test
+    func `tolerates trailing whitespace on a row`() throws {
         let input = "TUN_EXISTS: PASS   \nDNS_OK: PASS\nTCP_PROXY_OK: PASS\nHTTP_204_OK: PASS\nMEM_OK: PASS"
         let results = try DiagnosticsLabelParser.parse(input)
         #expect(results[.tunExists] == .pass)

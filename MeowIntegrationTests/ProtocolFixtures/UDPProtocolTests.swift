@@ -1,5 +1,5 @@
-import Testing
 import Foundation
+import Testing
 
 /// End-to-end assertions for the three UDP-backed protocols in the
 /// §6.3 protocol matrix: WireGuard, Hysteria2, TUIC. Each one exercises
@@ -27,82 +27,72 @@ import Foundation
 /// `.serialized` is required — the engine is a process singleton.
 @Suite("UDP-backed protocol fixtures", .tags(.udpProtocols), .serialized)
 struct UDPProtocolTests {
-
     // MARK: WireGuard
 
     @Test(
-        "WireGuard: Noise IK handshake completes against wireguard-go fixture",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func wireguardHandshake() throws {
+    func `WireGuard: Noise IK handshake completes against wireguard-go fixture`() throws {
         try drive(proxy: "meow-fixture-wg", assertion: .handshake)
     }
 
     @Test(
-        "WireGuard: HTTP 204 round-trip through tunnel",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func wireguardHTTP204() throws {
+    func `WireGuard: HTTP 204 round-trip through tunnel`() throws {
         try drive(proxy: "meow-fixture-wg", assertion: .http204)
     }
 
     @Test(
-        "WireGuard: DoH resolves via engine, not system resolver",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func wireguardDNS() throws {
+    func `WireGuard: DoH resolves via engine, not system resolver`() throws {
         try drive(proxy: "meow-fixture-wg", assertion: .dohThroughTunnel)
     }
 
     // MARK: Hysteria2
 
     @Test(
-        "Hysteria2: QUIC + password auth completes",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func hysteria2Handshake() throws {
+    func `Hysteria2: QUIC + password auth completes`() throws {
         try drive(proxy: "meow-fixture-hy2", assertion: .handshake)
     }
 
     @Test(
-        "Hysteria2: HTTP 204 round-trip through tunnel",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func hysteria2HTTP204() throws {
+    func `Hysteria2: HTTP 204 round-trip through tunnel`() throws {
         try drive(proxy: "meow-fixture-hy2", assertion: .http204)
     }
 
     @Test(
-        "Hysteria2: DoH resolves via engine, not system resolver",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func hysteria2DNS() throws {
+    func `Hysteria2: DoH resolves via engine, not system resolver`() throws {
         try drive(proxy: "meow-fixture-hy2", assertion: .dohThroughTunnel)
     }
 
     // MARK: TUIC
 
     @Test(
-        "TUIC: UUID+password auth over QUIC completes",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func tuicHandshake() throws {
+    func `TUIC: UUID+password auth over QUIC completes`() throws {
         try drive(proxy: "meow-fixture-tuic", assertion: .handshake)
     }
 
     @Test(
-        "TUIC: HTTP 204 round-trip through tunnel",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func tuicHTTP204() throws {
+    func `TUIC: HTTP 204 round-trip through tunnel`() throws {
         try drive(proxy: "meow-fixture-tuic", assertion: .http204)
     }
 
     @Test(
-        "TUIC: DoH resolves via engine, not system resolver",
-        .disabled("blocked on T2.9")
+        .disabled("blocked on T2.9"),
     )
-    func tuicDNS() throws {
+    func `TUIC: DoH resolves via engine, not system resolver`() throws {
         try drive(proxy: "meow-fixture-tuic", assertion: .dohThroughTunnel)
     }
 }
@@ -120,6 +110,6 @@ private enum FixtureAssertion {
     case dohThroughTunnel
 }
 
-private func drive(proxy: String, assertion: FixtureAssertion) throws {
+private func drive(proxy _: String, assertion _: FixtureAssertion) throws {
     Issue.record("drive(proxy:assertion:) not implemented — test should be skipped via .disabled until T2.9")
 }

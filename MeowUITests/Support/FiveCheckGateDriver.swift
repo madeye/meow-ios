@@ -76,7 +76,7 @@ struct FiveCheckGateDriver {
         subscriptionDeepLink: URL,
         navigateToDiagnostics: @escaping NavigateToDiagnostics = FiveCheckGateDriver.defaultNavigateToDiagnostics,
         connectTimeout: TimeInterval = 10,
-        diagnosticsReadTimeout: TimeInterval = 20
+        diagnosticsReadTimeout: TimeInterval = 20,
     ) {
         self.phone = phone
         self.subscriptionDeepLink = subscriptionDeepLink
@@ -92,13 +92,13 @@ struct FiveCheckGateDriver {
 
         var description: String {
             switch self {
-            case .stillNotRunning(let t):
+            case let .stillNotRunning(t):
                 return "is_running did not reach 1 within \(t)s after connect()"
-            case .diagnosticsUnreadable(let underlying):
+            case let .diagnosticsUnreadable(underlying):
                 return "diagnostics panel unreadable: \(underlying)"
-            case .rowsFailed(let rows):
+            case let .rowsFailed(rows):
                 let failed = rows
-                    .filter { if case .pass = $0.value { return false } else { return true } }
+                    .filter { if case .pass = $0.value { false } else { true } }
                     .map { "\($0.key.rawValue)=\($0.value)" }
                     .sorted()
                     .joined(separator: ", ")

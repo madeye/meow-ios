@@ -15,7 +15,7 @@ enum AppModelContainer {
                 "meow",
                 schema: schema,
                 url: url,
-                cloudKitDatabase: .none
+                cloudKitDatabase: .none,
             )
             let container = try ModelContainer(for: schema, configurations: config)
             return Holder(container: container)

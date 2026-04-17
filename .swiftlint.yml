@@ -1,0 +1,40 @@
+included:
+  - App
+  - PacketTunnel
+  - MeowShared/Sources
+  - MeowShared/Tests
+  - MeowCore/Sources
+  - MeowTests
+  - MeowIntegrationTests
+
+excluded:
+  - .build
+  - build
+  - MeowShared/.build
+  - MeowShared/.swiftpm
+
+disabled_rules:
+  # TODO comments are tracked markers (e.g. "TODO: replace once T4.1 lands").
+  - todo
+  # SwiftFormat owns brace + trailing-comma style; keeping both linters enabled
+  # on these rules produces contradictory diagnostics.
+  - trailing_comma
+  - opening_brace
+
+identifier_name:
+  min_length:
+    warning: 1
+    error: 1
+  excluded:
+    - id
+  # Swift Testing uses backticked natural-language test names starting with
+  # uppercase (e.g. `WireGuard: handshake completes`). Not a style violation.
+  validates_start_with_lowercase: off
+
+file_length:
+  warning: 600
+  error: 800
+
+type_body_length:
+  warning: 300
+  error: 400

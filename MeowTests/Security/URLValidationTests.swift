@@ -1,38 +1,37 @@
-import Testing
 import Foundation
+import Testing
 
 /// Subscription URL ingress validator. Ship-blocker: must reject any scheme
 /// outside http(s).
 @Suite("Subscription URL validator", .tags(.security))
 struct URLValidationTests {
-
-    @Test("accepts https URLs", .disabled("blocked on validator implementation"))
-    func testAcceptsHttps() {
+    @Test(.disabled("blocked on validator implementation"))
+    func `accepts https URLs`() {
         // #expect(SubscriptionURL.validate("https://example.com/sub") == .valid)
     }
 
-    @Test("accepts http URLs with warning", .disabled("blocked on validator"))
-    func testAcceptsHttpWithWarning() {
+    @Test(.disabled("blocked on validator"))
+    func `accepts http URLs with warning`() {
         // #expect(SubscriptionURL.validate("http://example.com") == .insecureHttp)
     }
 
-    @Test("rejects file:// scheme", .disabled("blocked on validator"))
-    func testRejectsFile() {
+    @Test(.disabled("blocked on validator"))
+    func `rejects file:// scheme`() {
         // #expect(SubscriptionURL.validate("file:///etc/passwd") == .unsupportedScheme)
     }
 
-    @Test("rejects javascript: scheme", .disabled("blocked on validator"))
-    func testRejectsJavascript() {
+    @Test(.disabled("blocked on validator"))
+    func `rejects javascript: scheme`() {
         // ship-blocker
     }
 
-    @Test("rejects data: scheme", .disabled("blocked on validator"))
-    func testRejectsData() {
+    @Test(.disabled("blocked on validator"))
+    func `rejects data: scheme`() {
         // ship-blocker — would let base64-smuggled payloads bypass controls
     }
 
-    @Test("rejects malformed URL strings", .disabled("blocked on validator"))
-    func testRejectsMalformed() {
+    @Test(.disabled("blocked on validator"))
+    func `rejects malformed URL strings`() {
         // "not a url", "", " " all rejected
     }
 }

@@ -1,13 +1,12 @@
-import Testing
 import Foundation
-import Yams
 @testable import MeowModels
+import Testing
+import Yams
 
 @Suite("EffectiveConfigWriter")
 struct EffectiveConfigWriterTests {
-
-    @Test("strips dns and subscriptions top-level blocks")
-    func stripsManagedBlocks() throws {
+    @Test
+    func `strips dns and subscriptions top-level blocks`() throws {
         let source = """
         dns:
           enable: true
@@ -29,8 +28,8 @@ struct EffectiveConfigWriterTests {
         #expect(out.contains("proxies:"))
     }
 
-    @Test("pins mixed-port from preferences")
-    func pinsMixedPort() throws {
+    @Test
+    func `pins mixed-port from preferences`() throws {
         let source = "proxies: []\n"
         var prefs = Preferences()
         prefs.mixedPort = 17890
@@ -39,8 +38,8 @@ struct EffectiveConfigWriterTests {
         #expect(parsed?["mixed-port"] as? Int == 17890)
     }
 
-    @Test("defaults mixed-port to 7890 when preference is zero")
-    func defaultsMixedPortWhenZero() throws {
+    @Test
+    func `defaults mixed-port to 7890 when preference is zero`() throws {
         var prefs = Preferences()
         prefs.mixedPort = 0
         let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: prefs)
@@ -48,15 +47,15 @@ struct EffectiveConfigWriterTests {
         #expect(parsed?["mixed-port"] as? Int == 7890)
     }
 
-    @Test("pins external-controller to loopback:9090")
-    func pinsExternalController() throws {
+    @Test
+    func `pins external-controller to loopback:9090`() throws {
         let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: Preferences())
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["external-controller"] as? String == "127.0.0.1:9090")
     }
 
-    @Test("injects geox-url when missing")
-    func injectsGeoXURLWhenMissing() throws {
+    @Test
+    func `injects geox-url when missing`() throws {
         let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: Preferences())
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         let geo = parsed?["geox-url"] as? [String: String]
@@ -65,8 +64,8 @@ struct EffectiveConfigWriterTests {
         #expect(geo?["mmdb"]?.contains("country.mmdb") == true)
     }
 
-    @Test("preserves user-supplied geox-url")
-    func preservesUserGeoXURL() throws {
+    @Test
+    func `preserves user-supplied geox-url`() throws {
         let source = """
         proxies: []
         geox-url:
@@ -81,16 +80,16 @@ struct EffectiveConfigWriterTests {
         #expect(geo?["geosite"] == "https://example.com/custom.dat")
     }
 
-    @Test("empty source yields minimal effective config")
-    func emptySource() throws {
+    @Test
+    func `empty source yields minimal effective config`() throws {
         let out = try EffectiveConfigWriter.patch(sourceYAML: "", prefs: Preferences())
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["mixed-port"] as? Int == 7890)
         #expect(parsed?["external-controller"] as? String == "127.0.0.1:9090")
     }
 
-    @Test("overrides existing mixed-port and external-controller")
-    func overridesExistingSettings() throws {
+    @Test
+    func `overrides existing mixed-port and external-controller`() throws {
         let source = """
         mixed-port: 1080
         external-controller: 10.0.0.1:9999
@@ -102,8 +101,8 @@ struct EffectiveConfigWriterTests {
         #expect(parsed?["external-controller"] as? String == "127.0.0.1:9090")
     }
 
-    @Test("write() persists effective config to destination")
-    func writeToDestination() throws {
+    @Test
+    func `write() persists effective config to destination`() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appending(path: "effective-test-\(UUID().uuidString).yaml")
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -111,7 +110,7 @@ struct EffectiveConfigWriterTests {
         try EffectiveConfigWriter.write(
             sourceYAML: "proxies: []\n",
             to: tmp,
-            prefs: Preferences()
+            prefs: Preferences(),
         )
         let written = try String(contentsOf: tmp, encoding: .utf8)
         let parsed = try Yams.load(yaml: written) as? [String: Any]

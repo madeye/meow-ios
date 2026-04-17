@@ -1,8 +1,8 @@
 import Foundation
-import NetworkExtension
-import Observation
 import MeowIPC
 import MeowModels
+import NetworkExtension
+import Observation
 
 /// Thin wrapper around `NETunnelProviderManager` that the UI observes for
 /// connect/disconnect and the current `VpnStage`.
@@ -15,7 +15,7 @@ final class VpnManager {
     // nonisolated(unsafe): written only from attach() on MainActor, read from
     // deinit (which is nonisolated). NotificationCenter.removeObserver is
     // thread-safe, so a torn read here is harmless.
-    nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
+    private nonisolated(unsafe) var statusObserver: NSObjectProtocol?
 
     deinit {
         if let statusObserver {
@@ -71,13 +71,13 @@ final class VpnManager {
     }
 
     private func attach(_ mgr: NETunnelProviderManager) {
-        self.manager = mgr
-        self.stage = map(mgr.connection.status)
+        manager = mgr
+        stage = map(mgr.connection.status)
         if let statusObserver { NotificationCenter.default.removeObserver(statusObserver) }
         statusObserver = NotificationCenter.default.addObserver(
             forName: .NEVPNStatusDidChange,
             object: mgr.connection,
-            queue: .main
+            queue: .main,
         ) { [weak self] _ in
             guard let self else { return }
             let status = mgr.connection.status

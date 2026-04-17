@@ -1,12 +1,12 @@
-import Testing
 import Foundation
 @testable import MeowModels
+import Testing
 
 @Suite("Preferences round-trip")
 struct PreferencesTests {
-    @Test("defaults are applied when keys are missing")
-    func testDefaults() {
-        let defaults = UserDefaults(suiteName: "preferences-test-defaults")!
+    @Test
+    func `defaults are applied when keys are missing`() throws {
+        let defaults = try #require(UserDefaults(suiteName: "preferences-test-defaults"))
         defaults.removePersistentDomain(forName: "preferences-test-defaults")
         let prefs = Preferences.load(from: defaults)
         #expect(prefs.mixedPort == PreferenceDefaults.mixedPort)
@@ -14,9 +14,9 @@ struct PreferencesTests {
         #expect(prefs.allowLan == false)
     }
 
-    @Test("save then load preserves values")
-    func testRoundTrip() {
-        let defaults = UserDefaults(suiteName: "preferences-test-rt")!
+    @Test
+    func `save then load preserves values`() throws {
+        let defaults = try #require(UserDefaults(suiteName: "preferences-test-rt"))
         defaults.removePersistentDomain(forName: "preferences-test-rt")
         var prefs = Preferences()
         prefs.mixedPort = 9999

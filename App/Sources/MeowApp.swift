@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import MeowModels
+import SwiftData
+import SwiftUI
 
 @main
 struct MeowApp: App {

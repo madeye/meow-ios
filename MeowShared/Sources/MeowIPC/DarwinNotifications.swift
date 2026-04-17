@@ -9,7 +9,9 @@ public enum MeowNotification: String, Sendable {
     case state = "com.meow.vpn.state"
     case traffic = "com.meow.vpn.traffic"
 
-    public var cfName: CFNotificationName { CFNotificationName(rawValue as CFString) }
+    public var cfName: CFNotificationName {
+        CFNotificationName(rawValue as CFString)
+    }
 }
 
 public enum DarwinBridge {
@@ -22,7 +24,7 @@ public enum DarwinBridge {
             notification.cfName,
             nil,
             nil,
-            true
+            true,
         )
     }
 
@@ -32,7 +34,7 @@ public enum DarwinBridge {
     @discardableResult
     public static func addObserver(
         for notification: MeowNotification,
-        handler: @escaping @Sendable () -> Void
+        handler: @escaping @Sendable () -> Void,
     ) -> DarwinObserver {
         let observer = DarwinObserver(notification: notification, handler: handler)
         observer.start()
@@ -68,7 +70,7 @@ public final class DarwinObserver: @unchecked Sendable {
             },
             notification.rawValue as CFString,
             nil,
-            .deliverImmediately
+            .deliverImmediately,
         )
     }
 

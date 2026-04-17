@@ -24,17 +24,17 @@ let package = Package(
             dependencies: [
                 .product(name: "Yams", package: "Yams"),
             ],
-            path: "Sources/MeowModels"
+            path: "Sources/MeowModels",
         ),
         .target(
             name: "MeowIPC",
             dependencies: ["MeowModels"],
-            path: "Sources/MeowIPC"
+            path: "Sources/MeowIPC",
         ),
         .testTarget(
             name: "MeowSharedTests",
             dependencies: ["MeowModels", "MeowIPC"],
-            path: "Tests/MeowSharedTests"
+            path: "Tests/MeowSharedTests",
         ),
-    ]
+    ],
 )

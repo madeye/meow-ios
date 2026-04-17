@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 import MeowIPC
 import MeowModels
 
@@ -20,7 +20,7 @@ enum DiagnosticsRunner {
             dnsOk: dnsOk(),
             tcpProxyOk: tcpProxyOk(),
             http204Ok: http204Ok(),
-            memOk: memOk()
+            memOk: memOk(),
         )
     }
 

@@ -1,5 +1,5 @@
-import Testing
 import Foundation
+import Testing
 
 /// Exercises the mihomo-rust engine lifecycle through the C ABI — boot,
 /// idempotent start/stop, config validation, and traffic counters. These
@@ -17,9 +17,8 @@ import Foundation
 /// parallel start/stop would race.
 @Suite("mihomo-rust engine lifecycle", .tags(.engine), .serialized)
 struct EngineBootTests {
-
-    @Test("engine start toggles is_running and stop unwinds it")
-    func startStopLifecycle() throws {
+    @Test
+    func `engine start toggles is_running and stop unwinds it`() throws {
         let fixture = try EngineFixture.make()
         defer { fixture.cleanup() }
 
@@ -37,8 +36,8 @@ struct EngineBootTests {
         #expect(meow_engine_is_running() == 0)
     }
 
-    @Test("second engine_start is a no-op, not an error")
-    func startIdempotent() throws {
+    @Test
+    func `second engine_start is a no-op, not an error`() throws {
         let fixture = try EngineFixture.make()
         defer { fixture.cleanup(); meow_engine_stop() }
 
@@ -55,15 +54,15 @@ struct EngineBootTests {
         meow_engine_stop()
     }
 
-    @Test("engine_stop is idempotent before or after start")
-    func stopIdempotent() {
+    @Test
+    func `engine_stop is idempotent before or after start`() {
         meow_engine_stop()
         meow_engine_stop()
         #expect(meow_engine_is_running() == 0)
     }
 
-    @Test("engine_start → engine_stop → engine_start releases the REST port")
-    func restartReleasesRestPort() throws {
+    @Test
+    func `engine_start → engine_stop → engine_start releases the REST port`() throws {
         let fixture = try EngineFixture.make()
         defer { fixture.cleanup(); meow_engine_stop() }
 
@@ -78,12 +77,13 @@ struct EngineBootTests {
         #expect(meow_engine_is_running() == 0)
 
         let rc2 = fixture.configPath.withCString { meow_engine_start($0) }
-        #expect(rc2 == 0, "second start failed (likely EADDRINUSE on external-controller): \(String(cString: meow_core_last_error()))")
+        let err2 = String(cString: meow_core_last_error())
+        #expect(rc2 == 0, "second start failed (likely EADDRINUSE on external-controller): \(err2)")
         #expect(meow_engine_is_running() == 1)
     }
 
-    @Test("engine_start returns -1 when the config path does not exist")
-    func startWithMissingPath() {
+    @Test
+    func `engine_start returns -1 when the config path does not exist`() {
         meow_engine_stop()
         let bogus = "/nonexistent/path/\(UUID().uuidString).yaml"
         let rc = bogus.withCString { meow_engine_start($0) }
@@ -93,8 +93,8 @@ struct EngineBootTests {
         #expect(meow_engine_is_running() == 0)
     }
 
-    @Test("engine_traffic returns zero counters before any start")
-    func trafficBeforeStart() {
+    @Test
+    func `engine_traffic returns zero counters before any start`() {
         meow_engine_stop()
         var up: Int64 = -1
         var down: Int64 = -1
@@ -103,8 +103,8 @@ struct EngineBootTests {
         #expect(down == 0)
     }
 
-    @Test("engine_traffic accepts NULL output pointers")
-    func trafficNullPointers() {
+    @Test
+    func `engine_traffic accepts NULL output pointers`() {
         meow_engine_traffic(nil, nil)
     }
 }

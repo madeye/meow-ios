@@ -48,7 +48,7 @@ final class ManagedAtomicCounter: @unchecked Sendable {
 let meowPacketWriteCallback: @convention(c) (
     UnsafeMutableRawPointer?,
     UnsafePointer<UInt8>?,
-    UInt
+    UInt,
 ) -> Void = { ctx, data, len in
     guard let ctx, let data, len > 0 else { return }
     let writer = Unmanaged<PacketWriter>.fromOpaque(ctx).takeUnretainedValue()

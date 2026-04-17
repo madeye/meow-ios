@@ -1,7 +1,10 @@
 import Foundation
 
 struct Proxy: Decodable, Identifiable {
-    var id: String { name }
+    var id: String {
+        name
+    }
+
     let name: String
     let type: String
     let now: String?
@@ -45,7 +48,10 @@ struct ConnectionsResponse: Decodable {
 }
 
 struct Rule: Decodable, Identifiable {
-    var id: String { "\(type)\(payload)\(proxy)" }
+    var id: String {
+        "\(type)\(payload)\(proxy)"
+    }
+
     let type: String
     let payload: String
     let proxy: String

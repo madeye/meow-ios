@@ -8,7 +8,7 @@ import Foundation
 ///
 /// Routing lives in `ContentView.onOpenURL`; this type is separate so
 /// URL semantics can be unit-tested without UIKit.
-struct SubscriptionDeepLink: Equatable, Sendable {
+struct SubscriptionDeepLink: Equatable {
     let subscriptionURL: URL
     let name: String
     let autoSelect: Bool
@@ -26,7 +26,8 @@ struct SubscriptionDeepLink: Equatable, Sendable {
             return nil
         }
         guard let components = URLComponents(url: deepLink, resolvingAgainstBaseURL: false),
-              let items = components.queryItems else {
+              let items = components.queryItems
+        else {
             return nil
         }
 
@@ -34,17 +35,17 @@ struct SubscriptionDeepLink: Equatable, Sendable {
               let subscriptionURL = URL(string: rawURL),
               let scheme = subscriptionURL.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
-              subscriptionURL.host?.isEmpty == false else {
+              subscriptionURL.host?.isEmpty == false
+        else {
             return nil
         }
 
         let explicit = items.first(where: { $0.name == "name" })?.value?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let name: String
-        if let explicit, !explicit.isEmpty {
-            name = explicit
+        let name: String = if let explicit, !explicit.isEmpty {
+            explicit
         } else {
-            name = subscriptionURL.host ?? "Subscription"
+            subscriptionURL.host ?? "Subscription"
         }
 
         let autoSelect = items.first(where: { $0.name == "select" })?.value == "1"
@@ -52,7 +53,7 @@ struct SubscriptionDeepLink: Equatable, Sendable {
         return SubscriptionDeepLink(
             subscriptionURL: subscriptionURL,
             name: name,
-            autoSelect: autoSelect
+            autoSelect: autoSelect,
         )
     }
 }

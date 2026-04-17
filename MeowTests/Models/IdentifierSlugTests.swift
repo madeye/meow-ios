@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 import MeowModels
+import Testing
 
 /// Contract for `String.identifierSlug` (MeowShared/MeowModels) — the
 /// slug used to build XCUITest `accessibilityIdentifier`s on the Home
@@ -19,42 +19,40 @@ import MeowModels
 /// not found" errors at nightly E2E time.
 @Suite("identifierSlug — home.group / home.proxy slug contract", .tags(.model))
 struct IdentifierSlugTests {
-
-    @Test("ASCII lowercase passes through unchanged")
-    func passthrough() {
+    @Test
+    func `ASCII lowercase passes through unchanged`() {
         #expect("auto".identifierSlug == "auto")
         #expect("direct".identifierSlug == "direct")
         #expect("reject".identifierSlug == "reject")
     }
 
-    @Test("uppercase folds to lowercase, digits preserved")
-    func caseFold() {
+    @Test
+    func `uppercase folds to lowercase, digits preserved`() {
         #expect("ALLCAPS".identifierSlug == "allcaps")
         #expect("Hong Kong 01".identifierSlug == "hong-kong-01")
         #expect("Node42".identifierSlug == "node42")
     }
 
-    @Test("non-ASCII letters and emoji collapse to dash boundaries")
-    func nonAscii() {
+    @Test
+    func `non-ASCII letters and emoji collapse to dash boundaries`() {
         // Dev's T4.2 example — regional-indicator flag + spaces.
         #expect("🇺🇸 US Nodes".identifierSlug == "us-nodes")
         #expect("Speedtest.net ⚡️".identifierSlug == "speedtest-net")
         #expect("东京 01".identifierSlug == "01")
     }
 
-    @Test("leading / trailing / repeated non-alphanumerics collapse cleanly")
-    func dashCollapsing() {
+    @Test
+    func `leading / trailing / repeated non-alphanumerics collapse cleanly`() {
         #expect("  hello  world  ".identifierSlug == "hello-world")
         #expect("...dots...".identifierSlug == "dots")
         #expect("a--b".identifierSlug == "a-b")
     }
 
-    @Test("empty or all-non-ASCII input yields the '_' sentinel")
-    func emptySentinel() {
+    @Test
+    func `empty or all-non-ASCII input yields the '_' sentinel`() {
         #expect("".identifierSlug == "_")
         #expect("---".identifierSlug == "_")
         #expect("🇺🇸".identifierSlug == "_")
         #expect("   ".identifierSlug == "_")
     }
 }
-

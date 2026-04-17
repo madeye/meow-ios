@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import MeowModels
+import SwiftData
+import SwiftUI
 
 struct HomeView: View {
     @Environment(VpnManager.self) private var vpnManager
@@ -9,9 +9,9 @@ struct HomeView: View {
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
     @State private var groups: [ProxyGroupModel] = []
-    @State private var expandedGroupID: String? = nil
+    @State private var expandedGroupID: String?
     @State private var inflightDelay: Set<String> = []
-    @State private var groupsLoadError: String? = nil
+    @State private var groupsLoadError: String?
 
     var body: some View {
         ScrollView {
@@ -33,7 +33,7 @@ struct HomeView: View {
 
     // MARK: - Primary card
 
-    @ViewBuilder private var primaryCard: some View {
+    private var primaryCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
@@ -53,12 +53,12 @@ struct HomeView: View {
                     PacketStat(
                         systemImage: "arrow.down.to.line.square",
                         count: ipcBridge.currentTraffic.ingressPackets,
-                        label: "Ingress"
+                        label: "Ingress",
                     )
                     PacketStat(
                         systemImage: "arrow.up.to.line.square",
                         count: ipcBridge.currentTraffic.egressPackets,
-                        label: "Egress"
+                        label: "Egress",
                     )
                     Spacer()
                 }
@@ -68,7 +68,7 @@ struct HomeView: View {
         }
     }
 
-    @ViewBuilder private var vpnToggle: some View {
+    private var vpnToggle: some View {
         Button(action: toggle) {
             HStack(spacing: 8) {
                 if isInFlight {
@@ -89,26 +89,26 @@ struct HomeView: View {
 
     // MARK: - Traffic row
 
-    @ViewBuilder private var trafficRow: some View {
+    private var trafficRow: some View {
         HStack(spacing: 12) {
             TrafficTile(
                 title: "Upload",
                 bytes: ipcBridge.currentTraffic.uploadBytes,
                 rate: ipcBridge.currentTraffic.uploadRate,
-                systemImage: "arrow.up"
+                systemImage: "arrow.up",
             )
             TrafficTile(
                 title: "Download",
                 bytes: ipcBridge.currentTraffic.downloadBytes,
                 rate: ipcBridge.currentTraffic.downloadRate,
-                systemImage: "arrow.down"
+                systemImage: "arrow.down",
             )
         }
     }
 
     // MARK: - Proxy groups
 
-    @ViewBuilder private var proxyGroupsSection: some View {
+    private var proxyGroupsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Proxy Groups")
@@ -151,7 +151,7 @@ struct HomeView: View {
                         },
                         onPing: { proxy in
                             Task { await ping(proxy: proxy) }
-                        }
+                        },
                     )
                 }
             }
@@ -160,38 +160,38 @@ struct HomeView: View {
 
     private var placeholderText: String {
         switch vpnManager.stage {
-        case .connected: return "Loading groups…"
-        case .connecting: return "Connecting — groups appear when the engine is up."
-        default: return "Connect to populate available groups."
+        case .connected: "Loading groups…"
+        case .connecting: "Connecting — groups appear when the engine is up."
+        default: "Connect to populate available groups."
         }
     }
 
     // MARK: - Auxiliary nav
 
-    @ViewBuilder private var auxiliaryNavSection: some View {
+    private var auxiliaryNavSection: some View {
         VStack(spacing: 10) {
             NavRow(
                 title: "Connections",
                 systemImage: "chevron.right.square",
-                identifier: "home.nav.connections"
+                identifier: "home.nav.connections",
             ) { ConnectionsView() }
 
             NavRow(
                 title: "Rules",
                 systemImage: "arrow.triangle.branch",
-                identifier: "home.nav.rules"
+                identifier: "home.nav.rules",
             ) { RulesView() }
 
             NavRow(
                 title: "Providers",
                 systemImage: "tray.full",
-                identifier: "home.nav.providers"
+                identifier: "home.nav.providers",
             ) { ProvidersView() }
 
             NavRow(
                 title: "Diagnostics",
                 systemImage: "stethoscope",
-                identifier: "home.nav.diagnostics"
+                identifier: "home.nav.diagnostics",
             ) {
                 DiagnosticsPanelView()
                     .ignoresSafeArea(edges: .bottom)
@@ -203,9 +203,13 @@ struct HomeView: View {
 
     // MARK: - Derived state
 
-    private var profileName: String { selected.first?.name ?? "No Profile" }
+    private var profileName: String {
+        selected.first?.name ?? "No Profile"
+    }
 
-    private var isConnected: Bool { vpnManager.stage == .connected }
+    private var isConnected: Bool {
+        vpnManager.stage == .connected
+    }
 
     private var isInFlight: Bool {
         vpnManager.stage == .connecting || vpnManager.stage == .stopping
@@ -216,28 +220,28 @@ struct HomeView: View {
     /// harness pins on this — don't localise, don't title-case.
     private var stageBadgeText: String {
         switch vpnManager.stage {
-        case .idle, .stopped, .error: return "disconnected"
-        case .connecting: return "connecting"
-        case .connected: return "connected"
-        case .stopping: return "disconnecting"
+        case .idle, .stopped, .error: "disconnected"
+        case .connecting: "connecting"
+        case .connected: "connected"
+        case .stopping: "disconnecting"
         }
     }
 
     private var toggleTitle: String {
         switch vpnManager.stage {
-        case .connected: return "Disconnect"
-        case .connecting: return "Connecting…"
-        case .stopping: return "Disconnecting…"
-        default: return "Connect"
+        case .connected: "Disconnect"
+        case .connecting: "Connecting…"
+        case .stopping: "Disconnecting…"
+        default: "Connect"
         }
     }
 
     private var toggleTint: Color {
         switch vpnManager.stage {
-        case .connected: return .red
-        case .connecting, .stopping: return .orange
-        case .error: return .red
-        default: return .accentColor
+        case .connected: .red
+        case .connecting, .stopping: .orange
+        case .error: .red
+        default: .accentColor
         }
     }
 
@@ -287,7 +291,7 @@ struct HomeView: View {
         inflightDelay.insert(proxy)
         _ = try? await mihomoAPI.testDelay(
             proxy: proxy,
-            url: "http://www.gstatic.com/generate_204"
+            url: "http://www.gstatic.com/generate_204",
         )
         await refreshGroupsIfConnected()
         inflightDelay.remove(proxy)
@@ -315,7 +319,7 @@ struct ProxyGroupModel: Identifiable, Equatable {
     /// top-level aggregator, not a user-facing selector; direct/reject are
     /// leaf proxies, not groups.
     static func build(from dict: [String: Proxy]) -> [ProxyGroupModel] {
-        let selectable: Set<String> = ["Selector", "URLTest", "Fallback", "LoadBalance", "Relay"]
+        let selectable: Set = ["Selector", "URLTest", "Fallback", "LoadBalance", "Relay"]
         return dict.values
             .filter { selectable.contains($0.type) && $0.all != nil && $0.name != "GLOBAL" }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -326,7 +330,7 @@ struct ProxyGroupModel: Identifiable, Equatable {
                         id: childName,
                         name: p.name,
                         type: p.type,
-                        delay: p.history?.last?.delay
+                        delay: p.history?.last?.delay,
                     )
                 }
                 return ProxyGroupModel(
@@ -334,7 +338,7 @@ struct ProxyGroupModel: Identifiable, Equatable {
                     name: group.name,
                     type: group.type,
                     now: group.now,
-                    children: children
+                    children: children,
                 )
             }
     }
@@ -394,7 +398,6 @@ private struct ProxyGroupCard: View {
         .accessibilityIdentifier("home.group.\(group.id.identifierSlug)")
     }
 
-    @ViewBuilder
     private func proxyRow(_ child: ProxyGroupModel.Child) -> some View {
         HStack(spacing: 10) {
             Image(systemName: child.name == group.now ? "largecircle.fill.circle" : "circle")
@@ -414,11 +417,11 @@ private struct ProxyGroupCard: View {
 
     private var groupSymbol: String {
         switch group.type {
-        case "URLTest": return "speedometer"
-        case "Fallback": return "arrow.uturn.right.circle"
-        case "LoadBalance": return "scale.3d"
-        case "Relay": return "arrow.triangle.turn.up.right.circle"
-        default: return "rectangle.stack"
+        case "URLTest": "speedometer"
+        case "Fallback": "arrow.uturn.right.circle"
+        case "LoadBalance": "scale.3d"
+        case "Relay": "arrow.triangle.turn.up.right.circle"
+        default: "rectangle.stack"
         }
     }
 }
@@ -448,9 +451,9 @@ private struct DelayBadge: View {
 
     private func tint(for delay: Int) -> Color {
         switch delay {
-        case ..<200: return .green
-        case 200..<500: return .yellow
-        default: return .red
+        case ..<200: .green
+        case 200 ..< 500: .yellow
+        default: .red
         }
     }
 }
@@ -487,10 +490,10 @@ private struct StageDot: View {
 
     private var color: Color {
         switch stage {
-        case .idle, .stopped: return .secondary
-        case .connecting, .stopping: return .yellow
-        case .connected: return .green
-        case .error: return .red
+        case .idle, .stopped: .secondary
+        case .connecting, .stopping: .yellow
+        case .connected: .green
+        case .error: .red
         }
     }
 }

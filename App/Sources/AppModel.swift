@@ -1,7 +1,7 @@
 import Foundation
-import Observation
 import MeowIPC
 import MeowModels
+import Observation
 
 /// Top-level observable that wires the app's long-lived services together and
 /// performs first-launch setup (asset seeding, IPC observer registration).
@@ -18,12 +18,12 @@ final class AppModel {
     init() {
         let defaults = AppGroup.defaults
         let prefs = Preferences.load(from: defaults)
-        self.vpnManager = VpnManager()
-        self.mihomoAPI = MihomoAPI(port: 9090, secret: defaults.string(forKey: PreferenceKey.apiSecret) ?? "")
-        self.subscriptionService = SubscriptionService(
-            modelContext: AppModelContainer.shared.container.mainContext
+        vpnManager = VpnManager()
+        mihomoAPI = MihomoAPI(port: 9090, secret: defaults.string(forKey: PreferenceKey.apiSecret) ?? "")
+        subscriptionService = SubscriptionService(
+            modelContext: AppModelContainer.shared.container.mainContext,
         )
-        self.ipcBridge = AppIPCBridge()
+        ipcBridge = AppIPCBridge()
         _ = prefs
     }
 

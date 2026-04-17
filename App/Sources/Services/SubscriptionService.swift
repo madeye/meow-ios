@@ -1,7 +1,7 @@
 import Foundation
+import MeowModels
 import SwiftData
 import Yams
-import MeowModels
 
 /// Fetches and stores mihomo profiles. mihomo-rust only consumes Clash YAML
 /// — if the subscription body isn't valid YAML it's rejected here rather
@@ -16,7 +16,7 @@ final class SubscriptionService {
     init(
         modelContext: ModelContext,
         session: URLSession = .shared,
-        converter: SubscriptionConverter = ClashYAMLConverter()
+        converter: SubscriptionConverter = ClashYAMLConverter(),
     ) {
         self.modelContext = modelContext
         self.session = session
@@ -50,7 +50,9 @@ final class SubscriptionService {
     func select(_ profile: Profile) throws {
         let fetch = FetchDescriptor<Profile>()
         let all = try modelContext.fetch(fetch)
-        for p in all { p.isSelected = (p.id == profile.id) }
+        for p in all {
+            p.isSelected = (p.id == profile.id)
+        }
         AppGroup.defaults.set(profile.id.uuidString, forKey: PreferenceKey.selectedProfileID)
         try modelContext.save()
         try writeActiveConfig(profile)
@@ -67,7 +69,7 @@ final class SubscriptionService {
     private func fetchAndNormalize(url: String) async throws -> String {
         guard let remote = URL(string: url) else { throw SubscriptionError.invalidURL }
         let (data, response) = try await session.data(from: remote)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+        if let http = response as? HTTPURLResponse, !(200 ..< 300).contains(http.statusCode) {
             throw SubscriptionError.http(status: http.statusCode)
         }
         return try await normalize(body: data)
