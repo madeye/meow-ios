@@ -161,11 +161,32 @@ jobs:
           WARN=$((7 * 1024 * 1024))
           SIZE=$(stat -f %z "$BIN")
           MB=$(awk "BEGIN {printf \"%.2f\", ${SIZE}/1048576}")
-          echo "PacketTunnel stripped binary: ${SIZE} bytes (${MB} MB)"
+          HEADROOM=$((LIMIT - SIZE))
+          HEADROOM_MB=$(awk "BEGIN {printf \"%.2f\", ${HEADROOM}/1048576}")
+          STATUS="pass"
           if [ "$SIZE" -gt "$LIMIT" ]; then
+            STATUS="fail"
+          elif [ "$SIZE" -gt "$WARN" ]; then
+            STATUS="warn"
+          fi
+          echo "PacketTunnel stripped binary: ${SIZE} bytes (${MB} MB), headroom ${HEADROOM_MB} MB [${STATUS}]"
+
+          {
+            echo "### PacketTunnel.appex size — TEST_STRATEGY §8.1"
+            echo ""
+            echo "| Metric | Value |"
+            echo "| --- | --- |"
+            echo "| Stripped binary | **${MB} MB** (${SIZE} bytes) |"
+            echo "| Ceiling | 8.00 MB |"
+            echo "| Soft warning | 7.00 MB |"
+            echo "| Headroom | ${HEADROOM_MB} MB |"
+            echo "| Status | \`${STATUS}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATUS" = "fail" ]; then
             echo "::error::PacketTunnel exceeds 8 MB ceiling (${SIZE} > ${LIMIT}) — see TEST_STRATEGY §8.1"
             exit 1
           fi
-          if [ "$SIZE" -gt "$WARN" ]; then
+          if [ "$STATUS" = "warn" ]; then
             echo "::warning::PacketTunnel approaching 8 MB ceiling (${MB} MB > 7 MB soft warning)"
           fi
