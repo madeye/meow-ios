@@ -1,10 +1,10 @@
-# Protocol Test Fixtures — Scoping Doc
+# Protocol Test Fixtures
 
-**Status:** draft for review • **Author:** QA • **Date:** 2026-04-17
+**Status:** approved 2026-04-17 (team-lead) • **Author:** QA
 
-Scoping doc for standing up Trojan / WireGuard / Hysteria2 / SS / VLESS / VMess / TUIC test fixtures so the §6.3 protocol matrix in `TEST_STRATEGY.md` and the 5-check E2E gate in §6.2 can run deterministically in the nightly pipeline. **Not a PR.** Seeking sign-off on approach + phasing before implementation.
+Plan for standing up Trojan / WireGuard / Hysteria2 / SS / VLESS / VMess / TUIC test fixtures so the §6.3 protocol matrix in `TEST_STRATEGY.md` and the 5-check E2E gate in §6.2 can run deterministically in the nightly pipeline.
 
-Open question flagged in `TEST_STRATEGY.md` (§13 risks): *"Protocol fixture sources — Trojan/WG/Hy2 need real test endpoints; do we stand up dedicated test servers, or piggyback on existing infra?"* This doc answers "stand up dedicated, local, disposable."
+Answers the open question flagged in `TEST_STRATEGY.md` (§13 risks): *"Protocol fixture sources — Trojan/WG/Hy2 need real test endpoints; do we stand up dedicated test servers, or piggyback on existing infra?"* Resolution: **stand up dedicated, local, disposable, native-binary** — no live endpoints, no nested Docker.
 
 ---
 
@@ -78,7 +78,7 @@ The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already re
 1. `brew install` (cached in the Tart base image — rebuilt quarterly per §7.3 cadence).
 2. Generate per-run ephemeral credentials (Trojan passwords, VLESS UUIDs, WG keypairs) into `/tmp/meow-fixtures/<uuid>/`.
 3. `launchctl bootstrap` each fixture as a user LaunchAgent with a config pointing at that ephemeral dir. LaunchAgents over `brew services` because they're scriptable per-run and don't pollute machine state.
-4. Serve a Clash subscription YAML via `python3 -m http.server` (same pattern as Android) referencing the live fixture endpoints.
+4. Serve a Clash subscription YAML via `python3 -m http.server 18080` — same port as the Android `test-e2e.sh` pattern, so local devs don't have to rediscover it. Claimed port allocation for future Tart VM conflict bookkeeping.
 5. Point vphone-cli's iPhone at the subscription URL via the `meow://connect` deep link.
 6. Tear down: `launchctl bootout`, wipe `/tmp/meow-fixtures/<uuid>/`.
 
@@ -99,12 +99,12 @@ Phases 1–3 are independent of T2.6 / T4.2 and can land before the 5-check gate
 
 ---
 
-## 7. Open Questions (for sign-off)
+## 7. Decisions (2026-04-17)
 
-1. **Homebrew-in-Tart over Docker** — is the native-services direction acceptable, or is there a reason to prefer Docker/Lima/Colima I'm not seeing? (The Tart base rebuild cost is modest either way.)
-2. **Ephemeral vs seeded credentials** — per-run ephemeral is more hygienic but means each nightly has a fresh keyset. Alternatively seed fixed keys checked into `MeowIntegrationTests/Fixtures/` for local-dev reproducibility. I lean ephemeral in CI + seeded for local dev (both paths, selected by env var). OK?
-3. **Assertion (4) reconnect and (5) error surface in scope for M1?** — extends the 5-check gate to a 7-check gate. Could add to the existing `DiagnosticsCheck` enum, but that's a production-surface change that belongs to Dev. Happy to hand off a spec.
-4. **Phase-1 timing** — should I start P1 (SS fixture + scaffold) now, or wait until team-lead has loaded T4.2 anchors first? P1 is genuinely self-contained and doesn't block on anything in flight, but if Dev's next move steps on `scripts/test-e2e-ios.sh` there's coordination to do.
-5. **Trojan cert trust** — test-bundle-scoped trust anchor (via `NSPinnedDomains` or per-request `URLSession` delegate) is the clean path; never `NSAllowsArbitraryLoads` (already a security-scan ship-blocker per `.github/workflows/ci.yml`). Confirm the trust-anchor surface is acceptable.
+Team-lead sign-off on the 5 questions raised in the original scoping draft:
 
-Ready to move on any of P1–P3 the moment (1)–(5) have a read from team-lead. Won't start implementation until then.
+1. **Homebrew-in-Tart over Docker** — ✅ approved. Lima/Colima fallback only if a future protocol has no native binary.
+2. **Ephemeral CI creds, seeded local-dev creds, env-var selected** — ✅ approved.
+3. **Reconnect (4) + error-surface (5) assertions** — ❌ deferred to M2. The 5-check gate contract is frozen (PRD §4.4) and extending to 7 checks would ripple through Dev, `DiagnosticsLabelParser`, OCR, and the XCUITest page object mid-milestone. Implement (4)+(5) as regular `MeowIntegrationTests` cases instead; revisit contract extension post-M1 signal. Tracked as an M2 scope item.
+4. **Start P1 (SS fixture) now** — ✅ approved. `scripts/test-e2e-ios.sh` is fair game; Dev is not touching it for T4.2. Coordinate via DM or WIP-commit if overlap surfaces.
+5. **Trojan trust anchor** — ✅ approved. Per-request `URLSession` delegate with explicit pin; trust anchor lives only in the test bundle's Info.plist (never in app/extension). `NSAllowsArbitraryLoads` remains a security-scan ship-blocker per `.github/workflows/ci.yml`.
