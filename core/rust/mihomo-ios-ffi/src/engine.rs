@@ -3,9 +3,12 @@
 //! local SOCKS listener; TCP flows hop Rust-to-Rust through a shared
 //! `Arc<TunnelInner>` rather than through a loopback socket.
 //!
-//! Lifecycle is single-shot: `start(config_path)` spawns supervisor tasks on
-//! the shared tokio runtime; `stop()` fires a `Notify` the supervisor awaits
-//! before exiting — listeners/servers tear down when the runtime is dropped.
+//! Lifecycle: `start(config_path)` spawns the REST API and (optional) DNS
+//! listener on the shared tokio runtime and keeps their `JoinHandle`s in
+//! `EngineState`. `stop()` aborts those tasks and *blocks* on them before
+//! returning — dropping the futures drops the `TcpListener`/`UdpSocket` and
+//! releases the ports synchronously, so a fast `start → stop → start` cycle
+//! doesn't race the previous bind (`EADDRINUSE`).
 use anyhow::Result;
 use mihomo_api::ApiServer;
 use mihomo_config::{load_config, load_config_from_str};
@@ -13,13 +16,14 @@ use mihomo_dns::DnsServer;
 use mihomo_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
 use std::sync::{Arc, OnceLock};
-use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tracing::{error, info};
 
 struct EngineState {
-    shutdown: Arc<Notify>,
     stats: Arc<Statistics>,
     tunnel: Tunnel,
+    api_task: Option<JoinHandle<()>>,
+    dns_task: Option<JoinHandle<()>>,
 }
 
 fn slot() -> &'static Mutex<Option<EngineState>> {
@@ -40,7 +44,6 @@ pub fn start(config_path: &str) -> Result<()> {
 
     let cfg = load_config(config_path)?;
     let raw_config = Arc::new(RwLock::new(cfg.raw.clone()));
-    let shutdown = Arc::new(Notify::new());
 
     let tunnel = Tunnel::new(cfg.dns.resolver.clone());
     tunnel.set_mode(cfg.general.mode);
@@ -48,54 +51,58 @@ pub fn start(config_path: &str) -> Result<()> {
     tunnel.update_proxies(cfg.proxies);
     let stats = tunnel.statistics().clone();
 
-    let dns_listen = cfg.dns.listen_addr;
-    let dns_resolver = cfg.dns.resolver.clone();
-    let api_addr = cfg.api.external_controller;
-    let api_secret = cfg.api.secret.clone();
-    let config_path_owned = config_path.to_string();
-
-    let tunnel_for_task = tunnel.clone();
-    crate::get_runtime().spawn({
-        let shutdown = shutdown.clone();
-        async move {
-            if let Some(addr) = dns_listen {
-                let dns_server = DnsServer::new(dns_resolver, addr);
-                tokio::spawn(async move {
-                    if let Err(e) = dns_server.run().await {
-                        error!("DNS server error: {}", e);
-                    }
-                });
+    let dns_task = cfg.dns.listen_addr.map(|addr| {
+        let resolver = cfg.dns.resolver.clone();
+        crate::get_runtime().spawn(async move {
+            let dns_server = DnsServer::new(resolver, addr);
+            if let Err(e) = dns_server.run().await {
+                error!("DNS server error: {}", e);
             }
-
-            if let Some(addr) = api_addr {
-                let api_server = ApiServer::new(
-                    tunnel_for_task,
-                    addr,
-                    api_secret,
-                    config_path_owned,
-                    raw_config,
-                );
-                tokio::spawn(async move {
-                    if let Err(e) = api_server.run().await {
-                        error!("API server error: {}", e);
-                    }
-                });
-            }
-
-            info!("mihomo-rust engine running (in-process dispatch)");
-            shutdown.notified().await;
-            info!("mihomo-rust engine stopped");
-        }
+        })
     });
 
-    *slot().lock() = Some(EngineState { shutdown, stats, tunnel });
+    let api_task = cfg.api.external_controller.map(|addr| {
+        let api_server = ApiServer::new(
+            tunnel.clone(),
+            addr,
+            cfg.api.secret.clone(),
+            config_path.to_string(),
+            raw_config,
+        );
+        crate::get_runtime().spawn(async move {
+            if let Err(e) = api_server.run().await {
+                error!("API server error: {}", e);
+            }
+        })
+    });
+
+    info!("mihomo-rust engine running (in-process dispatch)");
+
+    *slot().lock() = Some(EngineState { stats, tunnel, api_task, dns_task });
     Ok(())
 }
 
 pub fn stop() {
-    if let Some(state) = slot().lock().take() {
-        state.shutdown.notify_waiters();
+    // Take the state out before awaiting — we don't want to hold the
+    // parking_lot mutex across the runtime `block_on`.
+    let Some(state) = slot().lock().take() else {
+        return;
+    };
+
+    // Aborting the task drops its future, which drops the TcpListener /
+    // UdpSocket and releases the port. `block_on` waits for that drop to
+    // actually happen before `stop()` returns — without it, a rapid
+    // start → stop → start cycle observed `EADDRINUSE` on the REST bind.
+    let runtime = crate::get_runtime();
+    if let Some(h) = state.api_task {
+        h.abort();
+        let _ = runtime.block_on(h);
     }
+    if let Some(h) = state.dns_task {
+        h.abort();
+        let _ = runtime.block_on(h);
+    }
+    info!("mihomo-rust engine stopped");
 }
 
 pub fn is_running() -> bool {
