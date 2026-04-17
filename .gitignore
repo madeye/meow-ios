@@ -1,0 +1,76 @@
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ---- Xcode ----
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xcscheme
+*.moved-aside
+*.hmap
+*.ipa
+*.xcarchive
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+*.xccheckout
+*.xccheckout.plist
+
+# Xcode project is generated from project.yml via xcodegen — do not commit.
+meow-ios.xcodeproj/
+*.xcworkspace/
+
+# ---- Swift Package Manager ----
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# ---- CocoaPods (not used, guard anyway) ----
+Pods/
+
+# ---- Carthage (not used) ----
+Carthage/Build/
+
+# ---- Rust ----
+core/rust/**/target/
+core/rust/**/Cargo.lock.bak
+**/*.rs.bk
+
+# ---- Go ----
+core/go/**/vendor/
+core/go/**/*.test
+core/go/**/coverage.out
+
+# ---- Native artifacts / XCFrameworks ----
+MeowCore/Frameworks/*.xcframework/
+MeowCore/Frameworks/*.a
+MeowCore/include/generated/
+build-output/
+
+# ---- Secrets / local ----
+local.properties
+*.mobileprovision
+*.certSigningRequest
+*.p8
+*.p12
+.env
+.env.*
+
+# ---- IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- fastlane ----
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/

@@ -1,0 +1,144 @@
+name: meow-ios
+
+options:
+  bundleIdPrefix: io.github.madeye.meow
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  groupSortPosition: top
+  xcodeVersion: "26.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SUPPORTS_MACCATALYST: NO
+    DEVELOPMENT_TEAM: "345Y8TX7HZ"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+    CLANG_CXX_LANGUAGE_STANDARD: "c++17"
+    GCC_C_LANGUAGE_STANDARD: c11
+    ENABLE_MODULE_VERIFIER: NO
+
+packages:
+  MeowShared:
+    path: MeowShared
+  Yams:
+    url: https://github.com/jpsim/Yams.git
+    from: "5.1.3"
+
+targets:
+  meow-ios:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+    resources:
+      - path: App/Resources
+        optional: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: meow
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIRequiredDeviceCapabilities:
+          - arm64
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+          NSAllowsLocalNetworking: true
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: App/App.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.madeye.meow
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)io.github.madeye.meow
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.madeye.meow
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: ""
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: PacketTunnel
+        embed: true
+        codeSign: true
+      - package: MeowShared
+      - package: Yams
+
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PacketTunnel/Sources
+    info:
+      path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: meow Tunnel
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.madeye.meow
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)io.github.madeye.meow
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.madeye.meow.PacketTunnel
+        CODE_SIGN_ENTITLEMENTS: PacketTunnel/PacketTunnel.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        CLANG_ENABLE_MODULES: YES
+        SWIFT_OBJC_BRIDGING_HEADER: PacketTunnel/Sources/BridgingHeader.h
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/include
+        LIBRARY_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/Frameworks
+        OTHER_LDFLAGS:
+          - -ObjC
+    dependencies:
+      - package: MeowShared
+      - framework: MeowCore/Frameworks/MihomoFfi.xcframework
+        embed: false
+        optional: true
+      - framework: MeowCore/Frameworks/MihomoGo.xcframework
+        embed: false
+        optional: true
+
+schemes:
+  meow-ios:
+    build:
+      targets:
+        meow-ios: all
+        PacketTunnel: all
+    run:
+      config: Debug
+    archive:
+      config: Release
