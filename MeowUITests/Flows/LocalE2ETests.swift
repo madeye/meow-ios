@@ -97,7 +97,7 @@ final class LocalE2ETests: XCTestCase {
             VPhone.HomeScreen.AccessibilityID.vpnToggle,
             VPhone.HomeScreen.AccessibilityID.stateBadge,
             VPhone.HomeScreen.AccessibilityID.profileName,
-            VPhone.HomeScreen.AccessibilityID.navDiagnostics,
+            VPhone.HomeScreen.AccessibilityID.navDiagnostics
         ]
 
         for id in anchors {
@@ -209,13 +209,12 @@ final class LocalE2ETests: XCTestCase {
         XCTAssertNotNil(Int(codeStr), "home.error code = \"\(codeStr)\", expected integer")
     }
 
-    /// `<Domain>(<Code>): <message>` — matches `VpnManagerError.label`.
-    /// Domain is any non-paren/non-colon run so a rename like
-    /// `NEVPNError` (without `Domain`) still matches structurally; the
-    /// separate equality check on `NEVPNErrorDomain` pins the exact name.
-    private static let errorLabelRegex: NSRegularExpression = {
-        try! NSRegularExpression(pattern: #"^([^(]+)\((-?\d+)\):\s"#)
-    }()
+    // `<Domain>(<Code>): <message>` — matches `VpnManagerError.label`. Domain is any
+    // non-paren/non-colon run so a rename like `NEVPNError` (without `Domain`) still
+    // matches structurally; the separate equality check on `NEVPNErrorDomain` pins the
+    // exact name.
+    // swiftlint:disable:next force_try
+    private static let errorLabelRegex = try! NSRegularExpression(pattern: #"^([^(]+)\((-?\d+)\):\s"#)
 
     // MARK: - (4) Diagnostics panel contract
 
