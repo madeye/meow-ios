@@ -3,10 +3,9 @@ import SwiftData
 import Yams
 import MeowModels
 
-/// Fetches and stores mihomo profiles. If the subscription body already looks
-/// like a Clash YAML (contains a `proxies:` key) we keep it verbatim;
-/// otherwise we hand it to the Go converter to turn a v2rayN node list into
-/// Clash YAML.
+/// Fetches and stores mihomo profiles. mihomo-rust only consumes Clash YAML
+/// — if the subscription body isn't valid YAML it's rejected here rather
+/// than producing a broken profile at engine startup.
 @Observable
 @MainActor
 final class SubscriptionService {
@@ -17,7 +16,7 @@ final class SubscriptionService {
     init(
         modelContext: ModelContext,
         session: URLSession = .shared,
-        converter: SubscriptionConverter = GoSubscriptionConverter()
+        converter: SubscriptionConverter = ClashYAMLConverter()
     ) {
         self.modelContext = modelContext
         self.session = session

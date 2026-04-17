@@ -4,9 +4,10 @@ import os.log
 import MeowIPC
 import MeowModels
 
-/// Orchestrates the Go mihomo engine and the Rust tun2socks layer inside the
-/// packet-tunnel extension. The Rust side needs a file descriptor it can read
-/// from; NEPacketTunnelFlow doesn't expose one, so TunnelEngine establishes a
+/// Orchestrates the mihomo-rust engine and the Rust tun2socks layer inside
+/// the packet-tunnel extension. Both halves live in the same static library
+/// (MihomoFfi.xcframework); the Rust side needs a file descriptor it can read
+/// from, and NEPacketTunnelFlow doesn't expose one, so TunnelEngine creates a
 /// socketpair and pumps packets between `packetFlow` and the Rust fd.
 final class TunnelEngine {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "engine")
@@ -30,26 +31,16 @@ final class TunnelEngine {
 
         try writeEffectiveConfig(prefs: prefs)
 
-        // Initialize Go mihomo and start it bound to loopback.
-        #if MIHOMO_GO_LINKED
-        homeDir.withCString { meowSetHomeDir($0) }
-        meowEngineInit()
-        let controller = "127.0.0.1:9090"
-        let secret = AppGroup.defaults.string(forKey: PreferenceKey.apiSecret) ?? ""
-        let result = controller.withCString { addr in
-            secret.withCString { sec in meowStartEngine(addr, sec) }
-        }
-        if result != 0 {
-            throw TunnelEngineError.engineStartFailed(lastGoError())
-        }
-        #else
-        log.info("Go engine placeholder — MIHOMO_GO_LINKED not defined; skipping startEngine")
-        #endif
-
-        // Initialize Rust tun2socks.
         #if MIHOMO_FFI_LINKED
         meow_tun_init()
         homeDir.withCString { meow_tun_set_home_dir($0) }
+
+        let configPath = AppGroup.configURL.path
+        let started = configPath.withCString { meow_engine_start($0) }
+        if started != 0 {
+            throw TunnelEngineError.engineStartFailed(lastRustError())
+        }
+
         try openSocketPair()
         if meow_tun_start(rustSideFd, Int32(prefs.mixedPort), Int32(prefs.localDnsPort)) != 0 {
             throw TunnelEngineError.tunStartFailed(lastRustError())
@@ -58,7 +49,7 @@ final class TunnelEngine {
             await PacketPump.run(fd: swiftSideFd, packetFlow: packetFlow)
         }
         #else
-        log.info("Rust tun2socks placeholder — MIHOMO_FFI_LINKED not defined; skipping tun start")
+        log.info("Rust engine placeholder — MIHOMO_FFI_LINKED not defined; skipping start")
         #endif
 
         trafficTask = Task { await self.trafficPump() }
@@ -72,9 +63,7 @@ final class TunnelEngine {
 
         #if MIHOMO_FFI_LINKED
         meow_tun_stop()
-        #endif
-        #if MIHOMO_GO_LINKED
-        meowStopEngine()
+        meow_engine_stop()
         #endif
         closeSocketPair()
     }
@@ -82,19 +71,15 @@ final class TunnelEngine {
     func reloadConfig() async throws {
         let prefs = Preferences.load(from: AppGroup.defaults)
         try writeEffectiveConfig(prefs: prefs)
-        #if MIHOMO_GO_LINKED
-        // mihomo re-reads on next Parse; a full reload flow will be added in M3.
+        // Hot-reload is a POST /configs on mihomo-rust's REST API; wiring the
+        // extension ↔ API call lands with the reload flow in M3. For now a
+        // full stop/start is the safe path.
         _ = prefs
-        #endif
     }
 
     // MARK: - Private
 
     private func writeEffectiveConfig(prefs: Preferences) throws {
-        // The app writes the raw profile YAML to config.yaml on select. Here
-        // we patch in the fixed mixed-port / external-controller the
-        // extension relies on. For now this is a no-op placeholder — the
-        // logic will be fleshed out in M1 once the Go binding exists.
         _ = prefs
         _ = AppGroup.configURL
     }
@@ -122,12 +107,10 @@ final class TunnelEngine {
         var lastTime = Date()
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
-            #if MIHOMO_GO_LINKED
-            let up = Int64(meowGetUploadTraffic())
-            let down = Int64(meowGetDownloadTraffic())
-            #else
-            let up: Int64 = 0
-            let down: Int64 = 0
+            var up: Int64 = 0
+            var down: Int64 = 0
+            #if MIHOMO_FFI_LINKED
+            meow_engine_traffic(&up, &down)
             #endif
             let now = Date()
             let dt = max(0.001, now.timeIntervalSince(lastTime))
@@ -146,16 +129,6 @@ final class TunnelEngine {
                 log.error("traffic write failed: \(error.localizedDescription)")
             }
         }
-    }
-
-    private func lastGoError() -> String {
-        #if MIHOMO_GO_LINKED
-        var buf = [CChar](repeating: 0, count: 512)
-        _ = meowGetLastError(&buf, Int32(buf.count))
-        return String(cString: buf)
-        #else
-        return ""
-        #endif
     }
 
     private func lastRustError() -> String {

@@ -12,7 +12,6 @@
 | Xcode | 26.4 | Bundled clang + iOS 26 simulator. |
 | Swift | 6.0 | Project uses strict concurrency. |
 | Rust | 1.82+ | `rustup target add aarch64-apple-ios aarch64-apple-ios-sim` |
-| Go | 1.23+ | CGO_ENABLED=1 for cross compilation. |
 | xcodegen | 2.40+ | `brew install xcodegen` |
 | cbindgen | 0.28+ | Installed as a Cargo dev-dependency. |
 
@@ -33,13 +32,18 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
 ## Native library builds
 
-Both scripts produce an XCFramework under `MeowCore/Frameworks/` and a header
-under `MeowCore/include/`. Swift source is gated behind `MIHOMO_FFI_LINKED`
-and `MIHOMO_GO_LINKED` so partial builds compile until both libs exist.
+There is no Go toolchain. The NetworkExtension memory ceiling (15 MB resident
+on iOS) forbids the Go runtime, so the proxy engine is
+[`mihomo-rust`](https://github.com/madeye/mihomo-rust) embedded into our FFI
+crate as a Cargo dependency. Only one static library ships.
+
+`scripts/build-rust.sh` produces `MeowCore/Frameworks/MihomoFfi.xcframework`
+and the `MeowCore/include/mihomo_ios_ffi.h` header. Swift source is gated
+behind `MIHOMO_FFI_LINKED` so the project still compiles before the
+XCFramework is built.
 
 ```sh
 ./scripts/build-rust.sh   # → MihomoFfi.xcframework
-./scripts/build-go.sh     # → MihomoGo.xcframework
 ```
 
 ### Rust notes
@@ -49,26 +53,21 @@ and `MIHOMO_GO_LINKED` so partial builds compile until both libs exist.
 - `profile.release`: `opt-level = "z"`, LTO, `panic = "abort"` — keeps the
   binary under the NetworkExtension memory ceiling.
 - `cbindgen` emits `mihomo_ios_ffi.h` from `build.rs` on every build.
-
-### Go notes
-
-- Cross-compile requires `CC` and `CGO_CFLAGS` set to the target SDK clang and
-  sysroot — `scripts/build-go.sh` handles both the device (`iphoneos`) and
-  simulator (`iphonesimulator`) slices.
-- `-ldflags '-s -w'` + `-trimpath` strip debug info; combined with upstream
-  mihomo this still lands around 25MB per slice.
-- The simulator build uses `GOARCH=arm64`; Intel simulators are not supported.
+- Mihomo crates pulled as git deps (`mihomo-common`, `mihomo-config`,
+  `mihomo-dns`, `mihomo-tunnel`, `mihomo-listener`, `mihomo-api`,
+  `mihomo-proxy`) from `github.com/madeye/mihomo-rust`. The FFI crate owns the
+  tokio runtime and orchestrates the engine + tun2socks layer.
 
 ## Running locally
 
 1. Generate the Xcode project: `./scripts/generate-xcodeproj.sh`
-2. (Optional while UI-only) Build native libs: `./scripts/build-rust.sh && ./scripts/build-go.sh`
+2. (Optional while UI-only) Build the native lib: `./scripts/build-rust.sh`
 3. Open `meow-ios.xcodeproj`, select the `meow-ios` scheme.
 4. Run on an iOS 26 simulator or a provisioned device.
 
-When the XCFrameworks are absent the Swift source still compiles; engine
-operations log a warning and no-op. CI marks native builds required for the
-release configuration.
+When the XCFramework is absent the Swift source still compiles; engine
+operations log a warning and no-op. CI marks the native build required for
+the release configuration.
 
 ## App Group & entitlements
 

@@ -1,18 +1,21 @@
 //! Rust half of the meow-ios native stack.
 //!
-//! Ported from `mihomo-android-ffi` by replacing the JNI shim with a plain C
-//! ABI. The internals (tun2socks via netstack-smoltcp, DoH client, DNS table)
-//! are identical — only the entry points and the logger change.
+//! Embeds the mihomo-rust proxy engine and the tun2socks layer in a single
+//! static library that links into the iOS PacketTunnel extension.
 //!
-//!   TUN fd  →  netstack-smoltcp  →  SOCKS5 127.0.0.1:<port>  (Go mihomo)
-//!   UDP:53  →  DoH (over the same SOCKS5)
+//!   NEPacketTunnelFlow  ⇆  socketpair  ⇆  netstack-smoltcp  ⇆  SOCKS5 loopback
+//!                                                              ↑
+//!                                               mihomo-rust (MixedListener)
+//!                                                    ↓
+//!                                         rules / proxies / DNS / REST API
 //!
 //! All sockets this crate opens are loopback, so no protect-hook is required
-//! on iOS — `NEPacketTunnelProvider` already excludes the tunnel from the
-//! routing table, which matches the Android `VpnService.protect()` contract.
+//! on iOS — NEPacketTunnelProvider already excludes the tunnel sockets from
+//! the routing table.
 
 mod dns_table;
 mod doh_client;
+mod engine;
 mod logging;
 mod tun2socks;
 
@@ -38,12 +41,8 @@ pub(crate) fn get_runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-/// Directory where the active profile's `config.yaml` lives. The DoH client
-/// reads it to discover the user-configured DoH server list.
 pub(crate) static HOME_DIR: Mutex<Option<String>> = Mutex::new(None);
 
-// Thread-local last error (kept identical to the Android build so clients can
-// migrate with no behavior change).
 thread_local! {
     static LAST_ERROR: RefCell<CString> = RefCell::new(CString::new("").unwrap());
 }
@@ -51,6 +50,14 @@ thread_local! {
 fn set_error(msg: String) {
     let cstr = CString::new(msg).unwrap_or_else(|_| CString::new("error").unwrap());
     LAST_ERROR.with(|e| *e.borrow_mut() = cstr);
+}
+
+unsafe fn cstr_to_str<'a>(p: *const c_char) -> Option<&'a str> {
+    if p.is_null() {
+        None
+    } else {
+        CStr::from_ptr(p).to_str().ok()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -69,23 +76,100 @@ pub extern "C" fn meow_tun_init() {
 /// nameservers.
 ///
 /// # Safety
-/// `dir` must point to a NUL-terminated UTF-8 string or be NULL. The crate
-/// copies the value — the caller is free to free the buffer on return.
+/// `dir` must point to a NUL-terminated UTF-8 string or be NULL.
 #[no_mangle]
 pub unsafe extern "C" fn meow_tun_set_home_dir(dir: *const c_char) {
-    let parsed = if dir.is_null() {
-        None
-    } else {
-        CStr::from_ptr(dir).to_str().ok().map(str::to_owned)
-    };
+    let parsed = cstr_to_str(dir).map(str::to_owned).filter(|s| !s.is_empty());
     logging::bridge_log(&format!("meow_tun_set_home_dir: {:?}", parsed));
-    *HOME_DIR.lock() = parsed.filter(|s| !s.is_empty());
+    *HOME_DIR.lock() = parsed;
 }
 
+// ---------------------------------------------------------------------------
+// Engine (mihomo-rust)
+// ---------------------------------------------------------------------------
+
+/// Start the mihomo-rust engine using the YAML at `config_path`. Idempotent.
+/// Returns 0 on success, -1 on error (inspect `meow_tun_last_error`).
+///
+/// # Safety
+/// `config_path` must point to a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn meow_engine_start(config_path: *const c_char) -> c_int {
+    let Some(path) = cstr_to_str(config_path) else {
+        set_error("config_path is null or not utf-8".into());
+        return -1;
+    };
+    logging::bridge_log(&format!("meow_engine_start: {}", path));
+    match engine::start(path) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_error(format!("engine start failed: {}", e));
+            -1
+        }
+    }
+}
+
+/// Stop the mihomo-rust engine. Idempotent.
+#[no_mangle]
+pub extern "C" fn meow_engine_stop() {
+    logging::bridge_log("meow_engine_stop");
+    engine::stop();
+}
+
+/// Validate a Clash YAML config. Returns 0 if it parses, -1 otherwise
+/// (inspect `meow_tun_last_error`).
+///
+/// # Safety
+/// `yaml` must point to `len` bytes of UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn meow_engine_validate_config(yaml: *const c_char, len: c_int) -> c_int {
+    if yaml.is_null() || len <= 0 {
+        set_error("empty yaml".into());
+        return -1;
+    }
+    let slice = std::slice::from_raw_parts(yaml as *const u8, len as usize);
+    let Ok(text) = std::str::from_utf8(slice) else {
+        set_error("yaml is not utf-8".into());
+        return -1;
+    };
+    match engine::validate(text) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_error(format!("invalid config: {}", e));
+            -1
+        }
+    }
+}
+
+/// Write the engine's cumulative upload/download byte counters into the
+/// caller-provided slots. NULL pointers are skipped. Safe to call before
+/// `meow_engine_start`; returns zero counters.
+///
+/// # Safety
+/// `out_upload` / `out_download`, if non-NULL, must point to writable 64-bit
+/// integer slots.
+#[no_mangle]
+pub unsafe extern "C" fn meow_engine_traffic(
+    out_upload: *mut i64,
+    out_download: *mut i64,
+) {
+    let (up, down) = engine::traffic();
+    if !out_upload.is_null() {
+        *out_upload = up;
+    }
+    if !out_download.is_null() {
+        *out_download = down;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// tun2socks (NEPacketTunnelFlow bridge)
+// ---------------------------------------------------------------------------
+
 /// Start tun2socks on `fd`, relaying TCP through SOCKS5 `127.0.0.1:socks_port`
-/// and intercepting UDP DNS on port 53 via DoH (routed through the same SOCKS
-/// proxy). `dns_port` is accepted for API parity with the Android build but
-/// ignored — iOS uses a DNS resolver the TUN settings expose on the gateway.
+/// and UDP DNS via DoH (routed through the same SOCKS proxy). `dns_port` is
+/// accepted for API parity but ignored — iOS uses the DNS resolver exposed by
+/// `NEPacketTunnelNetworkSettings`.
 ///
 /// Returns 0 on success, -1 on error (inspect `meow_tun_last_error`).
 #[no_mangle]
@@ -94,12 +178,10 @@ pub extern "C" fn meow_tun_start(fd: c_int, socks_port: c_int, dns_port: c_int) 
         "meow_tun_start: fd={}, socks={}, dns={}",
         fd, socks_port, dns_port
     ));
-
     if fd < 0 {
-        set_error("invalid file descriptor".to_string());
+        set_error("invalid file descriptor".into());
         return -1;
     }
-
     match tun2socks::start(fd, socks_port as u16, dns_port as u16) {
         Ok(()) => 0,
         Err(e) => {

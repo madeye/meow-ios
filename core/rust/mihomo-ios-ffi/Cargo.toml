@@ -2,22 +2,21 @@
 name = "mihomo-ios-ffi"
 version = "0.1.0"
 edition = "2021"
-description = "tun2socks + DoH for meow-ios — C ABI, no JNI."
+description = "mihomo-rust engine + tun2socks + DoH for meow-ios — C ABI, no Go, no JNI."
 
 [lib]
-# staticlib: linked into the iOS PacketTunnel extension via XCFramework.
 crate-type = ["staticlib"]
 
 [lints.rust]
-unsafe_code = "allow"  # raw fd / libc calls
+unsafe_code = "allow"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 needless_return = "allow"
 
 [dependencies]
-# Runtime & sync
-tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time"] }
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }
 parking_lot = "0.12"
 futures = "0.3"
 
@@ -27,11 +26,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
-# DoH client (HTTP over SOCKS5)
+# HTTP / YAML / serialization
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "socks"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+serde_json = "1"
 
 # Low-level
 libc = "0.2"
@@ -40,11 +40,23 @@ anyhow = "1"
 # tun2socks
 netstack-smoltcp = "0.2"
 
+# Embedded mihomo-rust engine. Pinned to main; revisit once the project tags
+# releases. Each crate is a workspace member of madeye/mihomo-rust.
+mihomo-common = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+mihomo-config = { git = "https://github.com/madeye/mihomo-rust", branch = "main", default-features = false, features = ["vless", "vless-vision"] }
+mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+mihomo-listener = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+mihomo-api = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+
 [build-dependencies]
 cbindgen = "0.28"
 
 [profile.release]
-# Shrink binary for the 50MB extension budget.
+# Shrink binary for the 50MB extension budget. mihomo-rust adds significant
+# weight; LTO + size-optimized codegen keeps us within the NE resident-memory
+# ceiling.
 opt-level = "z"
 lto = true
 codegen-units = 1

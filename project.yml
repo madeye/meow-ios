@@ -128,9 +128,6 @@ targets:
       - framework: MeowCore/Frameworks/MihomoFfi.xcframework
         embed: false
         optional: true
-      - framework: MeowCore/Frameworks/MihomoGo.xcframework
-        embed: false
-        optional: true
 
 schemes:
   meow-ios:

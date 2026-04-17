@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Yams
 
 struct YamlEditorView: View {
     let profile: Profile
@@ -46,21 +47,17 @@ struct YamlEditorView: View {
 }
 
 enum MihomoConfigValidator {
+    /// Validates a YAML config. Currently a Yams-level syntactic check; the
+    /// authoritative validator is `meow_engine_validate_config` in the
+    /// PacketTunnel extension (can't be linked into the app target because
+    /// the Rust staticlib is extension-private). Real semantic validation
+    /// happens when the engine loads the config at start time.
     static func validate(_ yaml: String) throws {
-        #if MIHOMO_GO_LINKED
-        let data = Array(yaml.utf8)
-        let result = data.withUnsafeBufferPointer { buf -> Int32 in
-            buf.baseAddress!.withMemoryRebound(to: CChar.self, capacity: buf.count) { base in
-                meowValidateConfig(base, Int32(buf.count))
-            }
+        do {
+            _ = try Yams.load(yaml: yaml)
+        } catch {
+            throw MihomoConfigError.invalid(error.localizedDescription)
         }
-        if result != 0 { throw MihomoConfigError.invalid(MihomoErrorReader.read()) }
-        #else
-        // Offline fallback: at least ensure the bytes are valid YAML. The real
-        // validator is the mihomo executor, which we'll wire up once the Go
-        // XCFramework is linked.
-        _ = try Yams.load(yaml: yaml)
-        #endif
     }
 }
 
