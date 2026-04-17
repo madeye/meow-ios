@@ -806,10 +806,16 @@ All must be true before App Store submission:
 
 ## 14. Open Questions
 
+Still open:
+
 1. **vphone-cli nested-virt viability** — the nightly E2E pipeline (§7) assumes vphone-cli runs inside a Tart VM. vphone-cli's README explicitly calls out that Virtualization.framework does not support nesting. We need to prove this works end-to-end on a scratch runner before M4. If it doesn't, fallback is a dedicated SIP-disabled Mac mini on-prem; decision and ADR by M4.
-2. **Test proxy server host** — where does the ssserver live in the nightly pipeline? Option A: on the runner itself (localhost, reachable via `host.docker.internal`-style addressing). Option B: a shared test-infra box reachable by CI.
-3. **Protocol fixture sources** — Trojan/WG/Hy2 need real test endpoints; do we stand up dedicated test servers, or piggyback on existing infra?
-4. **Swift Testing vs XCTest** — fully commit to Swift Testing for new tests (requires Swift 6 / Xcode 16+) or stick with XCTest for broader compat? Recommend Swift Testing given iOS 26 minimum.
+2. **Protocol fixture sources** — Trojan/WG/Hy2 need real test endpoints; do we stand up dedicated test servers, or piggyback on existing infra?
+
+Resolved (team-lead, 2026-04-17):
+
+- **CI runner topology** — GitHub-hosted `macos-14` for PR lanes (lint / unit / UI / archive). Nightly E2E uses a single dedicated device-farm runner slot (`[self-hosted, macOS, apple-silicon, tart]`). No second runner budgeted for M1–M4.
+- **Test proxy host** — ssserver runs in a container **alongside the nightly runner** (mirrors the Android setup). The virtual iPhone reaches it via the Tart VM's bridged network; no shared test-infra box needed at MVP.
+- **Swift Testing vs XCTest** — standardize on **Swift Testing** for all new unit/integration tests. XCTest is retained only where the framework forces it (XCUITest, `measure` blocks in perf tests).
 
 ---
 
