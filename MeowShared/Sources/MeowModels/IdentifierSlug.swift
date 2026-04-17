@@ -35,7 +35,9 @@ public extension String {
                 trailingDash = true
             }
         }
-        while out.hasSuffix("-") { out.removeLast() }
+        while out.hasSuffix("-") {
+            out.removeLast()
+        }
         return out.isEmpty ? "_" : out
     }
 }

@@ -13,20 +13,41 @@ public enum AppGroup {
     }
 
     /// User-visible Clash YAML — what the app writes from the active profile.
-    public static var configURL: URL { containerURL.appending(path: "config.yaml") }
+    public static var configURL: URL {
+        containerURL.appending(path: "config.yaml")
+    }
 
     /// Patched copy consumed by the engine: mixed-port / external-controller
     /// pinned, `dns:` + `subscriptions:` stripped, `geox-url:` injected. The
     /// extension writes this at start time so the user's original YAML stays
     /// intact in `configURL`.
-    public static var effectiveConfigURL: URL { containerURL.appending(path: "effective-config.yaml") }
+    public static var effectiveConfigURL: URL {
+        containerURL.appending(path: "effective-config.yaml")
+    }
 
-    public static var stateURL: URL { containerURL.appending(path: "state.json") }
-    public static var trafficURL: URL { containerURL.appending(path: "traffic.json") }
-    public static var assetsDir: URL { containerURL.appending(path: "assets", directoryHint: .isDirectory) }
-    public static var geoIPURL: URL { assetsDir.appending(path: "geoip.metadb") }
-    public static var geositeURL: URL { assetsDir.appending(path: "geosite.dat") }
-    public static var countryURL: URL { assetsDir.appending(path: "country.mmdb") }
+    public static var stateURL: URL {
+        containerURL.appending(path: "state.json")
+    }
+
+    public static var trafficURL: URL {
+        containerURL.appending(path: "traffic.json")
+    }
+
+    public static var assetsDir: URL {
+        containerURL.appending(path: "assets", directoryHint: .isDirectory)
+    }
+
+    public static var geoIPURL: URL {
+        assetsDir.appending(path: "geoip.metadb")
+    }
+
+    public static var geositeURL: URL {
+        assetsDir.appending(path: "geosite.dat")
+    }
+
+    public static var countryURL: URL {
+        assetsDir.appending(path: "country.mmdb")
+    }
 
     /// UserDefaults suite shared between app and extension. Force-unwrap is
     /// safe once entitlements are wired — missing suite indicates a config bug

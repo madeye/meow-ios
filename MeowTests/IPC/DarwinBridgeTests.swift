@@ -1,12 +1,11 @@
-import Testing
 import Foundation
 @testable import MeowIPC
+import Testing
 
 @Suite("DarwinBridge notification timing", .tags(.ipc))
 struct DarwinBridgeTests {
-
-    @Test("post → observe round-trip within 50ms", .disabled("timing-sensitive; runs on-simulator only"))
-    func testPostObserveLatency() async {
+    @Test(.disabled("timing-sensitive; runs on-simulator only"))
+    func `post → observe round-trip within 50ms`() {
         // let received = expectation(fulfilled once)
         // let observer = DarwinBridge.addObserver(for: .state) { received.fulfill() }
         // DarwinBridge.post(.state)
@@ -14,8 +13,8 @@ struct DarwinBridgeTests {
         // DarwinBridge.removeObserver(observer)
     }
 
-    @Test("observer is cleaned up on deinit — no leaks", .disabled("requires leak detection"))
-    func testObserverCleanup() {
+    @Test(.disabled("requires leak detection"))
+    func `observer is cleaned up on deinit — no leaks`() {
         // create + drop observer, verify no stale callbacks fire
     }
 }

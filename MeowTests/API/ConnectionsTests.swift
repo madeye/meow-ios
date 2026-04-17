@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 @testable import meow_ios
+import Testing
 
 /// Contract for the Connections half of the mihomo REST client (T3.4) — the
 /// slice consumed by T4.5 Connections Screen.
@@ -22,7 +22,6 @@ import Foundation
 /// Fixture source: `URLProtocolStub` in `MeowTests/Support/URLProtocolStub.swift`.
 @Suite("MihomoAPI connections endpoints", .tags(.api))
 struct ConnectionsTests {
-
     /// Compile-time anchor: if any of the shapes below drifts, this file
     /// fails to build. That is the point of skeleton tests.
     private static func _contractAnchor(api: MihomoAPI) async throws {
@@ -36,10 +35,9 @@ struct ConnectionsTests {
     }
 
     @Test(
-        "GET /connections decodes ConnectionsResponse with non-empty list",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func getConnectionsHappyPath() async throws {
+    func `GET /connections decodes ConnectionsResponse with non-empty list`() {
         // Expected shape (see MihomoAPITypes.swift):
         //   ConnectionsResponse { downloadTotal, uploadTotal, connections: [Connection]? }
         //   Connection { id, metadata: Metadata, upload, download, start, chains, rule, rulePayload }
@@ -52,10 +50,9 @@ struct ConnectionsTests {
     }
 
     @Test(
-        "GET /connections decodes empty-list payload (null connections)",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func getConnectionsEmptyList() async throws {
+    func `GET /connections decodes empty-list payload (null connections)`() {
         // mihomo emits `"connections": null` when idle. Client must surface
         // `nil` (or `[]`) without throwing — `ConnectionsView` treats either
         // as "empty state" via `resp.connections ?? []`.
@@ -63,10 +60,9 @@ struct ConnectionsTests {
     }
 
     @Test(
-        "DELETE /connections/{id} issues correct verb and path",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func closeConnectionByID() async throws {
+    func `DELETE /connections/{id} issues correct verb and path`() {
         // Invoke `api.closeConnection(id: "abc-123")`, capture the outbound
         // URLRequest, assert `httpMethod == "DELETE"` and path ends with
         // `/connections/abc-123`. Swipe-to-close row in ConnectionsView
@@ -75,10 +71,9 @@ struct ConnectionsTests {
     }
 
     @Test(
-        "DELETE /connections issues correct verb for close-all",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func closeAllConnections() async throws {
+    func `DELETE /connections issues correct verb for close-all`() {
         // Toolbar "Close All" button in ConnectionsView calls
         // `api.closeAllConnections()`. Same stub harness as above but
         // targeting the collection URL (no id suffix).
@@ -86,10 +81,9 @@ struct ConnectionsTests {
     }
 
     @Test(
-        "non-2xx HTTP status surfaces as MihomoAPIError.http",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func httpErrorSurfaces() async throws {
+    func `non-2xx HTTP status surfaces as MihomoAPIError.http`() {
         // Stub `/connections` with 500 status; assert the thrown error
         // matches `MihomoAPIError.http(status: 500)`. Baseline behavior for
         // the error overlay the Connections Screen will add during T4.5.
@@ -97,10 +91,9 @@ struct ConnectionsTests {
     }
 
     @Test(
-        "malformed JSON body surfaces as decoding error",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func malformedPayloadSurfaces() async throws {
+    func `malformed JSON body surfaces as decoding error`() {
         // Stub `/connections` with `{"downloadTotal": "not-a-number"}`.
         // Swift's JSONDecoder must throw; client must propagate rather
         // than swallow. Polling loop in ConnectionsView.poll() currently

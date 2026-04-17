@@ -1,5 +1,5 @@
-import Testing
 import Foundation
+import Testing
 
 /// Thin smoke tests for the unified Rust `mihomo-ios-ffi` static library
 /// exposed via `MihomoCore.xcframework`. The app target links the same
@@ -18,38 +18,37 @@ import Foundation
 /// parallel would race.
 @Suite("mihomo-core Swift bridge", .tags(.ffi), .serialized)
 struct MihomoCoreBridgeTests {
-
-    @Test("meow_core_init is callable and idempotent")
-    func initIdempotent() {
+    @Test
+    func `meow_core_init is callable and idempotent`() {
         meow_core_init()
         meow_core_init()
     }
 
-    @Test("meow_core_set_home_dir accepts UTF-8")
-    func setHomeDirUtf8() {
+    @Test
+    func `meow_core_set_home_dir accepts UTF-8`() {
         let path = NSTemporaryDirectory() + "meow-ffi-tests-非ASCII路径"
         try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
         path.withCString { meow_core_set_home_dir($0) }
     }
 
-    @Test("meow_core_set_home_dir accepts NULL")
-    func setHomeDirNull() {
+    @Test
+    func `meow_core_set_home_dir accepts NULL`() {
         meow_core_set_home_dir(nil)
     }
 
-    @Test("meow_core_last_error pointer is always readable")
-    func lastErrorIsReadable() {
+    @Test
+    func `meow_core_last_error pointer is always readable`() throws {
         meow_core_init()
         let ptr = meow_core_last_error()
         // Header guarantees a crate-owned, non-NULL pointer. The content is
         // thread-local — may carry a prior error set by another test on this
         // worker thread — so we don't assert emptiness, only readability.
         #expect(ptr != nil)
-        _ = String(cString: ptr!)
+        _ = try String(cString: #require(ptr))
     }
 
-    @Test("meow_engine_is_running is 0 when no engine has been started")
-    func isRunningFalseByDefault() {
+    @Test
+    func `meow_engine_is_running is 0 when no engine has been started`() {
         // App-side tests never call meow_engine_start. The defensive stop
         // guards against contamination from a future app-side suite that
         // might boot the engine; meow_engine_stop is documented idempotent.
@@ -57,8 +56,8 @@ struct MihomoCoreBridgeTests {
         #expect(meow_engine_is_running() == 0)
     }
 
-    @Test("meow_engine_validate_config surfaces YAML errors")
-    func validateConfigMalformed() {
+    @Test
+    func `meow_engine_validate_config surfaces YAML errors`() {
         let bad = "this: is: not: valid: ["
         let rc = bad.withCString { ptr -> Int32 in
             meow_engine_validate_config(ptr, Int32(bad.utf8.count))
@@ -68,8 +67,8 @@ struct MihomoCoreBridgeTests {
         #expect(!err.isEmpty, "last_error must be populated after a validation failure")
     }
 
-    @Test("meow_engine_convert_subscription accepts Clash YAML")
-    func convertSubscriptionClashYaml() {
+    @Test
+    func `meow_engine_convert_subscription accepts Clash YAML`() {
         let body = """
         proxies:
           - {name: smoke, type: direct}

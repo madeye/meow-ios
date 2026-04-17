@@ -23,18 +23,18 @@ public enum EffectiveConfigWriter {
     public static let defaultGeoXURL: [String: String] = [
         "geoip": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
         "mmdb": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
-        "geosite": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+        "geosite": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
     ]
 
     public static func write(
         sourceYAML: String,
         to destination: URL,
-        prefs: Preferences
+        prefs: Preferences,
     ) throws {
         let effective = try patch(sourceYAML: sourceYAML, prefs: prefs)
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
         )
         try effective.write(to: destination, atomically: true, encoding: .utf8)
     }

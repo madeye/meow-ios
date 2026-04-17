@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 @testable import meow_ios
+import Testing
 
 /// Contract for `streamLogs(level:)` — the WebSocket half of `MihomoAPI`
 /// consumed by T4.7 Logs Screen.
@@ -16,7 +16,6 @@ import Foundation
 /// (plus a WebSocket stub helper that lands with T4.7).
 @Suite("MihomoAPI logs WebSocket", .tags(.api))
 struct LogsTests {
-
     /// Compile-time anchor — drift in `LogEntry` or the `streamLogs`
     /// signature breaks this file. `streamLogs` returns synchronously; the
     /// `AsyncThrowingStream` itself is the asynchrony boundary.
@@ -28,10 +27,9 @@ struct LogsTests {
     }
 
     @Test(
-        "LogEntry.from(jsonString:) decodes well-formed {type,payload}",
-        .disabled("blocked on T4.7")
+        .disabled("blocked on T4.7"),
     )
-    func logEntryDecodesHappyPath() throws {
+    func `LogEntry.from(jsonString:) decodes well-formed {type,payload}`() {
         // `LogEntry { type, payload }` — see MihomoAPITypes.swift.
         // Exercise: `LogEntry.from(jsonString: #"{"type":"info","payload":"hi"}"#)`
         // must yield a non-nil entry with both fields populated.
@@ -39,10 +37,9 @@ struct LogsTests {
     }
 
     @Test(
-        "LogEntry.from(jsonString:) returns nil on malformed JSON",
-        .disabled("blocked on T4.7")
+        .disabled("blocked on T4.7"),
     )
-    func logEntryMalformedYieldsNil() throws {
+    func `LogEntry.from(jsonString:) returns nil on malformed JSON`() {
         // Partial frames / non-JSON keepalives must not crash the stream.
         // `LogsView.subscribe()` drops `nil` entries silently; this test
         // locks that contract in so we don't regress to an `Optional.!` or
@@ -51,10 +48,9 @@ struct LogsTests {
     }
 
     @Test(
-        "streamLogs request URL embeds ?level= query param",
-        .disabled("blocked on T4.7")
+        .disabled("blocked on T4.7"),
     )
-    func streamLogsLevelQuery() async throws {
+    func `streamLogs request URL embeds ?level= query param`() {
         // Picker in LogsView toggles between debug/info/warning/error and
         // restarts the stream on change (`task(id: level)`). The client
         // must encode the level as `?level=<value>` on the WebSocket URL —
@@ -63,10 +59,9 @@ struct LogsTests {
     }
 
     @Test(
-        "streamLogs yields entries in order; cancellation finishes the stream",
-        .disabled("blocked on T4.7")
+        .disabled("blocked on T4.7"),
     )
-    func streamLogsOrderingAndCancellation() async throws {
+    func `streamLogs yields entries in order; cancellation finishes the stream`() {
         // Feed three framed messages through the WebSocket stub, assert
         // the `AsyncThrowingStream` yields them in the same order with no
         // drops. Then cancel the task — `continuation.onTermination` must
@@ -75,10 +70,9 @@ struct LogsTests {
     }
 
     @Test(
-        "WebSocket remote close surfaces as throwing-stream error",
-        .disabled("blocked on T4.7")
+        .disabled("blocked on T4.7"),
     )
-    func streamLogsRemoteClosePropagates() async throws {
+    func `WebSocket remote close surfaces as throwing-stream error`() {
         // When the server tears down the socket (engine restart / mihomo
         // panic), `ws.receive()` throws. The stream must finish(throwing:)
         // so LogsView can recover on the next `.task(id: level)` cycle

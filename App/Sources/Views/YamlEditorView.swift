@@ -63,7 +63,7 @@ enum MihomoConfigValidator {
 enum MihomoConfigError: LocalizedError {
     case invalid(String)
     var errorDescription: String? {
-        if case .invalid(let msg) = self { return msg.isEmpty ? "Invalid config" : msg }
+        if case let .invalid(msg) = self { return msg.isEmpty ? "Invalid config" : msg }
         return "Invalid config"
     }
 }
@@ -86,15 +86,20 @@ struct CodeTextView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UITextView, context: Context) {
+    func updateUIView(_ uiView: UITextView, context _: Context) {
         if uiView.text != text { uiView.text = text }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: CodeTextView
-        init(_ parent: CodeTextView) { self.parent = parent }
+        init(_ parent: CodeTextView) {
+            self.parent = parent
+        }
+
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
         }

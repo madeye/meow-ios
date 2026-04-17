@@ -1,8 +1,8 @@
 import Foundation
-import NetworkExtension
-import os.log
 import MeowIPC
 import MeowModels
+import NetworkExtension
+import os.log
 
 /// Orchestrates the mihomo-rust engine and the tun2socks layer inside the
 /// packet-tunnel extension. Both halves live in the same static library
@@ -10,9 +10,10 @@ import MeowModels
 /// no socketpair. `PacketWriter` + `meowPacketWriteCallback` form the egress
 /// bridge; this class drives ingress via `NEPacketTunnelFlow.readPackets` and
 /// forwards each packet into `meow_tun_ingest`.
-// @unchecked Sendable: NEPacketTunnelProvider serializes startTunnel/stopTunnel
-// for us (see NetworkExtension.framework docs), so this class is only touched
-// from one call chain at a time. Do not "helpfully" add actor isolation.
+///
+/// `@unchecked Sendable`: NEPacketTunnelProvider serializes startTunnel/stopTunnel
+/// for us (see NetworkExtension.framework docs), so this class is only touched
+/// from one call chain at a time. Do not "helpfully" add actor isolation.
 final class TunnelEngine: @unchecked Sendable {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "engine")
     private let packetFlow: NEPacketTunnelFlow
@@ -82,7 +83,7 @@ final class TunnelEngine: @unchecked Sendable {
     func runDiagnostics() -> DiagnosticsReport {
         DiagnosticsRunner.run(
             engineRunning: isEngineRunning,
-            tunStarted: tunStarted
+            tunStarted: tunStarted,
         )
     }
 
@@ -124,7 +125,7 @@ final class TunnelEngine: @unchecked Sendable {
         try EffectiveConfigWriter.write(
             sourceYAML: source,
             to: AppGroup.effectiveConfigURL,
-            prefs: prefs
+            prefs: prefs,
         )
     }
 
@@ -146,7 +147,7 @@ final class TunnelEngine: @unchecked Sendable {
                 downloadRate: Int64(Double(down - lastDown) / dt),
                 ingressPackets: ingressPackets.load(),
                 egressPackets: writerRef?.takeUnretainedValue().egressPackets.load() ?? 0,
-                timestamp: now
+                timestamp: now,
             )
             lastUp = up; lastDown = down; lastTime = now
             do {

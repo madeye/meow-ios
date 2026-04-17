@@ -1,39 +1,37 @@
-import Testing
 import Foundation
 import SwiftData
+import Testing
 
 /// SwiftData model tests — CRUD, relationship integrity, selected-exclusive
 /// invariant. Migration tests (when the schema changes) live alongside.
 @Suite("Profile SwiftData model", .tags(.model))
 struct ProfileTests {
-
-    @Test("create, fetch, update, delete round-trip", .disabled("blocked on T4.1 Profile model"))
-    func testRoundTrip() throws {
+    @Test(.disabled("blocked on T4.1 Profile model"))
+    func `create, fetch, update, delete round-trip`() {
         // let container = try SwiftDataTestContainer.make()
         // insert Profile, fetch by id, mutate name, fetch again, delete, confirm absent
     }
 
-    @Test("at most one profile can be selected", .disabled("blocked on T4.1"))
-    func testSelectedExclusive() throws {
+    @Test(.disabled("blocked on T4.1"))
+    func `at most one profile can be selected`() {
         // calling markSelected on profile B should deselect A
     }
 
-    @Test("selectedProxies encodes/decodes as JSON dict", .disabled("blocked on T4.1"))
-    func testSelectedProxiesJSON() throws {
+    @Test(.disabled("blocked on T4.1"))
+    func `selectedProxies encodes/decodes as JSON dict`() {
         // set ["Proxy": "node-01", "Auto": "auto"], save, reload, compare
     }
 }
 
 @Suite("DailyTraffic model", .tags(.model))
 struct DailyTrafficTests {
-
-    @Test("upsert by date string", .disabled("blocked on T4.1"))
-    func testUpsertByDate() throws {
+    @Test(.disabled("blocked on T4.1"))
+    func `upsert by date string`() {
         // two inserts with same "2026-04-17" coalesce — second write accumulates
     }
 
-    @Test("monthly total matches hand sum", .disabled("blocked on T4.1"))
-    func testMonthlySum() throws {
+    @Test(.disabled("blocked on T4.1"))
+    func `monthly total matches hand sum`() {
         // seed 30 days, compute total via model query, compare
     }
 }

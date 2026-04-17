@@ -1,15 +1,15 @@
 import Foundation
-import Observation
 import MeowIPC
 import MeowModels
+import Observation
 
 /// App-side IPC: posts tunnel intents to the extension and observes the state
 /// and traffic snapshots the extension writes to the shared container.
 @MainActor
 @Observable
 final class AppIPCBridge {
-    private(set) var currentState: VpnState = VpnState()
-    private(set) var currentTraffic: TrafficSnapshot = TrafficSnapshot()
+    private(set) var currentState: VpnState = .init()
+    private(set) var currentTraffic: TrafficSnapshot = .init()
 
     private var stateObserver: DarwinObserver?
     private var trafficObserver: DarwinObserver?

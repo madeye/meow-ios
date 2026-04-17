@@ -30,7 +30,7 @@ final class Profile {
         lastUpdated: Date = .now,
         txBytes: Int64 = 0,
         rxBytes: Int64 = 0,
-        selectedProxiesJSON: String = "{}"
+        selectedProxiesJSON: String = "{}",
     ) {
         self.id = id
         self.name = name
@@ -53,7 +53,8 @@ final class Profile {
         }
         set {
             if let data = try? JSONEncoder().encode(newValue),
-               let s = String(data: data, encoding: .utf8) {
+               let s = String(data: data, encoding: .utf8)
+            {
                 selectedProxiesJSON = s
             }
         }

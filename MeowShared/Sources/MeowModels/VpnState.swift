@@ -21,7 +21,7 @@ public struct VpnState: Codable, Sendable, Equatable {
         profileID: String? = nil,
         profileName: String? = nil,
         errorMessage: String? = nil,
-        startedAt: Date? = nil
+        startedAt: Date? = nil,
     ) {
         self.stage = stage
         self.profileID = profileID
@@ -47,7 +47,7 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
         downloadRate: Int64 = 0,
         ingressPackets: Int64 = 0,
         egressPackets: Int64 = 0,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
     ) {
         self.uploadBytes = uploadBytes
         self.downloadBytes = downloadBytes

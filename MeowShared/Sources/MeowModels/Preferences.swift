@@ -39,7 +39,7 @@ public struct Preferences: Sendable {
         dohServer: String = PreferenceDefaults.dohServer,
         logLevel: String = PreferenceDefaults.logLevel,
         allowLan: Bool = PreferenceDefaults.allowLan,
-        ipv6: Bool = PreferenceDefaults.ipv6
+        ipv6: Bool = PreferenceDefaults.ipv6,
     ) {
         self.mixedPort = mixedPort
         self.localDnsPort = localDnsPort

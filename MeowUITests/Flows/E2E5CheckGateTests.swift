@@ -1,5 +1,5 @@
-import XCTest
 import MeowModels
+import XCTest
 
 /// The five-check connectivity gate (TEST_STRATEGY §6.2, §7.6) driven on
 /// a virtual iPhone via vphone-cli. Direct parity target:
@@ -15,7 +15,6 @@ import MeowModels
 /// + T4.2 Home Screen + Tart base image are ready. When enabled, this
 /// suite runs only in the nightly `e2e` job, not on PRs.
 final class E2E5CheckGateTests: XCTestCase {
-
     override class var defaultTestSuite: XCTestSuite {
         // Skip by default — this bundle is only built into the nightly run.
         if ProcessInfo.processInfo.environment["MEOW_E2E_VPHONE"] == nil {
@@ -56,17 +55,17 @@ final class E2E5CheckGateTests: XCTestCase {
     /// above — so "we forgot to test a new check" becomes impossible.
     func test99_allFrozenKeysCovered() {
         let covered: Set<DiagnosticsCheck> = [
-            .tunExists, .dnsOk, .tcpProxyOk, .http204Ok, .memOk
+            .tunExists, .dnsOk, .tcpProxyOk, .http204Ok, .memOk,
         ]
         XCTAssertEqual(
             covered, Set(DiagnosticsCheck.allCases),
-            "PRD §4.4 added a diagnostics check without a matching test — add one above"
+            "PRD §4.4 added a diagnostics check without a matching test — add one above",
         )
     }
 
     // MARK: Helper
 
-    private func assertDiagnosticsPass(_ check: DiagnosticsCheck, file: StaticString = #filePath, line: UInt = #line) throws {
+    private func assertDiagnosticsPass(_: DiagnosticsCheck, file _: StaticString = #filePath, line _: UInt = #line) throws {
         throw XCTSkip("blocked on T2.6 diagnostics panel + Tart image")
 
         // When T2.6 + Tart image land, the body becomes roughly:

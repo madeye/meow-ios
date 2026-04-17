@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 @testable import meow_ios
+import Testing
 
 /// End-to-end contract for `ConnectionsView` (T4.5) — drives the view
 /// against a stubbed `MihomoAPI` and asserts polling cadence, swipe-to-close
@@ -26,7 +26,6 @@ import Foundation
 /// tests against the same stub registry race on shared state.
 @Suite("ConnectionsView — T4.5 screen contract", .tags(.screen), .serialized)
 struct ConnectionsScreenTests {
-
     /// Compile-time anchor — drift in `Connection` / `ConnectionsResponse`
     /// or the close-connection API surface breaks this file.
     private static func _contractAnchor(api: MihomoAPI) async throws {
@@ -38,10 +37,9 @@ struct ConnectionsScreenTests {
     }
 
     @Test(
-        "appears → polls /connections every ~1s",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func pollingCadence() async throws {
+    func `appears → polls /connections every ~1s`() {
         // Mount ConnectionsView with a stubbed API; count hits on the
         // `/connections` URL stub over a 3.5s window; expect 3–4 hits
         // (ConnectionsView.poll() sleeps 1s between calls). Catches any
@@ -50,10 +48,9 @@ struct ConnectionsScreenTests {
     }
 
     @Test(
-        "swipe-to-close row dispatches DELETE /connections/{id}",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func swipeToClose() async throws {
+    func `swipe-to-close row dispatches DELETE /connections/{id}`() {
         // Seed stub with one `Connection { id: "abc-123", … }`; invoke the
         // row's swipe-action Close button via the harness; assert a
         // DELETE to `/connections/abc-123` was captured. Confirms the
@@ -62,10 +59,9 @@ struct ConnectionsScreenTests {
     }
 
     @Test(
-        "Close-All toolbar button dispatches DELETE /connections",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func closeAllToolbar() async throws {
+    func `Close-All toolbar button dispatches DELETE /connections`() {
         // Hit the toolbar's "Close All" affordance; assert
         // `api.closeAllConnections()` fired exactly once (DELETE on the
         // collection URL, no id suffix).
@@ -73,10 +69,9 @@ struct ConnectionsScreenTests {
     }
 
     @Test(
-        "search query filters visible rows by metadata.host (case-insensitive)",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func searchFiltersByHost() async throws {
+    func `search query filters visible rows by metadata.host (case-insensitive)`() {
         // Seed three connections with hosts "example.com", "FOO.bar",
         // "speedtest.net"; set `query = "foo"`; assert only the FOO.bar
         // row is visible. Mirrors the `filtered` computed property;
@@ -86,10 +81,9 @@ struct ConnectionsScreenTests {
     }
 
     @Test(
-        "empty ConnectionsResponse renders zero rows without error overlay",
-        .disabled("blocked on T4.5")
+        .disabled("blocked on T4.5"),
     )
-    func emptyStateNoError() async throws {
+    func `empty ConnectionsResponse renders zero rows without error overlay`() {
         // `{"downloadTotal":0,"uploadTotal":0,"connections":null}` — the
         // idle-tunnel payload. Assert List renders 0 rows and the nav
         // title shows "Connections (0)" with no error state.

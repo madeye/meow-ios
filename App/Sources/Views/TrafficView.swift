@@ -1,7 +1,7 @@
-import SwiftUI
 import Charts
-import SwiftData
 import MeowModels
+import SwiftData
+import SwiftUI
 
 struct TrafficView: View {
     @Environment(AppIPCBridge.self) private var ipcBridge
@@ -54,7 +54,7 @@ struct TrafficView: View {
             let sample = RateSample(
                 timestamp: snapshot.timestamp,
                 uploadRate: snapshot.uploadRate,
-                downloadRate: snapshot.downloadRate
+                downloadRate: snapshot.downloadRate,
             )
             samples.append(sample)
             let cutoff = Date().addingTimeInterval(-window)
@@ -63,7 +63,10 @@ struct TrafficView: View {
     }
 
     private struct RateSample: Identifiable {
-        var id: Date { timestamp }
+        var id: Date {
+            timestamp
+        }
+
         let timestamp: Date
         let uploadRate: Int64
         let downloadRate: Int64

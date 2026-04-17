@@ -21,7 +21,7 @@ struct ProvidersView: View {
                                 Task {
                                     _ = try? await api.testDelay(
                                         proxy: proxy.name,
-                                        url: "http://www.gstatic.com/generate_204"
+                                        url: "http://www.gstatic.com/generate_204",
                                     )
                                     await load()
                                 }

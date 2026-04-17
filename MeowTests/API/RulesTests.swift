@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 @testable import meow_ios
+import Testing
 
 /// Contract for `GET /rules` — consumed by T4.6 Rules Screen.
 ///
@@ -14,7 +14,6 @@ import Foundation
 /// Fixture source: `URLProtocolStub` in `MeowTests/Support/URLProtocolStub.swift`.
 @Suite("MihomoAPI rules endpoint", .tags(.api))
 struct RulesTests {
-
     /// Compile-time anchor — drift in `Rule` / `RulesResponse` or in the
     /// `getRules()` signature breaks this file.
     private static func _contractAnchor(api: MihomoAPI) async throws {
@@ -24,10 +23,9 @@ struct RulesTests {
     }
 
     @Test(
-        "GET /rules parses Rule array with type/payload/proxy triples",
-        .disabled("blocked on T4.6")
+        .disabled("blocked on T4.6"),
     )
-    func getRulesHappyPath() async throws {
+    func `GET /rules parses Rule array with type/payload/proxy triples`() {
         // Expected shape (MihomoAPITypes.swift):
         //   RulesResponse { rules: [Rule] }
         //   Rule { type, payload, proxy, id: "\(type)\(payload)\(proxy)" }
@@ -40,10 +38,9 @@ struct RulesTests {
     }
 
     @Test(
-        "GET /rules handles empty rules list",
-        .disabled("blocked on T4.6")
+        .disabled("blocked on T4.6"),
     )
-    func getRulesEmpty() async throws {
+    func `GET /rules handles empty rules list`() {
         // Fresh config with no rules yet: `{"rules":[]}`. Decoder must
         // yield `RulesResponse(rules: [])`, not throw. RulesView renders
         // empty List without error overlay.
@@ -51,10 +48,9 @@ struct RulesTests {
     }
 
     @Test(
-        "non-2xx HTTP status surfaces as MihomoAPIError.http",
-        .disabled("blocked on T4.6")
+        .disabled("blocked on T4.6"),
     )
-    func httpErrorSurfaces() async throws {
+    func `non-2xx HTTP status surfaces as MihomoAPIError.http`() {
         // Stub `/rules` with 503; the `.overlay` showing error text in
         // RulesView depends on this being a throwing path rather than a
         // silent empty-list.
@@ -62,10 +58,9 @@ struct RulesTests {
     }
 
     @Test(
-        "unknown rule `type` string preserves raw value (no enum coercion)",
-        .disabled("blocked on T4.6")
+        .disabled("blocked on T4.6"),
     )
-    func unknownRuleTypePreserved() async throws {
+    func `unknown rule type string preserves raw value (no enum coercion)`() {
         // mihomo adds new rule kinds upstream faster than we ship; `Rule.type`
         // is `String` not an enum so new kinds pass through unchanged.
         // Guards against a well-meaning enum refactor that would start

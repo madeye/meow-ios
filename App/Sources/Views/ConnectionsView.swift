@@ -22,8 +22,10 @@ struct ConnectionsView: View {
                                 .background(.secondary.opacity(0.15), in: .capsule)
                         }
                         HStack(spacing: 10) {
-                            Label(ByteCountFormatter.string(fromByteCount: conn.upload, countStyle: .binary), systemImage: "arrow.up")
-                            Label(ByteCountFormatter.string(fromByteCount: conn.download, countStyle: .binary), systemImage: "arrow.down")
+                            let up = ByteCountFormatter.string(fromByteCount: conn.upload, countStyle: .binary)
+                            let down = ByteCountFormatter.string(fromByteCount: conn.download, countStyle: .binary)
+                            Label(up, systemImage: "arrow.up")
+                            Label(down, systemImage: "arrow.down")
                             Spacer()
                             Text(conn.chains.reversed().joined(separator: " › "))
                                 .font(.caption.monospaced())

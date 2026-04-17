@@ -25,7 +25,7 @@ struct ContentView: View {
             }
         }
         .onOpenURL { url in
-            if url.scheme == "meow" && url.host == "diagnostics" {
+            if url.scheme == "meow", url.host == "diagnostics" {
                 showDiagnostics = true
                 return
             }
@@ -58,7 +58,7 @@ struct ContentView: View {
         do {
             let profile = try await subscriptionService.add(
                 name: link.name,
-                url: link.subscriptionURL.absoluteString
+                url: link.subscriptionURL.absoluteString,
             )
             if link.autoSelect {
                 try subscriptionService.select(profile)

@@ -1,5 +1,5 @@
-import XCTest
 import MeowModels
+import XCTest
 
 /// Contract-smoke layer for the M1.5 5-check gate, runnable on any Mac
 /// with an iOS 26 simulator. This bundle *is not* the PASS-asserting
@@ -41,7 +41,6 @@ import MeowModels
 /// -destination 'platform=iOS Simulator,name=iPhone 17'
 /// -only-testing:MeowUITests/LocalE2ETests`.
 final class LocalE2ETests: XCTestCase {
-
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -53,7 +52,7 @@ final class LocalE2ETests: XCTestCase {
     /// `group(_:)` / `proxy(group:proxy:)` IDs are excluded — they only
     /// render once the engine has a live `/proxies` response, which
     /// this bundle does not set up.
-    func testHomeAnchorsExist() throws {
+    func testHomeAnchorsExist() {
         let app = launchHome()
 
         let anchors = [
@@ -67,18 +66,18 @@ final class LocalE2ETests: XCTestCase {
             let element = app.descendants(matching: .any)[id]
             XCTAssertTrue(
                 element.waitForExistence(timeout: 5),
-                "T4.2 anchor missing: \(id)"
+                "T4.2 anchor missing: \(id)",
             )
         }
     }
 
     // MARK: - (2) State-badge vocabulary
 
-    func testStateBadgeParsesAsConnectionState() throws {
+    func testStateBadgeParsesAsConnectionState() {
         let app = launchHome()
 
         let badge = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.stateBadge
+            VPhone.HomeScreen.AccessibilityID.stateBadge,
         ]
         XCTAssertTrue(badge.waitForExistence(timeout: 5))
 
@@ -86,7 +85,7 @@ final class LocalE2ETests: XCTestCase {
         XCTAssertNotNil(
             VPhone.HomeScreen.ConnectionState(rawValue: raw),
             "home.badge.state = \"\(raw)\", expected one of " +
-            "\(VPhone.HomeScreen.ConnectionState.allCases.map(\.rawValue))"
+                "\(VPhone.HomeScreen.ConnectionState.allCases.map(\.rawValue))",
         )
     }
 
@@ -101,10 +100,10 @@ final class LocalE2ETests: XCTestCase {
         let app = launchHome()
 
         let badge = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.stateBadge
+            VPhone.HomeScreen.AccessibilityID.stateBadge,
         ]
         let toggle = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.vpnToggle
+            VPhone.HomeScreen.AccessibilityID.vpnToggle,
         ]
         XCTAssertTrue(badge.waitForExistence(timeout: 5))
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
@@ -125,7 +124,7 @@ final class LocalE2ETests: XCTestCase {
         guard toggle.isEnabled else {
             throw XCTSkip(
                 "home.toggle.vpn is disabled — no profile seeded on this launch. " +
-                "Full toggle liveness runs in the nightly vphone gate, not here."
+                    "Full toggle liveness runs in the nightly vphone gate, not here.",
             )
         }
         toggle.tap()
@@ -138,11 +137,11 @@ final class LocalE2ETests: XCTestCase {
 
     // MARK: - (4) Diagnostics panel contract
 
-    func testDiagnosticsPanelExposesFiveRows() throws {
+    func testDiagnosticsPanelExposesFiveRows() {
         let app = launchHome()
 
         let nav = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.navDiagnostics
+            VPhone.HomeScreen.AccessibilityID.navDiagnostics,
         ]
         XCTAssertTrue(nav.waitForExistence(timeout: 5))
         nav.tap()
@@ -151,7 +150,7 @@ final class LocalE2ETests: XCTestCase {
             let row = app.descendants(matching: .any)["diagnostics.row.\(check.rawValue)"]
             XCTAssertTrue(
                 row.waitForExistence(timeout: 5),
-                "diagnostics.row.\(check.rawValue) missing — T2.6 contract drift"
+                "diagnostics.row.\(check.rawValue) missing — T2.6 contract drift",
             )
         }
     }
@@ -163,11 +162,11 @@ final class LocalE2ETests: XCTestCase {
     /// - the row text follows PRD §4.4's `CHECK_NAME: PASS|FAIL(reason)`
     ///   shape
     /// - it refreshes within a bounded timeout (liveness, not latency)
-    func testRunButtonRefreshesRowsWithinTimeout() throws {
+    func testRunButtonRefreshesRowsWithinTimeout() {
         let app = launchHome()
 
         let nav = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.navDiagnostics
+            VPhone.HomeScreen.AccessibilityID.navDiagnostics,
         ]
         XCTAssertTrue(nav.waitForExistence(timeout: 5))
         nav.tap()

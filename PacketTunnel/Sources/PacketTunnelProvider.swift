@@ -1,12 +1,12 @@
 import Foundation
-import NetworkExtension
-import os.log
 import MeowIPC
 import MeowModels
+import NetworkExtension
+import os.log
 
-// @unchecked Sendable: the NetworkExtension runtime serializes provider
-// lifecycle callbacks (startTunnel/stopTunnel/sleep/wake) onto a single
-// internal queue, so cross-actor hops inside this class are safe.
+/// @unchecked Sendable: the NetworkExtension runtime serializes provider
+/// lifecycle callbacks (startTunnel/stopTunnel/sleep/wake) onto a single
+/// internal queue, so cross-actor hops inside this class are safe.
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "provider")
     private var engine: TunnelEngine?
@@ -14,7 +14,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     override func startTunnel(
         options: [String: NSObject]?,
-        completionHandler: @escaping @Sendable (Error?) -> Void
+        completionHandler: @escaping @Sendable (Error?) -> Void,
     ) {
         log.info("startTunnel")
 
@@ -26,8 +26,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 return
             }
             do {
-                try await self.applySettings(settings)
-                let engine = TunnelEngine(packetFlow: self.packetFlow)
+                try await applySettings(settings)
+                let engine = TunnelEngine(packetFlow: packetFlow)
                 try await engine.start()
                 self.engine = engine
 
@@ -35,13 +35,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     Task { await self?.handle(intent: intent) }
                 }
                 listener.start()
-                self.ipcListener = listener
+                ipcListener = listener
 
-                self.writeState(.connected, profileID: profileID)
+                writeState(.connected, profileID: profileID)
                 completionHandler(nil)
             } catch {
-                self.log.error("engine start failed: \(error.localizedDescription)")
-                self.writeState(.error, errorMessage: error.localizedDescription)
+                log.error("engine start failed: \(error.localizedDescription)")
+                writeState(.error, errorMessage: error.localizedDescription)
                 completionHandler(error)
             }
         }
@@ -57,7 +57,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         // we don't stall `handleAppMessage`'s caller. The NE completion
         // handler is not @Sendable, so we can't hop through a Task; GCD is
         // the correct tool here.
-        let engine = self.engine
+        let engine = engine
         let handler = UnsafeSendableBox(completionHandler)
         DispatchQueue.global(qos: .userInitiated).async {
             let report = engine?.runDiagnostics() ?? DiagnosticsReport(
@@ -65,7 +65,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 dnsOk: .fail("engine_not_running"),
                 tcpProxyOk: .fail("engine_not_running"),
                 http204Ok: .fail("engine_not_running"),
-                memOk: .fail("engine_not_running")
+                memOk: .fail("engine_not_running"),
             )
             let data = (try? DiagnosticsIPC.encodeResponse(report)) ?? Data()
             handler.value?(data)
@@ -78,7 +78,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     /// itself is only invoked from one thread.
     private struct UnsafeSendableBox<T>: @unchecked Sendable {
         let value: T
-        init(_ value: T) { self.value = value }
+        init(_ value: T) {
+            self.value = value
+        }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping @Sendable () -> Void) {
@@ -123,7 +125,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private func writeState(
         _ stage: VpnStage,
         profileID: String? = nil,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
     ) {
         var state = SharedStore.readState() ?? VpnState()
         state.stage = stage

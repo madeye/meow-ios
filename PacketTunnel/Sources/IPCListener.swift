@@ -6,7 +6,7 @@ import MeowModels
 /// `TunnelIntent` in shared UserDefaults and posts `com.meow.vpn.command`;
 /// the listener reads it and hands it off to the packet-tunnel provider.
 final class IPCListener: Sendable {
-    nonisolated(unsafe) private var observer: DarwinObserver?
+    private nonisolated(unsafe) var observer: DarwinObserver?
     private let handler: @Sendable (TunnelIntent) -> Void
 
     init(handler: @escaping @Sendable (TunnelIntent) -> Void) {
@@ -14,7 +14,7 @@ final class IPCListener: Sendable {
     }
 
     func start() {
-        let handler = self.handler
+        let handler = handler
         observer = DarwinBridge.addObserver(for: .command) {
             guard let intent = SharedStore.takeIntent() else { return }
             handler(intent)

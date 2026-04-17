@@ -1,8 +1,8 @@
-import SwiftUI
 import MeowModels
+import SwiftUI
 
 struct SettingsView: View {
-    @State private var preferences: Preferences = Preferences.load(from: AppGroup.defaults)
+    @State private var preferences: Preferences = .load(from: AppGroup.defaults)
     @State private var memoryMB: Int64?
     @Environment(MihomoAPI.self) private var api
     @Environment(VpnManager.self) private var vpnManager
@@ -32,18 +32,18 @@ struct SettingsView: View {
                 LabeledContent("Memory", value: memoryMB.map { "\($0) MB" } ?? "—")
             }
             #if DEBUG
-            Section("Debug Tunnel") {
-                LabeledContent("Stage", value: String(describing: vpnManager.stage))
-                LabeledContent("Ingress pkts", value: "\(ipcBridge.currentTraffic.ingressPackets)")
-                LabeledContent("Egress pkts", value: "\(ipcBridge.currentTraffic.egressPackets)")
-                Button("Install NE profile") { Task { await vpnManager.refresh() } }
-                Button("Connect (no profile required)") { Task { await vpnManager.connect() } }
-                Button("Disconnect", role: .destructive) { vpnManager.disconnect() }
-                NavigationLink("Open Diagnostics") {
-                    DiagnosticsPanelView()
-                        .ignoresSafeArea(edges: .bottom)
+                Section("Debug Tunnel") {
+                    LabeledContent("Stage", value: String(describing: vpnManager.stage))
+                    LabeledContent("Ingress pkts", value: "\(ipcBridge.currentTraffic.ingressPackets)")
+                    LabeledContent("Egress pkts", value: "\(ipcBridge.currentTraffic.egressPackets)")
+                    Button("Install NE profile") { Task { await vpnManager.refresh() } }
+                    Button("Connect (no profile required)") { Task { await vpnManager.connect() } }
+                    Button("Disconnect", role: .destructive) { vpnManager.disconnect() }
+                    NavigationLink("Open Diagnostics") {
+                        DiagnosticsPanelView()
+                            .ignoresSafeArea(edges: .bottom)
+                    }
                 }
-            }
             #endif
         }
         .navigationTitle("Settings")
@@ -57,7 +57,7 @@ struct SettingsView: View {
     private func binding<Value>(_ keyPath: WritableKeyPath<Preferences, Value>) -> Binding<Value> {
         Binding(
             get: { preferences[keyPath: keyPath] },
-            set: { preferences[keyPath: keyPath] = $0 }
+            set: { preferences[keyPath: keyPath] = $0 },
         )
     }
 
