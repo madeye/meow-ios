@@ -93,12 +93,15 @@ gh workflow run nightly.yml --repo madeye/meow-ios
 gh run watch
 ```
 
+**Nested-virt prerequisite:** the runner host must be Apple Silicon **M3 or later**. vphone-cli's virtual iPhone runs via `Virtualization.framework` inside the outer Tart guest, and that only works when the outer VM boots with nested-virt enabled. `nightly.yml` passes `--nested` to `tart run`; the host CPU has to actually support it. M1 and M2 don't — that escalates back to a hardware gate on the runner host.
+
 First-run signals to watch for:
-- `tart clone` from the local `bld-e2e-base` image completes (nested-virt works — the 2026-04-17 risk callout resolves positively). No `tart pull` step: the workflow runs only on a host that already has the base image locally (see `TEST_FIXTURES.md §5`).
+- `tart clone` from the local `bld-e2e-base` image completes. No `tart pull` step: the workflow runs only on a host that already has the base image locally (see `TEST_FIXTURES.md §5`).
+- `tart run … --nested` boots the outer VM cleanly (nested-virt works — the 2026-04-17 risk callout resolves positively).
 - `scp` into the inner vphone VM succeeds (SSH keys provisioned inside the outer VM's `~/.ssh/`).
 - The 5-check diagnostics gate ends with `** TEST SUCCEEDED **`.
 
-If `tart clone` fails (`bld-e2e-base` missing, nested-virt disabled, etc.), that's the re-raise scenario team-lead flagged — escalate rather than workaround.
+If `tart clone` fails (`bld-e2e-base` missing), or `tart run --nested` errors with "nested virtualization not supported" (missing `--nested` flag in the workflow, or the host CPU doesn't support nested-virt — M1/M2), that's the re-raise scenario team-lead flagged — escalate rather than workaround.
 
 ---
 
