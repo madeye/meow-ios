@@ -63,6 +63,14 @@ struct HomeView: View {
                     Spacer()
                 }
 
+                if let err = vpnManager.lastError {
+                    Text(err.label)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(3)
+                        .accessibilityIdentifier("home.error")
+                }
+
                 vpnToggle
             }
         }

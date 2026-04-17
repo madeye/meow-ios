@@ -10,7 +10,28 @@ import Observation
 @Observable
 final class VpnManager {
     private(set) var stage: VpnStage = .idle
-    private(set) var lastError: String?
+    private(set) var lastError: VpnManagerError?
+
+    /// Structured error surface. `lastError.label` is the PRD §4.3 text
+    /// rendered at `home.error` (accessibility id) and pinned by
+    /// `LocalE2ETests` — keeping domain + code + message machine-parseable
+    /// means a rename (`localizedDescription` drift, string interpolation
+    /// typo) breaks the test instead of silently swallowing the change.
+    struct VpnManagerError: Sendable, Equatable {
+        let domain: String
+        let code: Int
+        let message: String
+
+        init(_ error: Error) {
+            let ns = error as NSError
+            self.domain = ns.domain
+            self.code = ns.code
+            self.message = error.localizedDescription
+        }
+
+        /// `<domain>(<code>): <message>` — pinned by `LocalE2ETests`.
+        var label: String { "\(domain)(\(code)): \(message)" }
+    }
     private var manager: NETunnelProviderManager?
     // nonisolated(unsafe): written only from attach() on MainActor, read from
     // deinit (which is nonisolated). NotificationCenter.removeObserver is
@@ -34,7 +55,7 @@ final class VpnManager {
             try await mgr.loadFromPreferences()
             attach(mgr)
         } catch {
-            lastError = error.localizedDescription
+            lastError = VpnManagerError(error)
             stage = .error
         }
     }
@@ -47,7 +68,7 @@ final class VpnManager {
             guard let manager else { return }
             try manager.connection.startVPNTunnel()
         } catch {
-            lastError = error.localizedDescription
+            lastError = VpnManagerError(error)
             stage = .error
         }
     }

@@ -2,18 +2,23 @@ import MeowModels
 import XCTest
 
 /// Local XCUITest layer for the M1.5 5-check gate, runnable on any
-/// Mac with an iOS 26 simulator. Ladder position: *Option 2* on the
-/// contract-smoke ↔ full-vphone-gate continuum. It drives the `-UITests`
-/// seeder (bundled fixture YAML, auto-selected profile, pre-approved
-/// NETunnelProviderManager) so that the toggle goes live and the
-/// tunnel can actually start. It is *still not* the PASS-asserting
-/// nightly — that's `E2E5CheckGateTests` + `Support/VPhone.swift`
-/// (TEST_STRATEGY v1.2 §7), which needs a Tart VM, a real proxy, and
-/// a live C2 endpoint. The only checks this bundle asserts PASS for
-/// are the ones that don't depend on an outbound path: `TUN_EXISTS`
-/// (extension running) and `MEM_OK` (extension under the appex cap).
+/// Mac with an iOS 26 simulator. Ladder position: *Option 2 (β)* on
+/// the contract-smoke ↔ full-vphone-gate continuum — seeder pipeline
+/// + NE error-surface UX, but *not* a real `.connecting → .connected`
+/// transition. That lives in the nightly vphone gate
+/// (`E2E5CheckGateTests` + `Support/VPhone.swift`, TEST_STRATEGY v1.2
+/// §7), which needs a Tart VM, a real proxy, and a live C2 endpoint.
 ///
-/// What this bundle does:
+/// Why this bundle doesn't assert connected: `NETunnelProviderManager`
+/// operations fail on the iOS 26 simulator with
+/// `NEVPNErrorDomain Code=5 ("IPC failed")` — the sim has no
+/// `nesessionmanager` daemon to service the IPC. So
+/// `saveToPreferences` / `startVPNTunnel` never complete, and no
+/// amount of seeder wiring can get the badge to `connecting`. That
+/// failure mode is the one we lean into: we pin the UX contract that
+/// an NE error bubbles up to the user instead of vanishing.
+///
+/// What this bundle pins:
 ///
 /// 1. **Anchor wiring** — every `VPhone.HomeScreen.AccessibilityID`
 ///    identifier the T4.2 spec promises is actually queryable at
@@ -23,26 +28,30 @@ import XCTest
 ///    via `VPhone.HomeScreen.ConnectionState(rawValue:)`. Any drift
 ///    from the frozen lowercase-ASCII vocabulary (PRD §4.3) fails
 ///    here, not two hours into a nightly run.
-/// 3. **Toggle liveness** — with the `-UITests` seeder selecting a
-///    DIRECT-only fixture profile, `home.toggle.vpn` enables on
-///    launch. Tapping it must move the badge to `connecting` within
-///    5s. We deliberately don't wait for `connected` — locally there
-///    is no remote proxy to tunnel to, but the extension itself
-///    comes up and that's what the next test pins on.
-/// 4. **Diagnostics contract + extension liveness** — navigating via
-///    `home.nav.diagnostics` exposes the 5 PRD §4.4 rows with correct
-///    `diagnostics.row.<KEY>` identifiers and parseable labels. Post-
-///    connect, `TUN_EXISTS: PASS` and `MEM_OK: PASS` are asserted
-///    (the extension is up and under the 50MB cap). `DNS_OK`,
-///    `TCP_PROXY_OK`, and `HTTP_204_OK` are allowed to FAIL — those
-///    need a real outbound, which local sims don't have.
+/// 3. **Seeder + NE error surface** — with the `-UITests` seeder
+///    selecting a DIRECT-only fixture profile, `home.toggle.vpn` is
+///    enabled on launch (which by itself proves the seeder ran end to
+///    end). Tapping the toggle triggers `VpnManager.connect()`, which
+///    on the sim fails with an `NEVPNError`. The test asserts:
+///    (a) `home.badge.state` stays `disconnected`,
+///    (b) `home.error` renders a machine-parseable
+///        `<Domain>(<Code>): <message>` label pointing at
+///        `NEVPNErrorDomain` with an integer code.
+///    Loose assertions ("any non-empty error") would let a rename of
+///    `VpnManager.lastError` or a string-interpolation typo slip
+///    through — the tight domain+code pin catches that.
+/// 4. **Diagnostics contract** — navigating via `home.nav.diagnostics`
+///    exposes the 5 PRD §4.4 rows with correct `diagnostics.row.<KEY>`
+///    identifiers, and the `Run Diagnostics` button updates each row
+///    within a bounded timeout. We assert only that each row parses
+///    via `DiagnosticsLabelParser`; the actual PASS/FAIL result is
+///    irrelevant here because the extension never runs on the sim.
 ///
-/// Why not full PASS: the user's Mac has no Tart fixture, no
-/// wireguard-go endpoint, no C2 server — all the things the three
-/// outbound checks probe. The nightly vphone run asserts PASS on all
-/// 5; this bundle asserts PASS only on the subset that stays true in
-/// an outbound-less environment, plus pins the contract the nightly
-/// relies on.
+/// What this bundle does **not** do (intentionally):
+/// - assert `.connecting` / `.connected` — sim NE can't reach either;
+/// - assert `TUN_EXISTS: PASS` / `MEM_OK: PASS` — needs the extension
+///   to be running, which needs NE IPC, which the sim doesn't have.
+/// Both live in the nightly vphone gate.
 ///
 /// Running: `xcodebuild test -scheme meow-ios
 /// -destination 'platform=iOS Simulator,name=iPhone 17'
@@ -118,18 +127,31 @@ final class LocalE2ETests: XCTestCase {
         )
     }
 
-    // MARK: - (3) Toggle liveness
+    // MARK: - (3) Seeder + NE error surface
 
-    /// Tapping the VPN toggle from a disconnected state must move the
-    /// badge to `connecting` within 5s. The `-UITests` seeder (see
-    /// `UITestsSeeder`) installs a DIRECT-only Clash profile and
-    /// `VpnManager.refresh()` pre-approves the NETunnelProviderManager,
-    /// so the toggle is enabled on launch and the tunnel can start.
-    /// We don't wait for `connected` — on a local sim there is no
-    /// remote proxy to tunnel to. The bookkeeping we *do* care about
-    /// (the extension is running, it's under its memory cap) moves to
-    /// `testPostConnectDiagnosticsReportTunAndMemPass`.
-    func testToggleMovesBadgeToConnecting() throws {
+    /// End-to-end pin for Option 2 (β): seeder runs → toggle enables →
+    /// tap produces a tightly-typed NE error surface. Three assertions,
+    /// all of which must hold:
+    ///
+    /// 1. **Seeder ran.** `home.toggle.vpn.isEnabled == true` at launch
+    ///    — only possible if `UITestsSeeder` inserted a selected Profile
+    ///    into SwiftData on the `-UITests` path.
+    /// 2. **Badge stays `disconnected`.** On sim NE IPC fails, so the
+    ///    UI must not lie by advancing to `connecting`. Loose check
+    ///    ("not connected") would allow a `connecting` → `disconnected`
+    ///    flicker to slip through.
+    /// 3. **`home.error` is populated and parseable.** Label format is
+    ///    `<Domain>(<Code>): <message>`. On iOS 26 sim `Domain` is
+    ///    exactly `NEVPNErrorDomain` and `Code` is an integer. A
+    ///    rename in `VpnManager.VpnManagerError.label` breaks this,
+    ///    which is the intent — loose "label != empty" would hide
+    ///    that regression.
+    ///
+    /// This doesn't prove the real-device NE path works. That's what
+    /// the nightly vphone gate is for. What it *does* prove: if the
+    /// NE stack surfaces an error, the user sees a structured one
+    /// (not a silent no-op).
+    func testTapToggleSurfacesNEError() throws {
         let app = launchHome()
 
         let badge = app.descendants(matching: .any)[
@@ -141,7 +163,11 @@ final class LocalE2ETests: XCTestCase {
         XCTAssertTrue(badge.waitForExistence(timeout: 5))
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
 
-        waitForDisconnected(badge: badge, app: app, timeout: 10)
+        XCTAssertEqual(
+            badge.label,
+            VPhone.HomeScreen.ConnectionState.disconnected.rawValue,
+            "Expected home.badge.state to read `disconnected` on a cold launch"
+        )
 
         XCTAssertTrue(
             toggle.isEnabled,
@@ -151,115 +177,45 @@ final class LocalE2ETests: XCTestCase {
         toggle.tap()
         app.activate() // flush any pending NE consent interruption
 
-        let reachedConnecting = expectation(for: NSPredicate(format: "label == %@",
-                                                             VPhone.HomeScreen.ConnectionState.connecting.rawValue),
-                                            evaluatedWith: badge)
-        wait(for: [reachedConnecting], timeout: 5)
-    }
-
-    /// With the tunnel up, the diagnostics panel should report
-    /// `TUN_EXISTS: PASS` (extension is running) and `MEM_OK: PASS`
-    /// (extension is under the 50MB appex cap). The other three checks
-    /// need a real outbound path and are expected to `FAIL(...)` on a
-    /// local sim — we don't assert on them.
-    ///
-    /// One retry budget: first-ever launch on a fresh sim image may
-    /// stall on the NE consent flow; the interruption monitor + a
-    /// single relaunch gets past it. Beyond that, we surface a real
-    /// failure rather than paper over flakiness.
-    func testPostConnectDiagnosticsReportTunAndMemPass() throws {
-        try runPostConnectDiagnostics(attempt: 1, maxAttempts: 2)
-    }
-
-    private func runPostConnectDiagnostics(attempt: Int, maxAttempts: Int) throws {
-        let app = launchHome()
-
-        let badge = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.stateBadge
+        let errorLabel = app.descendants(matching: .any)[
+            VPhone.HomeScreen.AccessibilityID.errorMessage
         ]
-        let toggle = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.vpnToggle
-        ]
-        XCTAssertTrue(badge.waitForExistence(timeout: 5))
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            errorLabel.waitForExistence(timeout: 5),
+            "home.error did not appear after tapping toggle — VpnManager.lastError not surfaced"
+        )
 
-        waitForDisconnected(badge: badge, app: app, timeout: 10)
+        // Pin #1: badge didn't lie about progress.
+        XCTAssertEqual(
+            badge.label,
+            VPhone.HomeScreen.ConnectionState.disconnected.rawValue,
+            "home.badge.state advanced past `disconnected` despite NE error — " +
+            "UX is reporting progress that isn't happening"
+        )
 
-        guard toggle.isEnabled else {
-            if attempt < maxAttempts {
-                app.terminate()
-                try runPostConnectDiagnostics(attempt: attempt + 1, maxAttempts: maxAttempts)
-                return
-            }
-            XCTFail("home.toggle.vpn stayed disabled across \(maxAttempts) attempts")
-            return
-        }
-
-        toggle.tap()
-        app.activate() // flush consent interruption, if any
-
-        // Wait for the tunnel to leave `disconnected`. We accept either
-        // `connecting` or `connected` — the point of this test is that the
-        // extension is up, not that the status machine passed through a
-        // specific state.
-        let leftDisconnected = expectation(for: NSPredicate(format: "label != %@",
-                                                            VPhone.HomeScreen.ConnectionState.disconnected.rawValue),
-                                           evaluatedWith: badge)
-        let leftResult = XCTWaiter().wait(for: [leftDisconnected], timeout: 10)
-        guard leftResult == .completed else {
-            if attempt < maxAttempts {
-                app.terminate()
-                try runPostConnectDiagnostics(attempt: attempt + 1, maxAttempts: maxAttempts)
-                return
-            }
-            XCTFail("tunnel did not leave disconnected after \(maxAttempts) attempts")
-            return
-        }
-
-        let nav = app.descendants(matching: .any)[
-            VPhone.HomeScreen.AccessibilityID.navDiagnostics
-        ]
-        XCTAssertTrue(nav.waitForExistence(timeout: 5))
-        nav.tap()
-
-        let runButton = app.descendants(matching: .any)["diagnostics.button.run"]
-        XCTAssertTrue(runButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(runButton.isHittable)
-        runButton.tap()
-
-        let deadline = Date().addingTimeInterval(20)
-        var lastResults: [DiagnosticsCheck: DiagnosticsResult] = [:]
-        while Date() < deadline {
-            let dump = DiagnosticsCheck.allCases.compactMap { check -> String? in
-                let row = app.descendants(matching: .any)["diagnostics.row.\(check.rawValue)"]
-                return row.exists ? row.label : nil
-            }.joined(separator: "\n")
-
-            if let parsed = try? DiagnosticsLabelParser.parse(dump) {
-                lastResults = parsed
-                if parsed[.tunExists] == .pass && parsed[.memOk] == .pass {
-                    return
-                }
-            }
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-
-        let snapshot = DiagnosticsCheck.allCases.map { check in
-            "\(check.rawValue)=\(lastResults[check].map(String.init(describing:)) ?? "<absent>")"
-        }.joined(separator: ", ")
-        XCTFail("TUN_EXISTS + MEM_OK did not both reach PASS within 20s — last seen: \(snapshot)")
+        // Pin #2: error label is structured — `<Domain>(<Code>): <message>`.
+        let raw = errorLabel.label
+        let match = try XCTUnwrap(
+            Self.errorLabelRegex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+            "home.error = \"\(raw)\", expected `<Domain>(<Code>): <message>` per VpnManagerError.label"
+        )
+        let domain = (raw as NSString).substring(with: match.range(at: 1))
+        let codeStr = (raw as NSString).substring(with: match.range(at: 2))
+        XCTAssertEqual(
+            domain, "NEVPNErrorDomain",
+            "home.error domain = \"\(domain)\" — expected `NEVPNErrorDomain` (seeing a non-NE error " +
+            "here would mean the failure is upstream of the NE call, which is a real regression)"
+        )
+        XCTAssertNotNil(Int(codeStr), "home.error code = \"\(codeStr)\", expected integer")
     }
 
-    private func waitForDisconnected(badge: XCUIElement, app: XCUIApplication, timeout: TimeInterval) {
-        let isDisconnected = NSPredicate(format: "label == %@",
-                                         VPhone.HomeScreen.ConnectionState.disconnected.rawValue)
-        let e = expectation(for: isDisconnected, evaluatedWith: badge)
-        if XCTWaiter().wait(for: [e], timeout: timeout) == .completed { return }
-        // Give interruption monitor a chance to dismiss NE consent, then
-        // accept the current label — the individual tests will assert their
-        // own preconditions.
-        app.activate()
-    }
+    /// `<Domain>(<Code>): <message>` — matches `VpnManagerError.label`.
+    /// Domain is any non-paren/non-colon run so a rename like
+    /// `NEVPNError` (without `Domain`) still matches structurally; the
+    /// separate equality check on `NEVPNErrorDomain` pins the exact name.
+    private static let errorLabelRegex: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"^([^(]+)\((-?\d+)\):\s"#)
+    }()
 
     // MARK: - (4) Diagnostics panel contract
 

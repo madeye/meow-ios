@@ -104,6 +104,11 @@ struct VPhone {
             static let stateBadge = "home.badge.state"
             static let profileName = "home.profile.name"
             static let navDiagnostics = "home.nav.diagnostics"
+            /// Present only when `VpnManager.lastError != nil`. Label is
+            /// `<domain>(<code>): <message>` — parseable so the local sim
+            /// test can pin on a real `NEVPNError` code instead of
+            /// a loose "any non-empty string".
+            static let errorMessage = "home.error"
             static func group(_ groupName: String) -> String {
                 "home.group.\(groupName.identifierSlug)"
             }
