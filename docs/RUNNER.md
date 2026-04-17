@@ -89,11 +89,11 @@ gh run watch
 ```
 
 First-run signals to watch for:
-- `tart pull` / `tart clone` steps complete (nested-virt works — the 2026-04-17 risk callout resolves positively).
+- `tart clone` from the local `bld-e2e-base` image completes (nested-virt works — the 2026-04-17 risk callout resolves positively). No `tart pull` step: the workflow runs only on a host that already has the base image locally (see `TEST_FIXTURES.md §5`).
 - `scp` into the inner vphone VM succeeds (SSH keys provisioned inside the outer VM's `~/.ssh/`).
 - The 5-check diagnostics gate ends with `** TEST SUCCEEDED **`.
 
-If `tart pull` fails with a nested-virt error, that's the re-raise scenario team-lead flagged — escalate rather than workaround.
+If `tart clone` fails (`bld-e2e-base` missing, nested-virt disabled, etc.), that's the re-raise scenario team-lead flagged — escalate rather than workaround.
 
 ---
 
