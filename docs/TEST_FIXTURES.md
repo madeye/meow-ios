@@ -77,10 +77,10 @@ The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already re
 
 1. `brew install` (cached in the Tart base image — rebuilt quarterly per §7.3 cadence).
 2. Generate per-run ephemeral credentials (Trojan passwords, VLESS UUIDs, WG keypairs) into `/tmp/meow-fixtures/<uuid>/`.
-3. `launchctl bootstrap` each fixture as a user LaunchAgent with a config pointing at that ephemeral dir. LaunchAgents over `brew services` because they're scriptable per-run and don't pollute machine state.
+3. Fork each fixture as a background process from the orchestrator itself (`binary … &; FIXTURE_PID=$!`), track its PID in a shell variable, and register an `EXIT INT TERM` trap that reaps every tracked PID in reverse-start order and then wipes `/tmp/meow-fixtures/<uuid>/`. Fork-and-trap over `launchctl bootstrap` (speculated in v1): one script owns the whole lifecycle, no per-run LaunchAgent plist pollution of the Tart guest, and interactive Ctrl-C plus programmatic `kill -TERM` both land on the same cleanup path. Trojan's fallback-probe requirement is handled in the same style — a dedicated loopback `python3 -m http.server` on an ephemeral port is forked alongside trojan-go and reaped by the trap.
 4. Serve a Clash subscription YAML via `python3 -m http.server 18080` — same port as the Android `test-e2e.sh` pattern, so local devs don't have to rediscover it. Claimed port allocation for future Tart VM conflict bookkeeping.
 5. Point vphone-cli's iPhone at the subscription URL via the `meow://connect` deep link.
-6. Tear down: `launchctl bootout`, wipe `/tmp/meow-fixtures/<uuid>/`.
+6. Tear down: the trap from step 3 fires (on exit, Ctrl-C, or SIGTERM), `kill -TERM`s each tracked PID, and removes `/tmp/meow-fixtures/<uuid>/`. No post-run LaunchAgent cleanup needed because no LaunchAgents were ever registered.
 
 **Tart image rebuild ask:** base image needs `brew install shadowsocks-rust trojan-go xray wireguard-tools wireguard-go` plus the manually-downloaded `hysteria` / `tuic-server` binaries placed in `/usr/local/bin` (neither has a homebrew-core formula as of 2026-04, though apernet/hysteria has an unofficial tap). Targeted delta from current base: ~80 MB. Not a blocker; the base is already rebuilt per §7.3.
 
