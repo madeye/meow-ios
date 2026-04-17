@@ -32,6 +32,9 @@ final class AppModel {
         didBootstrap = true
 
         await AssetSeeder.seedIfNeeded()
+        #if DEBUG
+        UITestsSeeder.seedIfNeeded(modelContext: AppModelContainer.shared.container.mainContext)
+        #endif
         await vpnManager.refresh()
         ipcBridge.start()
     }

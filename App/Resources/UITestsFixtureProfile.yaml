@@ -1,0 +1,19 @@
+# Minimal Clash profile used by LocalE2ETests (#33, Option 2).
+#
+# Compiled into the app bundle and seeded via UITestsSeeder when the
+# process is launched with `-UITests`. The point is only to have *a*
+# valid, selectable profile so the VPN toggle enables and the tunnel
+# can start — none of the rules need to be reachable on a local sim.
+#
+# DIRECT-only by design: no remote proxies means no DNS lookups that
+# can hang the sim, and every connection shortcircuits. Ports match
+# the defaults mihomo-rust pins in effective-config.yaml so that the
+# app's normal bootstrap paths don't have to special-case this YAML.
+mixed-port: 7890
+external-controller: 127.0.0.1:9090
+mode: rule
+log-level: info
+proxies: []
+proxy-groups: []
+rules:
+  - MATCH,DIRECT
