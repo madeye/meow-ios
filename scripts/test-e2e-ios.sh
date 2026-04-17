@@ -293,8 +293,8 @@ EOF
         || fail "trojan-go failed to start — see $FIXTURE_DIR/trojan.log"
     # skip-cert-verify is scoped to this fixture YAML only — the
     # engine's TLS on the proxied hop accepts the self-signed cert here.
-    # This is NOT ATS / NSAllowsArbitraryLoads, which stays forbidden
-    # per .github/workflows/ci.yml security-scan and TEST_FIXTURES §7.5.
+    # This is NOT ATS / NSAllowsArbitraryLoads. App/Info.plist still sets
+    # `NSAllowsArbitraryLoads: false` (secure default-deny); see TEST_FIXTURES §7.5.
     cat >"$FIXTURE_DIR/proxies.d/trojan.yaml" <<EOF
   - name: meow-fixture-trojan
     type: trojan
