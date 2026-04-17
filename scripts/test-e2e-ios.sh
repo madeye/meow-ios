@@ -16,9 +16,21 @@
 # behind T4.1 (deep-link handler) and T4.2 (Home Screen anchors); T2.6
 # Diagnostics Panel is live so Step 9 anchors are known.
 #
+# Execution model:
+#   The fixture servers (ssserver / trojan-go / xray / wg / hy2 / tuic)
+#   spawn on the host this script runs on — the **outer runner host**
+#   in the nightly pipeline. Only vphone-cli ops run inside the Tart
+#   guest, reached over SSH via VPHONE_HOST. The virtual iPhone in the
+#   guest reaches these fixture servers via the Tart-visible host IP
+#   (the outer host's address on the `bridgeN` interface Tart bridges
+#   onto), which we resolve from VPHONE_HOST. This is why the binds
+#   below are 0.0.0.0 and NOT 127.0.0.1 — loopback on the host is
+#   invisible to the iPhone's network stack inside the guest.
+#
 # Required env:
 #   VPHONE_HOST           SSH target where vphone-cli and the virtual iPhone live
-#                         (e.g. admin@<tart-vm-ip>). Empty = local vphone-cli.
+#                         (e.g. admin@<tart-vm-ip>). Empty = local vphone-cli,
+#                         in which case FIXTURE_HOST stays on 127.0.0.1.
 #   VPHONE_SOCK           Path to vm/vphone.sock on VPHONE_HOST. Default /tmp/vphone.sock.
 #
 # Optional env:
@@ -57,8 +69,33 @@ MEOW_FIXTURE_PROTOCOLS="${MEOW_FIXTURE_PROTOCOLS:-ss}"
 
 SSSERVER="${SSSERVER:-ssserver}"
 SS_METHOD="${SS_METHOD:-aes-256-gcm}"
-SS_HOST="127.0.0.1"
 SUB_PORT="${SUB_PORT:-18080}"
+
+# FIXTURE_HOST is the address advertised to the iPhone in the Clash
+# subscription YAML — i.e. where the iPhone dials the fixture servers.
+# - Local mode (no VPHONE_HOST): loopback is correct, iPhone and
+#   fixtures share a kernel.
+# - Tart mode (VPHONE_HOST=admin@<vm-ip>): the iPhone lives inside the
+#   Tart guest and sees the outer host via Tart's bridged interface,
+#   NOT via loopback. We resolve the outer-host address on the
+#   interface that routes to the VM IP and advertise that instead.
+tart_visible_host_ip() {
+    # Parse the VM IP out of VPHONE_HOST (form: user@host)
+    local vm_ip="${VPHONE_HOST#*@}"
+    [[ -z "$vm_ip" || "$vm_ip" == "$VPHONE_HOST" ]] && return 1
+    local iface
+    iface="$(route -n get "$vm_ip" 2>/dev/null | awk '/interface: /{print $2; exit}')"
+    [[ -n "$iface" ]] || return 1
+    ifconfig "$iface" 2>/dev/null | awk '/inet /{print $2; exit}'
+}
+
+if [[ -n "$VPHONE_HOST" ]]; then
+    FIXTURE_HOST="$(tart_visible_host_ip || true)"
+    [[ -n "$FIXTURE_HOST" ]] \
+        || { echo "error: could not resolve Tart-visible host IP from VPHONE_HOST=$VPHONE_HOST — check 'route -n get <vm-ip>' output" >&2; exit 1; }
+else
+    FIXTURE_HOST="127.0.0.1"
+fi
 
 FIXTURE_BASE="/tmp/meow-fixtures"
 
@@ -197,7 +234,7 @@ setup_ss() {
     cat >"$FIXTURE_DIR/proxies.d/ss.yaml" <<EOF
   - name: meow-fixture-ss
     type: ss
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${SS_PORT}
     cipher: ${SS_METHOD}
     password: "${SS_PASSWORD}"
@@ -261,7 +298,7 @@ EOF
     cat >"$FIXTURE_DIR/proxies.d/trojan.yaml" <<EOF
   - name: meow-fixture-trojan
     type: trojan
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${TROJAN_PORT}
     password: "${TROJAN_PASSWORD}"
     sni: meow-fixture.local
@@ -305,7 +342,7 @@ EOF
     cat >"$FIXTURE_DIR/proxies.d/vless.yaml" <<EOF
   - name: meow-fixture-vless
     type: vless
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${VLESS_PORT}
     uuid: ${VLESS_UUID}
     network: tcp
@@ -343,7 +380,7 @@ EOF
     cat >"$FIXTURE_DIR/proxies.d/vmess.yaml" <<EOF
   - name: meow-fixture-vmess
     type: vmess
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${VMESS_PORT}
     uuid: ${VMESS_UUID}
     alterId: 0
@@ -423,7 +460,7 @@ EOF
     cat >"$FIXTURE_DIR/proxies.d/wg.yaml" <<EOF
   - name: meow-fixture-wg
     type: wireguard
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${WG_PORT}
     private-key: "${cli_priv}"
     public-key: "${srv_pub}"
@@ -458,7 +495,7 @@ EOF
     cat >"$FIXTURE_DIR/proxies.d/hy2.yaml" <<EOF
   - name: meow-fixture-hy2
     type: hysteria2
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${HY2_PORT}
     password: "${HY2_PASSWORD}"
     sni: meow-fixture.local
@@ -498,7 +535,7 @@ EOF
     cat >"$FIXTURE_DIR/proxies.d/tuic.yaml" <<EOF
   - name: meow-fixture-tuic
     type: tuic
-    server: ${SS_HOST}
+    server: ${FIXTURE_HOST}
     port: ${TUIC_PORT}
     uuid: ${TUIC_UUID}
     password: "${TUIC_PASSWORD}"
@@ -574,7 +611,7 @@ HTTPD_PID=$!
 sleep 0.5
 kill -0 "$HTTPD_PID" 2>/dev/null || fail "http.server failed to start — see $FIXTURE_DIR/httpd.log"
 
-SUBSCRIPTION_URL="http://${SS_HOST}:${SUB_PORT}/clash.yaml"
+SUBSCRIPTION_URL="http://${FIXTURE_HOST}:${SUB_PORT}/clash.yaml"
 
 # Machine-parseable fixture summary — downstream harness (Swift XCUITest, etc.)
 # can parse these lines directly. Only variables for enabled protocols
@@ -588,41 +625,41 @@ SUBSCRIPTION_URL="http://${SS_HOST}:${SUB_PORT}/clash.yaml"
     for name in "${ENABLED_PROTOCOLS[@]}"; do
         case "$name" in
             meow-fixture-ss)
-                echo "SS_HOST=${SS_HOST}"
+                echo "SS_HOST=${FIXTURE_HOST}"
                 echo "SS_PORT=${SS_PORT}"
                 echo "SS_METHOD=${SS_METHOD}"
                 echo "SS_PASSWORD=${SS_PASSWORD}"
                 ;;
             meow-fixture-trojan)
-                echo "TROJAN_HOST=${SS_HOST}"
+                echo "TROJAN_HOST=${FIXTURE_HOST}"
                 echo "TROJAN_PORT=${TROJAN_PORT}"
                 echo "TROJAN_PASSWORD=${TROJAN_PASSWORD}"
                 echo "TROJAN_CERT=${FIXTURE_DIR}/trojan-cert.pem"
                 ;;
             meow-fixture-vless)
-                echo "VLESS_HOST=${SS_HOST}"
+                echo "VLESS_HOST=${FIXTURE_HOST}"
                 echo "VLESS_PORT=${VLESS_PORT}"
                 echo "VLESS_UUID=${VLESS_UUID}"
                 ;;
             meow-fixture-vmess)
-                echo "VMESS_HOST=${SS_HOST}"
+                echo "VMESS_HOST=${FIXTURE_HOST}"
                 echo "VMESS_PORT=${VMESS_PORT}"
                 echo "VMESS_UUID=${VMESS_UUID}"
                 ;;
             meow-fixture-wg)
-                echo "WG_HOST=${SS_HOST}"
+                echo "WG_HOST=${FIXTURE_HOST}"
                 echo "WG_PORT=${WG_PORT}"
                 echo "WG_CLIENT_PRIV=${FIXTURE_DIR}/wg-client.priv"
                 echo "WG_SERVER_PUB=${FIXTURE_DIR}/wg-server.pub"
                 ;;
             meow-fixture-hy2)
-                echo "HY2_HOST=${SS_HOST}"
+                echo "HY2_HOST=${FIXTURE_HOST}"
                 echo "HY2_PORT=${HY2_PORT}"
                 echo "HY2_PASSWORD=${HY2_PASSWORD}"
                 echo "HY2_CERT=${FIXTURE_DIR}/hy2-cert.pem"
                 ;;
             meow-fixture-tuic)
-                echo "TUIC_HOST=${SS_HOST}"
+                echo "TUIC_HOST=${FIXTURE_HOST}"
                 echo "TUIC_PORT=${TUIC_PORT}"
                 echo "TUIC_UUID=${TUIC_UUID}"
                 echo "TUIC_PASSWORD=${TUIC_PASSWORD}"

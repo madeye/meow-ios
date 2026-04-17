@@ -10,11 +10,11 @@ Answers the open question flagged in `TEST_STRATEGY.md` (§13 risks): *"Protocol
 
 ## 1. Recommendation
 
-**Run fixture servers natively via Homebrew inside the Tart VM, alongside vphone-cli.** Fall back to a lightweight container runtime (Lima or Colima, **not** Docker Desktop) only for protocols without a maintained brew formula.
+**Run fixture servers natively via Homebrew on the outer runner host, outside the Tart VM.** The Tart guest only runs vphone-cli + SSH + SIP-disabled macOS; the virtual iPhone in the guest reaches the fixtures via the Tart bridge IP (resolved at runtime inside `scripts/test-e2e-ios.sh` — see §5). Fall back to a lightweight container runtime (Lima or Colima, **not** Docker Desktop) only for protocols without a maintained brew formula.
 
 ### Why not Docker-compose
 
-The fixtures live inside the Tart macOS guest (per `TEST_STRATEGY.md` §7 — vphone-cli requires SIP-disabled macOS). Docker Desktop in a macOS-in-macOS nesting is heavy, fragile under virtualization, and adds a second VM layer (Docker's Linux VM inside the Tart VM). Native Homebrew services sidestep that entirely. Every protocol in scope has either a brew formula or a single-binary release.
+Docker Desktop on the runner host adds a second VM layer (Docker's Linux VM alongside the Tart macOS VM) — heavy, and for zero benefit since every protocol in scope has either a brew formula or a single-binary release. Native Homebrew on the host sidesteps that entirely.
 
 ### Why not live endpoints
 
@@ -73,22 +73,24 @@ Consequence for fixtures:
 
 ## 5. Tart VM Integration
 
-**Runner scope (2026-04-17 team-lead decision):** the nightly E2E runs **inside the Tart VM only** — no Mac mini fallback. We accept the nested-virtualisation risk for macOS guests on Apple Silicon. If `Virtualization.framework` refuses to nest reliably in practice, that re-raises as a real blocker; until then we proceed on the assumption it works.
+**Runner scope (2026-04-17 team-lead decision):** the nightly E2E uses a Tart guest as the vphone sandbox — no Mac mini fallback. We accept the nested-virtualisation risk for macOS guests on Apple Silicon. If `Virtualization.framework` refuses to nest reliably in practice, that re-raises as a real blocker; until then we proceed on the assumption it works.
 
-**Image strategy (2026-04-17 team-lead decision):** **reuse the existing local `bld-e2e-base` Tart VM** (already present per `tart list`; last accessed 2026-04-14, 32 GB disk-used). Rather than rebaking the base every time a fixture binary set shifts, we layer a delta on top via `scripts/provision-tart-fixtures.sh` (idempotent — installs only what's missing). Rebake becomes a last resort, not the default path.
+**Topology (amended 2026-04-17 after probing `bld-e2e-base`):** fixture servers and the GitHub Actions runner both live on the **outer macOS host** that boots Tart. The **Tart guest** runs only vphone-cli + SSH + SIP-disabled macOS (SIP needed for vphone, per `TEST_STRATEGY.md §7`). The virtual iPhone inside the guest reaches the fixture servers via the Tart bridge IP — the outer host's address on the `bridgeN` interface Tart bridges onto, typically `192.168.64.1` for the default vmnet-host NAT. `scripts/test-e2e-ios.sh` resolves this automatically from `VPHONE_HOST` using `route -n get <vm-ip>` → interface → `ifconfig inet`; local runs (no `VPHONE_HOST`) fall back to `127.0.0.1`. The binds stay on `0.0.0.0` so both paths work — do **not** tighten to loopback, since loopback on the host is invisible to the iPhone's network stack inside the guest.
 
-The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already referenced in `TEST_STRATEGY.md` §7 as the Android-parity entry point; P1–P3 live). Inside the Tart VM, the script will:
+**Image strategy (2026-04-17):** reuse the existing local `bld-e2e-base` Tart VM (already present per `tart list`; last accessed 2026-04-14, 32 GB disk-used). The guest stays stateless beyond what vphone-cli needs; fixture binaries go on the outer host, not the guest.
 
-1. `brew install` + release-binary drops are laid down once by `scripts/provision-tart-fixtures.sh` (see below). Subsequent runs are no-ops against the `bld-e2e-base` image; the orchestrator itself doesn't reach for `brew`.
-2. Generate per-run ephemeral credentials (Trojan passwords, VLESS UUIDs, WG keypairs) into `/tmp/meow-fixtures/<uuid>/`.
-3. Fork each fixture as a background process from the orchestrator itself (`binary … &; FIXTURE_PID=$!`), track its PID in a shell variable, and register an `EXIT INT TERM` trap that reaps every tracked PID in reverse-start order and then wipes `/tmp/meow-fixtures/<uuid>/`. Fork-and-trap over `launchctl bootstrap` (speculated in v1): one script owns the whole lifecycle, no per-run LaunchAgent plist pollution of the Tart guest, and interactive Ctrl-C plus programmatic `kill -TERM` both land on the same cleanup path. Trojan's fallback-probe requirement is handled in the same style — a dedicated loopback `python3 -m http.server` on an ephemeral port is forked alongside trojan-go and reaped by the trap.
-4. Serve a Clash subscription YAML via `python3 -m http.server 18080` — same port as the Android `test-e2e.sh` pattern, so local devs don't have to rediscover it. Claimed port allocation for future Tart VM conflict bookkeeping.
-5. Point vphone-cli's iPhone at the subscription URL via the `meow://connect` deep link.
+The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already referenced in `TEST_STRATEGY.md` §7 as the Android-parity entry point; P1–P3 live). On the outer runner host the script:
+
+1. Assumes fixture binaries are already installed on `PATH` by `scripts/provision-tart-fixtures.sh` (runner-host prereq — see [`RUNNER.md §1`](./RUNNER.md)). The orchestrator itself doesn't reach for `brew`.
+2. Generates per-run ephemeral credentials (Trojan passwords, VLESS UUIDs, WG keypairs) into `/tmp/meow-fixtures/<uuid>/` on the host.
+3. Forks each fixture as a background process from the orchestrator itself (`binary … &; FIXTURE_PID=$!`), tracks its PID in a shell variable, and registers an `EXIT INT TERM` trap that reaps every tracked PID in reverse-start order and then wipes `/tmp/meow-fixtures/<uuid>/`. Fork-and-trap over `launchctl bootstrap` (speculated in v1): one script owns the whole lifecycle, no per-run LaunchAgent plist pollution, and interactive Ctrl-C plus programmatic `kill -TERM` both land on the same cleanup path. Trojan's fallback-probe requirement is handled in the same style — a loopback `python3 -m http.server` on an ephemeral port is forked alongside trojan-go and reaped by the trap.
+4. Serves a Clash subscription YAML on the host via `python3 -m http.server 18080` — same port as the Android `test-e2e.sh` pattern, so local devs don't have to rediscover it.
+5. Points vphone-cli's iPhone (inside the guest, driven via SSH through `VPHONE_HOST`) at the subscription URL via the `meow://connect` deep link. The URL's host component is the Tart bridge IP so the in-guest iPhone can resolve and dial it.
 6. Tear down: the trap from step 3 fires (on exit, Ctrl-C, or SIGTERM), `kill -TERM`s each tracked PID, and removes `/tmp/meow-fixtures/<uuid>/`. No post-run LaunchAgent cleanup needed because no LaunchAgents were ever registered.
 
-**Tart image provisioning — `scripts/provision-tart-fixtures.sh`:** layered delta on top of `bld-e2e-base`, not a rebuild. Idempotent. Installs the Homebrew-core set (`shadowsocks-rust`, `trojan-go`, `xray`, `wireguard-tools`, `wireguard-go`) and drops the two GitHub-release binaries (`hysteria` from `apernet/hysteria`, `tuic-server` from `EAimTY/tuic` — neither has a homebrew-core formula as of 2026-04) into `/usr/local/bin`. Pin versions via `HYSTERIA_VERSION` / `TUIC_VERSION` env. `DRY_RUN=1` prints a present/missing summary without mutating the guest — useful for probing what the existing base already has.
+**Runner-host provisioning — `scripts/provision-tart-fixtures.sh`:** idempotent host-side installer. Installs the Homebrew-core set (`shadowsocks-rust`, `trojan-go`, `xray`, `wireguard-tools`, `wireguard-go`) and drops the two GitHub-release binaries (`hysteria` from `apernet/hysteria`, `tuic-server` from `EAimTY/tuic` — neither has a homebrew-core formula as of 2026-04) into `/usr/local/bin`. Pin versions via `HYSTERIA_VERSION` / `TUIC_VERSION` env. `DRY_RUN=1` prints a present/missing summary without mutating state — useful for probing a host (or, if someone ever wants to, a guest).
 
-Operational note: the same script also runs cleanly on a developer laptop, so `MEOW_FIXTURE_SEEDED=1` local-dev loops don't require a Tart boot. Targeted delta vs a clean `bld-e2e-base` is ~80 MB; subsequent invocations are no-ops.
+Operational note: the same script also runs cleanly on a developer laptop outside CI, so `MEOW_FIXTURE_SEEDED=1` local-dev loops don't require any Tart boot at all.
 
 ---
 

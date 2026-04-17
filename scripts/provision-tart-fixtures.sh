@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
 #
-# Idempotent Tart-guest provisioning for the protocol fixture binaries
-# consumed by scripts/test-e2e-ios.sh. Layered on top of the existing
-# `bld-e2e-base` image (per team-lead: reuse the local base, do not
-# rebake) so repeated runs only install what's missing.
+# Idempotent runner-host provisioning for the protocol fixture binaries
+# consumed by scripts/test-e2e-ios.sh. Repeated runs only install what's
+# missing.
 #
-# Runs in two modes:
-#   - inside the Tart macOS guest (most common): installs/downloads
-#     directly onto the guest's filesystem.
-#   - on a developer laptop: same provisioning, so `scripts/test-e2e-ios.sh`
-#     can be exercised locally without a Tart boot (MEOW_FIXTURE_SEEDED=1).
+# Runs on the **outer runner host** — the same macOS host that boots
+# the Tart guest for nightly E2E. The fixture servers spawn here (not
+# inside the guest); the virtual iPhone in the guest reaches them via
+# the Tart-visible host IP. The bld-e2e-base Tart image stays stateless
+# beyond SIP-disabled macOS + vphone-cli + SSH (see docs/TEST_FIXTURES.md
+# §5). Running this script inside the guest works too — fixture binaries
+# don't care where they live — but it's wasted installation on an image
+# the nightly pipeline never reaches with these binaries on PATH.
+#
+# Non-interactive SSH gotcha (for the guest-path, if anyone reaches for
+# it): `command -v brew` returns empty under `ssh user@host 'bash …'`
+# because /opt/homebrew/bin isn't on the non-interactive PATH. Prefix
+# with `eval "$(/opt/homebrew/bin/brew shellenv)"` or run the script
+# under an interactive shell. The outer-host path doesn't hit this
+# because it runs directly.
 #
 # What gets installed / downloaded:
 #   - Homebrew core formulas:
