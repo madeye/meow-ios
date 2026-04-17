@@ -62,6 +62,26 @@ struct EngineBootTests {
         #expect(meow_engine_is_running() == 0)
     }
 
+    @Test("engine_start → engine_stop → engine_start releases the REST port")
+    func restartReleasesRestPort() throws {
+        let fixture = try EngineFixture.make()
+        defer { fixture.cleanup(); meow_engine_stop() }
+
+        meow_core_init()
+        fixture.homeDir.withCString { meow_core_set_home_dir($0) }
+        meow_engine_stop()
+
+        let rc1 = fixture.configPath.withCString { meow_engine_start($0) }
+        #expect(rc1 == 0, "first start failed: \(String(cString: meow_core_last_error()))")
+
+        meow_engine_stop()
+        #expect(meow_engine_is_running() == 0)
+
+        let rc2 = fixture.configPath.withCString { meow_engine_start($0) }
+        #expect(rc2 == 0, "second start failed (likely EADDRINUSE on external-controller): \(String(cString: meow_core_last_error()))")
+        #expect(meow_engine_is_running() == 1)
+    }
+
     @Test("engine_start returns -1 when the config path does not exist")
     func startWithMissingPath() {
         meow_engine_stop()
