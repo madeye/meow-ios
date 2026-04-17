@@ -16,24 +16,29 @@ jobs:
     runs-on: [self-hosted, macOS, apple-silicon, tart]
     timeout-minutes: 90
     env:
-      TART_IMAGE: ghcr.io/${{ github.repository_owner }}/meow-e2e-base:latest
+      # Local Tart image on the self-hosted runner's host — see
+      # docs/TEST_FIXTURES.md §5 for the "reuse bld-e2e-base" decision.
+      # No `tart pull` / GHCR round-trip because the only place this
+      # workflow ever runs is a host that already has the base image
+      # (the "only-Tart-VM" scope decision in docs/RUNNER.md §1).
+      TART_BASE_IMAGE: bld-e2e-base
+      TART_VM: meow-nightly-${{ github.run_id }}
       VPHONE_SOCK: /tmp/vphone.sock
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Pull Tart base image (SIP-disabled macOS + vphone-cli)
+      - name: Clone ephemeral VM from local base image
         run: |
           brew list tart >/dev/null 2>&1 || brew install cirruslabs/cli/tart
-          tart pull "$TART_IMAGE"
-          tart clone "$TART_IMAGE" meow-e2e
+          tart clone "$TART_BASE_IMAGE" "$TART_VM"
 
       - name: Boot VM and wait for SSH
         run: |
-          tart run meow-e2e --no-graphics &
+          tart run "$TART_VM" --no-graphics &
           for i in $(seq 1 60); do
-            VM_IP=$(tart ip meow-e2e 2>/dev/null || true)
+            VM_IP=$(tart ip "$TART_VM" 2>/dev/null || true)
             [ -n "$VM_IP" ] && ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 admin@$VM_IP 'true' 2>/dev/null && break
             sleep 2
           done
@@ -92,7 +97,7 @@ jobs:
 
       - name: Tear down VM
         if: always()
-        run: tart delete meow-e2e || true
+        run: tart delete "$TART_VM" || true
 
       - name: Notify on failure
         if: failure()
