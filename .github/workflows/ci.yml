@@ -48,28 +48,36 @@ jobs:
 
   build-core:
     # PRD v1.1: single pure-Rust MihomoCore.xcframework — no Go toolchain.
+    # mihomo-rust is pulled as a cargo git dependency (pinned via Cargo.lock),
+    # not a submodule, so no --recurse-submodules here.
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Rust (stable + iOS targets)
+        uses: dtolnay/rust-toolchain@stable
         with:
-          submodules: recursive  # mihomo-rust is a git submodule
-      - name: Set up Rust
-        run: |
-          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
-          cargo install cbindgen
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - name: Cache cargo registry, git, and build target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core/rust/mihomo-ios-ffi/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('core/rust/mihomo-ios-ffi/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
       - name: Build MihomoCore.xcframework
-        run: |
-          # scripts/build-rust.sh   # lands with T0.4 / T1.4
-          echo "Rust build placeholder — enable after T1.4"
+        run: scripts/build-rust.sh
       - name: Enforce size budget (≤ 8 MB stripped — see TEST_STRATEGY §8.1)
         run: |
           # test $(stat -f %z MeowCore/Frameworks/MihomoCore.xcframework/ios-arm64/libmihomo_ios_ffi.a) -lt 8388608
-          echo "Size gate placeholder — enable after T1.4 (8 MB limit to stay inside the 15 MB NE memory cap)"
+          echo "Size gate placeholder — stripped-binary enforcement lives in the archive job (PacketTunnel.appex); raw-.a gate lands with T1.4."
       - uses: actions/upload-artifact@v4
         with:
           name: MihomoCore.xcframework
           path: MeowCore/Frameworks/MihomoCore.xcframework
-          if-no-files-found: warn
+          if-no-files-found: error
 
   unit-test:
     needs: [build-core]
@@ -132,10 +140,14 @@ jobs:
           path: build/ui.xcresult
 
   archive:
-    needs: [unit-test, ui-test, security-scan]
+    needs: [build-core, unit-test, ui-test, security-scan]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MihomoCore.xcframework
+          path: MeowCore/Frameworks/MihomoCore.xcframework
       - name: Archive (no signing on PR)
         run: |
           brew install xcodegen
