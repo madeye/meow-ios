@@ -132,7 +132,6 @@ jobs:
           path: build/ui.xcresult
 
   archive:
-    if: github.ref == 'refs/heads/main'
     needs: [unit-test, ui-test, security-scan]
     runs-on: macos-14
     steps:
@@ -149,3 +148,24 @@ jobs:
             -archivePath build/meow-ios.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify
+      - name: Enforce PacketTunnel.appex size budget (TEST_STRATEGY §8.1)
+        run: |
+          set -euo pipefail
+          BIN="build/meow-ios.xcarchive/Products/Applications/meow-ios.app/PlugIns/PacketTunnel.appex/PacketTunnel"
+          if [ ! -f "$BIN" ]; then
+            echo "::error::PacketTunnel binary not found at $BIN"
+            ls -R build/meow-ios.xcarchive/Products || true
+            exit 1
+          fi
+          LIMIT=$((8 * 1024 * 1024))
+          WARN=$((7 * 1024 * 1024))
+          SIZE=$(stat -f %z "$BIN")
+          MB=$(awk "BEGIN {printf \"%.2f\", ${SIZE}/1048576}")
+          echo "PacketTunnel stripped binary: ${SIZE} bytes (${MB} MB)"
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "::error::PacketTunnel exceeds 8 MB ceiling (${SIZE} > ${LIMIT}) — see TEST_STRATEGY §8.1"
+            exit 1
+          fi
+          if [ "$SIZE" -gt "$WARN" ]; then
+            echo "::warning::PacketTunnel approaching 8 MB ceiling (${MB} MB > 7 MB soft warning)"
+          fi
