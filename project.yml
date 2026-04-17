@@ -92,6 +92,9 @@ targets:
         embed: true
         codeSign: true
       - package: MeowShared
+        product: MeowModels
+      - package: MeowShared
+        product: MeowIPC
       - package: Yams
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
@@ -183,6 +186,9 @@ targets:
           - -ObjC
     dependencies:
       - package: MeowShared
+        product: MeowModels
+      - package: MeowShared
+        product: MeowIPC
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true

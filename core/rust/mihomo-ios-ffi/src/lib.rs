@@ -339,20 +339,29 @@ pub unsafe extern "C" fn meow_engine_test_dns(
 // tun2socks (NEPacketTunnelFlow bridge) — dispatches in-process into engine
 // ---------------------------------------------------------------------------
 
-/// Start tun2socks on `fd`. `socks_port` / `dns_port` are reserved for API
-/// compatibility; the in-process dispatcher ignores both. Returns 0 on
-/// success, -1 on error (inspect `meow_core_last_error`).
+/// C-compatible egress callback. Called from the tokio runtime whenever
+/// tun2socks produces a packet bound for Swift's `NEPacketTunnelFlow`. Swift
+/// guarantees `ctx` remains live between `meow_tun_start` and `meow_tun_stop`.
+pub type MeowWritePacket =
+    unsafe extern "C" fn(ctx: *mut std::os::raw::c_void, data: *const u8, len: usize);
+
+/// Start tun2socks with a Swift-owned egress callback. The ingest side is
+/// driven by `meow_tun_ingest`; the tunnel uses an internal mpsc queue so
+/// there's no file descriptor between Swift and Rust.
+///
+/// Returns 0 on success, -1 on error (inspect `meow_core_last_error`).
+///
+/// # Safety
+/// `ctx` is opaque to Rust but must remain valid for any dispatch that occurs
+/// between this call and `meow_tun_stop`. `write_cb` must be a non-null C
+/// function pointer that stays valid for the lifetime of the tunnel.
 #[no_mangle]
-pub extern "C" fn meow_tun_start(fd: c_int, socks_port: c_int, dns_port: c_int) -> c_int {
-    logging::bridge_log(&format!(
-        "meow_tun_start: fd={}, socks={}, dns={}",
-        fd, socks_port, dns_port
-    ));
-    if fd < 0 {
-        set_error("invalid file descriptor".into());
-        return -1;
-    }
-    match tun2socks::start(fd, socks_port as u16, dns_port as u16) {
+pub unsafe extern "C" fn meow_tun_start(
+    ctx: *mut std::os::raw::c_void,
+    write_cb: MeowWritePacket,
+) -> c_int {
+    logging::bridge_log("meow_tun_start (direct callback)");
+    match tun2socks::start(ctx, write_cb) {
         Ok(()) => 0,
         Err(e) => {
             logging::bridge_log(&format!("meow_tun_start ERROR: {}", e));
@@ -360,6 +369,22 @@ pub extern "C" fn meow_tun_start(fd: c_int, socks_port: c_int, dns_port: c_int) 
             -1
         }
     }
+}
+
+/// Feed a raw IP packet from `NEPacketTunnelFlow.readPackets` into the
+/// netstack. Returns 0 if the packet was queued (or dropped under backpressure),
+/// -1 if tun2socks isn't running. Non-blocking; callers shouldn't hold
+/// `readPackets` completion handlers waiting.
+///
+/// # Safety
+/// `data` must reference `len` bytes of readable memory.
+#[no_mangle]
+pub unsafe extern "C" fn meow_tun_ingest(data: *const u8, len: usize) -> c_int {
+    if data.is_null() || len == 0 {
+        return 0;
+    }
+    let slice = std::slice::from_raw_parts(data, len);
+    tun2socks::ingest(slice)
 }
 
 /// Stop the tun2socks task. Idempotent.

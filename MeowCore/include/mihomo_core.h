@@ -13,6 +13,13 @@
 #include <stdlib.h>
 
 /**
+ * C-compatible egress callback. Called from the tokio runtime whenever
+ * tun2socks produces a packet bound for Swift's `NEPacketTunnelFlow`. Swift
+ * guarantees `ctx` remains live between `meow_tun_start` and `meow_tun_stop`.
+ */
+typedef void (*MeowWritePacket)(void *ctx, const uint8_t *data, uintptr_t len);
+
+/**
  * Initialize logging. Safe to call more than once.
  */
 void meow_core_init(void);
@@ -110,11 +117,29 @@ int meow_engine_test_proxy_http(const char *url, int timeout_ms, int *out_status
 int meow_engine_test_dns(const char *host, int timeout_ms, char *out, int out_cap);
 
 /**
- * Start tun2socks on `fd`. `socks_port` / `dns_port` are reserved for API
- * compatibility; the in-process dispatcher ignores both. Returns 0 on
- * success, -1 on error (inspect `meow_core_last_error`).
+ * Start tun2socks with a Swift-owned egress callback. The ingest side is
+ * driven by `meow_tun_ingest`; the tunnel uses an internal mpsc queue so
+ * there's no file descriptor between Swift and Rust.
+ *
+ * Returns 0 on success, -1 on error (inspect `meow_core_last_error`).
+ *
+ * # Safety
+ * `ctx` is opaque to Rust but must remain valid for any dispatch that occurs
+ * between this call and `meow_tun_stop`. `write_cb` must be a non-null C
+ * function pointer that stays valid for the lifetime of the tunnel.
  */
-int meow_tun_start(int fd, int socks_port, int dns_port);
+int meow_tun_start(void *ctx, MeowWritePacket write_cb);
+
+/**
+ * Feed a raw IP packet from `NEPacketTunnelFlow.readPackets` into the
+ * netstack. Returns 0 if the packet was queued (or dropped under backpressure),
+ * -1 if tun2socks isn't running. Non-blocking; callers shouldn't hold
+ * `readPackets` completion handlers waiting.
+ *
+ * # Safety
+ * `data` must reference `len` bytes of readable memory.
+ */
+int meow_tun_ingest(const uint8_t *data, uintptr_t len);
 
 /**
  * Stop the tun2socks task. Idempotent.

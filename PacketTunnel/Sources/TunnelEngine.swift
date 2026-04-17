@@ -6,17 +6,16 @@ import MeowModels
 
 /// Orchestrates the mihomo-rust engine and the tun2socks layer inside the
 /// packet-tunnel extension. Both halves live in the same static library
-/// (`MihomoCore.xcframework`) and dispatch in-process — no SOCKS5 loopback.
-/// The Rust side needs a file descriptor it can read from, and
-/// `NEPacketTunnelFlow` doesn't expose one, so `TunnelEngine` creates a
-/// socketpair and pumps packets between `packetFlow` and the Rust fd.
-final class TunnelEngine {
+/// (`MihomoCore.xcframework`) and dispatch in-process — no SOCKS5 loopback,
+/// no socketpair. `PacketWriter` + `meowPacketWriteCallback` form the egress
+/// bridge; this class drives ingress via `NEPacketTunnelFlow.readPackets` and
+/// forwards each packet into `meow_tun_ingest`.
+final class TunnelEngine: @unchecked Sendable {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "engine")
     private let packetFlow: NEPacketTunnelFlow
-    private var pumpTask: Task<Void, Never>?
+    private var ingressTask: Task<Void, Never>?
     private var trafficTask: Task<Void, Never>?
-    private var swiftSideFd: Int32 = -1
-    private var rustSideFd: Int32 = -1
+    private var writerRef: Unmanaged<PacketWriter>?
     private var started = false
 
     init(packetFlow: NEPacketTunnelFlow) {
@@ -32,41 +31,44 @@ final class TunnelEngine {
 
         try writeEffectiveConfig(prefs: prefs)
 
-        #if MIHOMO_CORE_LINKED
         meow_core_init()
         homeDir.withCString { meow_core_set_home_dir($0) }
 
         let configPath = AppGroup.effectiveConfigURL.path
         let engineStarted = configPath.withCString { meow_engine_start($0) }
         if engineStarted != 0 {
+            started = false
             throw TunnelEngineError.engineStartFailed(lastRustError())
         }
 
-        try openSocketPair()
-        if meow_tun_start(rustSideFd, Int32(prefs.mixedPort), Int32(prefs.localDnsPort)) != 0 {
+        let writer = PacketWriter(flow: packetFlow)
+        let ref = Unmanaged.passRetained(writer)
+        writerRef = ref
+        if meow_tun_start(ref.toOpaque(), meowPacketWriteCallback) != 0 {
+            ref.release()
+            writerRef = nil
+            meow_engine_stop()
+            started = false
             throw TunnelEngineError.tunStartFailed(lastRustError())
         }
-        pumpTask = Task.detached { [swiftSideFd, packetFlow] in
-            await PacketPump.run(fd: swiftSideFd, packetFlow: packetFlow)
-        }
-        #else
-        log.info("Rust engine placeholder — MIHOMO_CORE_LINKED not defined; skipping start")
-        #endif
 
+        ingressTask = Task.detached { [packetFlow] in
+            await TunnelEngine.runIngressLoop(flow: packetFlow)
+        }
         trafficTask = Task { await self.trafficPump() }
     }
 
     func stop() async {
         guard started else { return }
         started = false
-        pumpTask?.cancel()
+        ingressTask?.cancel()
         trafficTask?.cancel()
 
-        #if MIHOMO_CORE_LINKED
         meow_tun_stop()
         meow_engine_stop()
-        #endif
-        closeSocketPair()
+
+        writerRef?.release()
+        writerRef = nil
     }
 
     func reloadConfig() async throws {
@@ -75,15 +77,28 @@ final class TunnelEngine {
         // Hot-reload is a POST /configs on mihomo-rust's REST API; wiring the
         // extension ↔ API call lands with the reload flow in M3. For now a
         // full stop/start is the safe path.
-        _ = prefs
     }
 
     var isEngineRunning: Bool {
-        #if MIHOMO_CORE_LINKED
-        return meow_engine_is_running() != 0
-        #else
-        return false
-        #endif
+        meow_engine_is_running() != 0
+    }
+
+    // MARK: - Ingress
+
+    private static func runIngressLoop(flow: NEPacketTunnelFlow) async {
+        while !Task.isCancelled {
+            let packets = await withCheckedContinuation { (cont: CheckedContinuation<[Data], Never>) in
+                flow.readPackets { packets, _ in
+                    cont.resume(returning: packets)
+                }
+            }
+            for packet in packets {
+                packet.withUnsafeBytes { buf in
+                    guard let base = buf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+                    _ = meow_tun_ingest(base, UInt(buf.count))
+                }
+            }
+        }
     }
 
     // MARK: - Private
@@ -97,23 +112,6 @@ final class TunnelEngine {
         )
     }
 
-    private func openSocketPair() throws {
-        var fds = [Int32](repeating: 0, count: 2)
-        let rc = fds.withUnsafeMutableBufferPointer { buf in
-            socketpair(AF_UNIX, SOCK_DGRAM, 0, buf.baseAddress)
-        }
-        if rc != 0 {
-            throw TunnelEngineError.socketPairFailed(errno)
-        }
-        swiftSideFd = fds[0]
-        rustSideFd = fds[1]
-    }
-
-    private func closeSocketPair() {
-        if swiftSideFd >= 0 { close(swiftSideFd); swiftSideFd = -1 }
-        if rustSideFd >= 0 { close(rustSideFd); rustSideFd = -1 }
-    }
-
     private func trafficPump() async {
         var lastUp: Int64 = 0
         var lastDown: Int64 = 0
@@ -122,9 +120,7 @@ final class TunnelEngine {
             try? await Task.sleep(for: .milliseconds(500))
             var up: Int64 = 0
             var down: Int64 = 0
-            #if MIHOMO_CORE_LINKED
             meow_engine_traffic(&up, &down)
-            #endif
             let now = Date()
             let dt = max(0.001, now.timeIntervalSince(lastTime))
             let snapshot = TrafficSnapshot(
@@ -145,9 +141,7 @@ final class TunnelEngine {
     }
 
     private func lastRustError() -> String {
-        #if MIHOMO_CORE_LINKED
         if let cstr = meow_core_last_error() { return String(cString: cstr) }
-        #endif
         return ""
     }
 }
@@ -155,5 +149,4 @@ final class TunnelEngine {
 enum TunnelEngineError: Error {
     case engineStartFailed(String)
     case tunStartFailed(String)
-    case socketPairFailed(Int32)
 }

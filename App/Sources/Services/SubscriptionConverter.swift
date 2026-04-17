@@ -1,5 +1,4 @@
 import Foundation
-import Yams
 
 /// Normalizes a raw subscription body into Clash YAML. The authoritative
 /// converter is Rust — `meow_engine_convert_subscription` handles Clash YAML
@@ -9,12 +8,9 @@ protocol SubscriptionConverter: Sendable {
     func convert(_ body: Data) async throws -> String
 }
 
-/// Default converter: forwards the body to the Rust FFI. Before the
-/// `MihomoCore.xcframework` is first built, the compile-time conditional
-/// degrades to a YAML-parseability check so the app still builds.
+/// Default converter: forwards the body to the Rust FFI.
 struct ClashYAMLConverter: SubscriptionConverter {
     func convert(_ body: Data) async throws -> String {
-        #if MIHOMO_CORE_LINKED
         return try body.withUnsafeBytes { raw -> String in
             guard let base = raw.baseAddress else {
                 throw SubscriptionError.decodeFailed
@@ -37,25 +33,10 @@ struct ClashYAMLConverter: SubscriptionConverter {
             }
             return String(cString: buffer)
         }
-        #else
-        guard let text = String(data: body, encoding: .utf8) else {
-            throw SubscriptionError.decodeFailed
-        }
-        do {
-            _ = try Yams.load(yaml: text)
-        } catch {
-            throw SubscriptionError.conversionFailed(
-                "subscription is not Clash YAML (\(error.localizedDescription))"
-            )
-        }
-        return text
-        #endif
     }
 }
 
-#if MIHOMO_CORE_LINKED
 private func lastCoreError() -> String {
     if let cstr = meow_core_last_error() { return String(cString: cstr) }
     return "unknown error"
 }
-#endif

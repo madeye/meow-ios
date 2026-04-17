@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import Yams
 
 struct YamlEditorView: View {
     let profile: Profile
@@ -49,29 +48,15 @@ struct YamlEditorView: View {
 enum MihomoConfigValidator {
     /// Validates a YAML config via the Rust FFI (`meow_engine_validate_config`)
     /// which runs the same `load_config_from_str` path the engine uses at
-    /// start time. Falls back to a Yams-level syntactic check when the
-    /// `MihomoCore.xcframework` isn't linked yet.
+    /// start time.
     static func validate(_ yaml: String) throws {
-        #if MIHOMO_CORE_LINKED
         let rc = yaml.withCString { ptr -> Int32 in
             meow_engine_validate_config(ptr, Int32(yaml.utf8.count))
         }
         if rc != 0 {
-            let msg: String
-            if let cstr = meow_core_last_error() {
-                msg = String(cString: cstr)
-            } else {
-                msg = "invalid config"
-            }
+            let msg = meow_core_last_error().map { String(cString: $0) } ?? "invalid config"
             throw MihomoConfigError.invalid(msg)
         }
-        #else
-        do {
-            _ = try Yams.load(yaml: yaml)
-        } catch {
-            throw MihomoConfigError.invalid(error.localizedDescription)
-        }
-        #endif
     }
 }
 

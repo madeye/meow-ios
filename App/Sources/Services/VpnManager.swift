@@ -12,7 +12,7 @@ final class VpnManager {
     private(set) var stage: VpnStage = .idle
     private(set) var lastError: String?
     private var manager: NETunnelProviderManager?
-    private var statusObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
 
     deinit {
         if let statusObserver {

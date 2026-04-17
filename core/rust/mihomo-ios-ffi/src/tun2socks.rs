@@ -1,22 +1,25 @@
-//! tun2socks using netstack-smoltcp: reads raw IP packets from the iOS utun
-//! file descriptor, terminates TCP sessions in a userspace smoltcp stack, and
-//! hands each accepted stream directly to `mihomo_tunnel::tcp::handle_tcp` —
-//! no SOCKS5 loopback, no cross-process hop. UDP DNS is still short-circuited
-//! via DoH (iOS-side primary path); non-DNS UDP is not yet plumbed through
-//! mihomo because mihomo-rust's UDP reverse-pump isn't wired for netstack
-//! integration yet.
+//! tun2socks using netstack-smoltcp: Swift pushes raw IP packets in via
+//! [`ingest`], netstack terminates TCP sessions in a userspace smoltcp stack,
+//! and each accepted stream dispatches directly into
+//! `mihomo_tunnel::tcp::handle_tcp` — no SOCKS5 loopback, no cross-process hop.
+//!
+//! Egress packets (netstack output + DNS replies) are handed back to Swift via
+//! a C callback registered in [`start`]. No file descriptors cross the FFI.
+//! UDP DNS is short-circuited via DoH (iOS-side primary path); non-DNS UDP is
+//! not yet plumbed through mihomo — see PRD v1.3 §3.3 known MVP limitations.
 
 use crate::dns_table;
 use crate::doh_client;
 use crate::logging;
 use futures::{SinkExt, StreamExt};
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
+use parking_lot::Mutex;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::os::raw::c_void;
-use std::os::unix::io::RawFd;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
@@ -24,26 +27,56 @@ use tracing::info;
 
 use netstack_smoltcp::{AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
 
+/// Matches the cbindgen-emitted typedef in `mihomo_core.h`: Rust calls this
+/// whenever netstack or DNS produces an egress packet bound for the utun.
+pub type WritePacketFn = unsafe extern "C" fn(ctx: *mut c_void, data: *const u8, len: usize);
+
+/// Wraps the raw context pointer so it's `Send` across the tokio runtime. The
+/// contract is that Swift keeps the referent alive between `meow_tun_start`
+/// and `meow_tun_stop` (typically via `Unmanaged.passRetained`); we treat the
+/// pointer as opaque.
+#[derive(Copy, Clone)]
+struct EmitCtx(*mut c_void);
+unsafe impl Send for EmitCtx {}
+unsafe impl Sync for EmitCtx {}
+
+struct EgressEmitter {
+    ctx: EmitCtx,
+    cb: WritePacketFn,
+}
+
+impl EgressEmitter {
+    fn emit(&self, packet: &[u8]) {
+        unsafe { (self.cb)(self.ctx.0, packet.as_ptr(), packet.len()) };
+    }
+}
+
 static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 
-pub fn start(fd: i32, _socks_port: u16, _dns_port: u16) -> Result<(), String> {
+fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
+    static S: OnceLock<Mutex<Option<mpsc::Sender<Vec<u8>>>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(None))
+}
+
+pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
     if TUN2SOCKS_RUNNING.swap(true, Ordering::SeqCst) {
         return Err("tun2socks already running".into());
     }
 
-    info!("tun2socks starting: fd={}, in-process dispatch", fd);
+    let emitter = EgressEmitter { ctx: EmitCtx(ctx), cb };
+
+    info!("tun2socks starting (direct-callback ingest)");
     doh_client::init_doh_client(0);
 
-    unsafe {
-        let flags = libc::fcntl(fd, libc::F_GETFL);
-        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-    }
+    let (ingress_tx, ingress_rx) = mpsc::channel::<Vec<u8>>(256);
+    *ingress_slot().lock() = Some(ingress_tx);
 
     let rt = crate::get_runtime();
     rt.spawn(async move {
-        if let Err(e) = run_tun2socks(fd).await {
+        if let Err(e) = run_tun2socks(ingress_rx, emitter).await {
             logging::bridge_log(&format!("tun2socks error: {}", e));
         }
+        ingress_slot().lock().take();
         TUN2SOCKS_RUNNING.store(false, Ordering::SeqCst);
         info!("tun2socks exited");
     });
@@ -53,6 +86,27 @@ pub fn start(fd: i32, _socks_port: u16, _dns_port: u16) -> Result<(), String> {
 
 pub fn stop() {
     TUN2SOCKS_RUNNING.store(false, Ordering::SeqCst);
+    // Dropping the sender terminates the ingress task on its next `recv()`.
+    ingress_slot().lock().take();
+}
+
+/// Push a raw IP packet produced by `NEPacketTunnelFlow.readPackets` into the
+/// netstack. Returns 0 on success, -1 if tun2socks isn't running or the queue
+/// is closed. Swift-side flow-control lives inside the mpsc channel: when full
+/// we drop rather than block, because `readPackets` must return promptly or
+/// iOS starts queueing packets itself.
+pub fn ingest(packet: &[u8]) -> i32 {
+    let Some(tx) = ingress_slot().lock().clone() else {
+        return -1;
+    };
+    match tx.try_send(packet.to_vec()) {
+        Ok(()) => 0,
+        Err(mpsc::error::TrySendError::Full(_)) => {
+            logging::bridge_log("tun2socks: ingress queue full, dropping packet");
+            0
+        }
+        Err(mpsc::error::TrySendError::Closed(_)) => -1,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +117,10 @@ pub fn stop() {
 // task owns the stack; other tasks exchange packets via mpsc channels.
 // ---------------------------------------------------------------------------
 
-async fn run_tun2socks(fd: RawFd) -> io::Result<()> {
+async fn run_tun2socks(
+    mut ingress_rx: mpsc::Receiver<Vec<u8>>,
+    emitter: EgressEmitter,
+) -> io::Result<()> {
     logging::bridge_log("tun2socks: building netstack-smoltcp stack");
 
     let (mut stack, tcp_runner, _udp_socket, tcp_listener) = StackBuilder::default()
@@ -76,7 +133,7 @@ async fn run_tun2socks(fd: RawFd) -> io::Result<()> {
     let tcp_runner = tcp_runner.expect("TCP runner");
     let mut tcp_listener = tcp_listener.expect("TCP listener");
 
-    let (ingress_tx, mut ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
+    let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
     let runner_handle = tokio::spawn(async move {
@@ -85,11 +142,11 @@ async fn run_tun2socks(fd: RawFd) -> io::Result<()> {
         }
     });
 
-    let egress_tx2 = egress_tx.clone();
+    let egress_tx_stack = egress_tx.clone();
     let stack_handle = tokio::spawn(async move {
         loop {
             tokio::select! {
-                pkt = ingress_rx.recv() => {
+                pkt = stack_ingress_rx.recv() => {
                     match pkt {
                         Some(frame) => {
                             if let Err(e) = stack.send(frame).await {
@@ -102,7 +159,7 @@ async fn run_tun2socks(fd: RawFd) -> io::Result<()> {
                 }
                 pkt = stack.next() => {
                     match pkt {
-                        Some(Ok(frame)) => { let _ = egress_tx2.send(frame); }
+                        Some(Ok(frame)) => { let _ = egress_tx_stack.send(frame); }
                         Some(Err(e)) => {
                             logging::bridge_log(&format!("stack recv error: {}", e));
                             break;
@@ -123,83 +180,42 @@ async fn run_tun2socks(fd: RawFd) -> io::Result<()> {
         }
     });
 
-    let tun_writer_handle = tokio::spawn(async move {
+    let egress_handle = tokio::spawn(async move {
         while let Some(pkt) = egress_rx.recv().await {
-            let mut retries = 0u32;
-            loop {
-                let written = unsafe { libc::write(fd, pkt.as_ptr() as *const c_void, pkt.len()) };
-                if written >= 0 {
-                    break;
-                }
-                let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-                if errno == libc::EAGAIN && retries < 3 {
-                    retries += 1;
-                    tokio::task::yield_now().await;
-                    continue;
-                }
-                break;
-            }
+            emitter.emit(&pkt);
         }
     });
 
     let udp_reply_tx = egress_tx.clone();
-    let tun_reader_handle = tokio::spawn(async move {
-        let mut read_buf = vec![0u8; 65535];
+    while let Some(ip_data) = ingress_rx.recv().await {
+        if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
+            break;
+        }
 
-        loop {
-            if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
-                break;
-            }
-
-            tokio::task::yield_now().await;
-
-            let mut did_work = false;
-            loop {
-                let n =
-                    unsafe { libc::read(fd, read_buf.as_mut_ptr() as *mut c_void, read_buf.len()) };
-                if n <= 0 {
-                    break;
-                }
-                did_work = true;
-                let n = n as usize;
-                let ip_data = &read_buf[..n];
-
-                if let Some((src_ip, src_port, dst_ip, dst_port, payload)) =
-                    parse_udp_packet(ip_data)
-                {
-                    if dst_port == 53 {
-                        let reply_tx = udp_reply_tx.clone();
-                        let query = payload.to_vec();
-                        tokio::spawn(async move {
-                            handle_dns_query(src_ip, src_port, dst_ip, dst_port, query, reply_tx)
-                                .await;
-                        });
-                        continue;
-                    }
-                }
-
-                let frame: AnyIpPktFrame = ip_data.to_vec();
-                match ingress_tx.try_send(frame) {
-                    Ok(()) => {}
-                    Err(mpsc::error::TrySendError::Full(frame)) => {
-                        let _ = ingress_tx.send(frame).await;
-                    }
-                    Err(mpsc::error::TrySendError::Closed(_)) => break,
-                }
-            }
-
-            if !did_work {
-                tokio::time::sleep(tokio::time::Duration::from_micros(200)).await;
+        if let Some((src_ip, src_port, dst_ip, dst_port, payload)) = parse_udp_packet(&ip_data) {
+            if dst_port == 53 {
+                let reply_tx = udp_reply_tx.clone();
+                let query = payload.to_vec();
+                tokio::spawn(async move {
+                    handle_dns_query(src_ip, src_port, dst_ip, dst_port, query, reply_tx).await;
+                });
+                continue;
             }
         }
-    });
 
-    let _ = tun_reader_handle.await;
+        match stack_ingress_tx.try_send(ip_data) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(frame)) => {
+                let _ = stack_ingress_tx.send(frame).await;
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => break,
+        }
+    }
 
     runner_handle.abort();
     stack_handle.abort();
     tcp_accept_handle.abort();
-    tun_writer_handle.abort();
+    egress_handle.abort();
 
     logging::bridge_log("tun2socks: exiting");
     Ok(())

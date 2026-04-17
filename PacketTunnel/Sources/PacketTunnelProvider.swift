@@ -4,57 +4,63 @@ import os.log
 import MeowIPC
 import MeowModels
 
-final class PacketTunnelProvider: NEPacketTunnelProvider {
+final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "provider")
     private var engine: TunnelEngine?
     private var ipcListener: IPCListener?
 
     override func startTunnel(
         options: [String: NSObject]?,
-        completionHandler: @escaping (Error?) -> Void
+        completionHandler: @escaping @Sendable (Error?) -> Void
     ) {
         log.info("startTunnel")
 
         let settings = TunnelSettings.make(serverAddress: protocolConfiguration.serverAddress ?? "meow")
-        setTunnelNetworkSettings(settings) { [weak self] error in
-            guard let self else { return }
-            if let error {
-                self.log.error("setTunnelNetworkSettings failed: \(error.localizedDescription)")
-                completionHandler(error)
+        let profileID = options?["profileID"] as? String
+        Task { [weak self] in
+            guard let self else {
+                completionHandler(nil)
                 return
             }
-            Task {
-                do {
-                    let engine = TunnelEngine(packetFlow: self.packetFlow)
-                    try await engine.start()
-                    self.engine = engine
+            do {
+                try await self.applySettings(settings)
+                let engine = TunnelEngine(packetFlow: self.packetFlow)
+                try await engine.start()
+                self.engine = engine
 
-                    let listener = IPCListener { [weak self] intent in
-                        Task { await self?.handle(intent: intent) }
-                    }
-                    listener.start()
-                    self.ipcListener = listener
-
-                    self.writeState(.connected, profileID: options?["profileID"] as? String)
-                    completionHandler(nil)
-                } catch {
-                    self.log.error("engine start failed: \(error.localizedDescription)")
-                    self.writeState(.error, errorMessage: error.localizedDescription)
-                    completionHandler(error)
+                let listener = IPCListener { [weak self] intent in
+                    Task { await self?.handle(intent: intent) }
                 }
+                listener.start()
+                self.ipcListener = listener
+
+                self.writeState(.connected, profileID: profileID)
+                completionHandler(nil)
+            } catch {
+                self.log.error("engine start failed: \(error.localizedDescription)")
+                self.writeState(.error, errorMessage: error.localizedDescription)
+                completionHandler(error)
             }
         }
     }
 
-    override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+    override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping @Sendable () -> Void) {
         log.info("stopTunnel reason=\(String(describing: reason))")
-        Task {
-            await engine?.stop()
-            engine = nil
-            ipcListener?.stop()
-            ipcListener = nil
-            writeState(.stopped)
+        Task { [weak self] in
+            await self?.engine?.stop()
+            self?.engine = nil
+            self?.ipcListener?.stop()
+            self?.ipcListener = nil
+            self?.writeState(.stopped)
             completionHandler()
+        }
+    }
+
+    private func applySettings(_ settings: NEPacketTunnelNetworkSettings) async throws {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            setTunnelNetworkSettings(settings) { error in
+                if let error { cont.resume(throwing: error) } else { cont.resume() }
+            }
         }
     }
 
