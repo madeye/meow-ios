@@ -12,8 +12,8 @@ import MeowModels
 /// file fails to compile — that's intentional.
 ///
 /// Status: STUB — all cases disabled until T2.6 Debug Diagnostics Panel
-/// + T3.7 UI stabilization + Tart base image are ready. When enabled,
-/// this suite runs only in the nightly `e2e` job, not on PRs.
+/// + T4.2 Home Screen + Tart base image are ready. When enabled, this
+/// suite runs only in the nightly `e2e` job, not on PRs.
 final class E2E5CheckGateTests: XCTestCase {
 
     override class var defaultTestSuite: XCTestSuite {

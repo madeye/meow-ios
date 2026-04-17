@@ -207,7 +207,5 @@ schemes:
       gatherCoverageData: true
       coverageTargets:
         - meow-ios
-        - MeowShared/MeowModels
-        - MeowShared/MeowIPC
     archive:
       config: Release

@@ -44,7 +44,7 @@ struct VPhone {
     struct HomeScreen {
         let phone: VPhone
         func tapConnect() throws { try phone.tap(x: 200, y: 420) }
-        func waitForConnected(timeout: TimeInterval = 10) throws { fatalError("T3.7") }
+        func waitForConnected(timeout: TimeInterval = 10) throws { fatalError("T4.2") }
         func screenshot() throws -> Data { try phone.screenshot() }
     }
 

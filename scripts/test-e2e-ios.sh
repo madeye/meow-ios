@@ -8,9 +8,10 @@
 # virtual iPhone through the same 5-check connectivity gate by speaking
 # the vm/vphone.sock protocol (tap / swipe / screenshot / clipboard).
 #
-# Status: SCAFFOLD. Blocked on T3.7 (in-app diagnostics panel that
-# surfaces per-check pass/fail signals the harness can screenshot/OCR)
-# and T4.1 (test-only SwiftData seeding deep link).
+# Status: SCAFFOLD. Blocked on T2.6 (Debug Diagnostics Panel — the
+# per-check PASS/FAIL surface the harness screenshots/OCRs, format pinned
+# by PRD v1.3 §4.4) and T4.1 (App Shell & Navigation — needed for the
+# test-only SwiftData seeding deep link path).
 #
 # Required env:
 #   VPHONE_HOST   SSH target where vphone-cli and the virtual iPhone live
@@ -18,7 +19,7 @@
 #                 vphone-cli runs on the same machine as this script.
 #   VPHONE_SOCK   Path to vm/vphone.sock on VPHONE_HOST. Default /tmp/vphone.sock.
 #
-# Design note: checks 3–5 lean on the in-app diagnostics panel (T3.6);
+# Design note: checks 3–5 lean on the in-app diagnostics panel (T2.6);
 # they are NOT executed directly from the host because the real
 # assertion is "traffic flowed through NEPacketTunnelProvider" — which
 # is unobservable from outside the virtual iPhone.
@@ -108,27 +109,37 @@ info "Step 6: Tap Connect and wait for Connected state"
 # vphone tap 200 420           # coords for Connect button (from §7.5 page object)
 # vphone screenshot build/e2e/connected.png
 # scripts/assert-ocr.py build/e2e/connected.png "Connected" || fail "VPN did not connect within 10s"
-info "  TODO: tap+wait — blocked on T3.7 UI stabilization"
+info "  TODO: tap+wait — blocked on T4.2 Home Screen (Connect button coords stable)"
 
 info "Step 7: Run 5-check connectivity gate via in-app diagnostics panel"
-# The app exposes a debug-only 'Diagnostics' screen (T3.6) that runs the
-# same five meow_test_* FFI calls the Android CLI does. The harness
-# navigates to it, taps Run, and screenshots the result table.
+# The app exposes a debug-only 'Diagnostics' screen (T2.6) that runs the
+# same five meow_engine_test_* FFI calls the Android CLI does. The
+# harness navigates to it, taps Run, and screenshots the result table.
+#
+# The panel's output format is frozen by PRD §4.4:
+#   TUN_EXISTS: PASS
+#   DNS_OK: PASS
+#   TCP_PROXY_OK: PASS
+#   HTTP_204_OK: PASS
+#   MEM_OK: PASS
+# (or FAIL(<reason>) per row). The parser in MeowShared/MeowModels
+# (DiagnosticsLabelParser) is shared with the XCUITest bundle, so this
+# harness can consume the same grammar.
 #
 #   vphone tap <diagnostics-tab>
 #   vphone tap <run-diagnostics-button>
 #   sleep 15
 #   vphone screenshot build/e2e/diagnostics.png
 #   scripts/assert-diagnostics-pass.py build/e2e/diagnostics.png \
-#       tun_up dns_resolve tcp_1111 tcp_8888 http_generate_204
+#       TUN_EXISTS DNS_OK TCP_PROXY_OK HTTP_204_OK MEM_OK
 #
-# The Python helper OCRs the five rows of the screen and fails if any
-# row's "PASS" column is missing. Aggregate format matches the Android
+# The Python helper OCRs the five rows and fails if any row's value is
+# not the exact string "PASS". Aggregate format matches the Android
 # script's table so the two are directly comparable in PR summaries.
-info "  TODO: diagnostics-panel gate — blocked on T3.6 + T3.7"
+info "  TODO: diagnostics-panel gate — blocked on T2.6 + T4.2"
 
 info "Step 8: Collect artifacts"
 mkdir -p "$REPO_ROOT/build/e2e"
 # vphone screenshot "$REPO_ROOT/build/e2e/final.png" || true
 
-info "SCAFFOLD COMPLETE — fill in steps 5–7 once vphone-cli image is baked and T3.6/T3.7 land"
+info "SCAFFOLD COMPLETE — fill in steps 5–7 once vphone-cli image is baked and T2.6/T4.2 land"
