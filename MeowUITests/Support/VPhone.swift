@@ -57,22 +57,24 @@ struct VPhone {
     struct HomeScreen {
         let phone: VPhone
 
-        /// T4.2 Home Screen accessibility-identifier spec. Mirrors the
-        /// names Dev is wiring on the `View`s — any rename here or
-        /// there is a compile-time / test-time break, which is the
-        /// point. Composite helpers (`group`, `proxy`) build the
-        /// `home.group.<groupName>` / `home.proxy.<groupName>.<proxyName>`
-        /// patterns; `groupName` is the URL-safe slug the app emits.
+        /// T4.2 Home Screen accessibility-identifier spec (landed in
+        /// `ac4c433`). Literalises the names Dev wired on the `View`s —
+        /// any rename here or there is a compile-time / test-time
+        /// break, which is the point. The `group` / `proxy` builders
+        /// accept the raw display name the Mihomo config emits and
+        /// apply `String.identifierSlug` (shared via `MeowModels`)
+        /// internally, so callers can pass `"🇺🇸 US Nodes"` and land
+        /// on `home.group.us-nodes` without hand-rolling the slug.
         enum AccessibilityID {
             static let vpnToggle = "home.toggle.vpn"
             static let stateBadge = "home.badge.state"
             static let profileName = "home.profile.name"
             static let navDiagnostics = "home.nav.diagnostics"
             static func group(_ groupName: String) -> String {
-                "home.group.\(groupName)"
+                "home.group.\(groupName.identifierSlug)"
             }
             static func proxy(group groupName: String, proxy proxyName: String) -> String {
-                "home.proxy.\(groupName).\(proxyName)"
+                "home.proxy.\(groupName.identifierSlug).\(proxyName.identifierSlug)"
             }
         }
 
