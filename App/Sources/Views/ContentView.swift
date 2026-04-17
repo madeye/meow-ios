@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
+    @State private var showDiagnostics = false
 
     var body: some View {
         TabView {
@@ -19,6 +20,24 @@ struct ContentView: View {
             }
             Tab("Settings", systemImage: "gearshape.fill") {
                 NavigationStack { SettingsView() }
+            }
+        }
+        .onOpenURL { url in
+            if url.scheme == "meow" && url.host == "diagnostics" {
+                showDiagnostics = true
+            }
+        }
+        .fullScreenCover(isPresented: $showDiagnostics) {
+            NavigationStack {
+                DiagnosticsPanelView()
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle("Diagnostics")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { showDiagnostics = false }
+                        }
+                    }
             }
         }
     }

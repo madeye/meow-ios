@@ -47,6 +47,40 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
     }
 
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
+        guard DiagnosticsIPC.isRequest(messageData) else {
+            completionHandler?(nil)
+            return
+        }
+        // Diagnostics checks call into blocking Rust FFI (DNS, TCP connect,
+        // HTTP fetch). Run off the provider queue on a GCD-managed worker so
+        // we don't stall `handleAppMessage`'s caller. The NE completion
+        // handler is not @Sendable, so we can't hop through a Task; GCD is
+        // the correct tool here.
+        let engine = self.engine
+        let handler = UnsafeSendableBox(completionHandler)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let report = engine?.runDiagnostics() ?? DiagnosticsReport(
+                tunExists: .fail("engine_not_running"),
+                dnsOk: .fail("engine_not_running"),
+                tcpProxyOk: .fail("engine_not_running"),
+                http204Ok: .fail("engine_not_running"),
+                memOk: .fail("engine_not_running")
+            )
+            let data = (try? DiagnosticsIPC.encodeResponse(report)) ?? Data()
+            handler.value?(data)
+        }
+    }
+
+    /// `NEPacketTunnelProvider.handleAppMessage` hands us a non-Sendable
+    /// completion callback; this wrapper lets us pass it across a GCD
+    /// dispatch in Swift 6 strict mode. The runtime guarantees the callback
+    /// itself is only invoked from one thread.
+    private struct UnsafeSendableBox<T>: @unchecked Sendable {
+        let value: T
+        init(_ value: T) { self.value = value }
+    }
+
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping @Sendable () -> Void) {
         log.info("stopTunnel reason=\(String(describing: reason))")
         Task { [weak self] in

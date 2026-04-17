@@ -39,6 +39,10 @@ struct SettingsView: View {
                 Button("Install NE profile") { Task { await vpnManager.refresh() } }
                 Button("Connect (no profile required)") { Task { await vpnManager.connect() } }
                 Button("Disconnect", role: .destructive) { vpnManager.disconnect() }
+                NavigationLink("Open Diagnostics") {
+                    DiagnosticsPanelView()
+                        .ignoresSafeArea(edges: .bottom)
+                }
             }
             #endif
         }

@@ -20,6 +20,7 @@ final class TunnelEngine: @unchecked Sendable {
     private var trafficTask: Task<Void, Never>?
     private var writerRef: Unmanaged<PacketWriter>?
     private var started = false
+    private(set) var tunStarted = false
     private let ingressPackets = ManagedAtomicCounter()
 
     init(packetFlow: NEPacketTunnelFlow) {
@@ -55,6 +56,7 @@ final class TunnelEngine: @unchecked Sendable {
             started = false
             throw TunnelEngineError.tunStartFailed(lastRustError())
         }
+        tunStarted = true
 
         let ingressCounter = ingressPackets
         ingressTask = Task.detached { [packetFlow] in
@@ -70,10 +72,18 @@ final class TunnelEngine: @unchecked Sendable {
         trafficTask?.cancel()
 
         meow_tun_stop()
+        tunStarted = false
         meow_engine_stop()
 
         writerRef?.release()
         writerRef = nil
+    }
+
+    func runDiagnostics() -> DiagnosticsReport {
+        DiagnosticsRunner.run(
+            engineRunning: isEngineRunning,
+            tunStarted: tunStarted
+        )
     }
 
     func reloadConfig() async throws {

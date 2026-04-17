@@ -63,6 +63,10 @@ targets:
           NSAllowsArbitraryLoads: false
           NSAllowsLocalNetworking: true
         ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: io.github.madeye.meow.deeplink
+            CFBundleURLSchemes:
+              - meow
     entitlements:
       path: App/App.entitlements
       properties:
