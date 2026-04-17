@@ -36,6 +36,8 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
     public var downloadBytes: Int64
     public var uploadRate: Int64
     public var downloadRate: Int64
+    public var ingressPackets: Int64
+    public var egressPackets: Int64
     public var timestamp: Date
 
     public init(
@@ -43,12 +45,16 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
         downloadBytes: Int64 = 0,
         uploadRate: Int64 = 0,
         downloadRate: Int64 = 0,
+        ingressPackets: Int64 = 0,
+        egressPackets: Int64 = 0,
         timestamp: Date = Date()
     ) {
         self.uploadBytes = uploadBytes
         self.downloadBytes = downloadBytes
         self.uploadRate = uploadRate
         self.downloadRate = downloadRate
+        self.ingressPackets = ingressPackets
+        self.egressPackets = egressPackets
         self.timestamp = timestamp
     }
 }

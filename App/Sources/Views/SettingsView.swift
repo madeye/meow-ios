@@ -5,6 +5,8 @@ struct SettingsView: View {
     @State private var preferences: Preferences = Preferences.load(from: AppGroup.defaults)
     @State private var memoryMB: Int64?
     @Environment(MihomoAPI.self) private var api
+    @Environment(VpnManager.self) private var vpnManager
+    @Environment(AppIPCBridge.self) private var ipcBridge
 
     var body: some View {
         Form {
@@ -29,6 +31,16 @@ struct SettingsView: View {
                 LabeledContent("Version", value: appVersion)
                 LabeledContent("Memory", value: memoryMB.map { "\($0) MB" } ?? "—")
             }
+            #if DEBUG
+            Section("Debug Tunnel") {
+                LabeledContent("Stage", value: String(describing: vpnManager.stage))
+                LabeledContent("Ingress pkts", value: "\(ipcBridge.currentTraffic.ingressPackets)")
+                LabeledContent("Egress pkts", value: "\(ipcBridge.currentTraffic.egressPackets)")
+                Button("Install NE profile") { Task { await vpnManager.refresh() } }
+                Button("Connect (no profile required)") { Task { await vpnManager.connect() } }
+                Button("Disconnect", role: .destructive) { vpnManager.disconnect() }
+            }
+            #endif
         }
         .navigationTitle("Settings")
         .onChange(of: preferences.allowLan) { _, _ in persist() }

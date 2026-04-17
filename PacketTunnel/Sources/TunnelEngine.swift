@@ -10,6 +10,9 @@ import MeowModels
 /// no socketpair. `PacketWriter` + `meowPacketWriteCallback` form the egress
 /// bridge; this class drives ingress via `NEPacketTunnelFlow.readPackets` and
 /// forwards each packet into `meow_tun_ingest`.
+// @unchecked Sendable: NEPacketTunnelProvider serializes startTunnel/stopTunnel
+// for us (see NetworkExtension.framework docs), so this class is only touched
+// from one call chain at a time. Do not "helpfully" add actor isolation.
 final class TunnelEngine: @unchecked Sendable {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "engine")
     private let packetFlow: NEPacketTunnelFlow
@@ -17,6 +20,7 @@ final class TunnelEngine: @unchecked Sendable {
     private var trafficTask: Task<Void, Never>?
     private var writerRef: Unmanaged<PacketWriter>?
     private var started = false
+    private let ingressPackets = ManagedAtomicCounter()
 
     init(packetFlow: NEPacketTunnelFlow) {
         self.packetFlow = packetFlow
@@ -52,8 +56,9 @@ final class TunnelEngine: @unchecked Sendable {
             throw TunnelEngineError.tunStartFailed(lastRustError())
         }
 
+        let ingressCounter = ingressPackets
         ingressTask = Task.detached { [packetFlow] in
-            await TunnelEngine.runIngressLoop(flow: packetFlow)
+            await TunnelEngine.runIngressLoop(flow: packetFlow, counter: ingressCounter)
         }
         trafficTask = Task { await self.trafficPump() }
     }
@@ -85,7 +90,7 @@ final class TunnelEngine: @unchecked Sendable {
 
     // MARK: - Ingress
 
-    private static func runIngressLoop(flow: NEPacketTunnelFlow) async {
+    private static func runIngressLoop(flow: NEPacketTunnelFlow, counter: ManagedAtomicCounter) async {
         while !Task.isCancelled {
             let packets = await withCheckedContinuation { (cont: CheckedContinuation<[Data], Never>) in
                 flow.readPackets { packets, _ in
@@ -97,6 +102,7 @@ final class TunnelEngine: @unchecked Sendable {
                     guard let base = buf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
                     _ = meow_tun_ingest(base, UInt(buf.count))
                 }
+                counter.increment()
             }
         }
     }
@@ -128,6 +134,8 @@ final class TunnelEngine: @unchecked Sendable {
                 downloadBytes: down,
                 uploadRate: Int64(Double(up - lastUp) / dt),
                 downloadRate: Int64(Double(down - lastDown) / dt),
+                ingressPackets: ingressPackets.load(),
+                egressPackets: writerRef?.takeUnretainedValue().egressPackets.load() ?? 0,
                 timestamp: now
             )
             lastUp = up; lastDown = down; lastTime = now

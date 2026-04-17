@@ -99,6 +99,14 @@ targets:
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true
+    postBuildScripts:
+      - name: Strip Release binary (strip -Sx)
+        runOnlyWhenInstalling: false
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "$CONFIGURATION" = "Release" ]; then
+            /usr/bin/xcrun strip -Sx "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+          fi
 
   MeowTests:
     type: bundle.unit-test
@@ -192,6 +200,14 @@ targets:
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true
+    postBuildScripts:
+      - name: Strip Release binary (strip -Sx)
+        runOnlyWhenInstalling: false
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "$CONFIGURATION" = "Release" ]; then
+            /usr/bin/xcrun strip -Sx "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+          fi
 
 schemes:
   meow-ios:

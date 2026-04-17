@@ -4,6 +4,9 @@ import os.log
 import MeowIPC
 import MeowModels
 
+// @unchecked Sendable: the NetworkExtension runtime serializes provider
+// lifecycle callbacks (startTunnel/stopTunnel/sleep/wake) onto a single
+// internal queue, so cross-actor hops inside this class are safe.
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "provider")
     private var engine: TunnelEngine?

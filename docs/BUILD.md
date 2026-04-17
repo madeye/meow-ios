@@ -39,8 +39,9 @@ crate as a Cargo dependency. Only one static library ships.
 
 `scripts/build-rust.sh` produces `MeowCore/Frameworks/MihomoCore.xcframework`
 and the `MeowCore/include/mihomo_core.h` header. Both the app and extension
-link the same XCFramework. Swift source is gated behind `MIHOMO_CORE_LINKED`
-so the project still compiles before the XCFramework is built.
+link the same XCFramework directly — there is no `MIHOMO_CORE_LINKED`
+conditional; the framework is declared `optional: true` in `project.yml`
+so source compiles before the `.a` exists, but link fails without it.
 
 ```sh
 ./scripts/build-rust.sh   # → MihomoCore.xcframework
@@ -52,6 +53,11 @@ so the project still compiles before the XCFramework is built.
   locations, so we link statically into the extension.
 - `profile.release`: `opt-level = "z"`, LTO, `panic = "abort"` — keeps the
   binary under the NetworkExtension memory ceiling.
+- Xcode's default Release strip leaves Swift/Obj-C metadata in the linked
+  binary; a `strip -Sx` postBuildScript on the `meow-ios` and `PacketTunnel`
+  targets (see `project.yml`) takes the `.appex` from ~8.8 MB to ~5.6 MB,
+  under the 8 MB TEST_STRATEGY §8.1 ceiling. Removing that script will fail
+  QA's CI size gate.
 - `cbindgen` emits `mihomo_core.h` from `build.rs` on every build.
 - Mihomo crates pulled as git deps (`mihomo-common`, `mihomo-config`,
   `mihomo-dns`, `mihomo-tunnel`, `mihomo-api`, `mihomo-proxy`) from
@@ -85,9 +91,7 @@ Both targets share the App Group; the provider bundle id is
 - **`error: ld: library not found for -lmihomo_ios_ffi`** — run
   `./scripts/build-rust.sh`. The XCFramework is optional in `project.yml`
   (`optional: true`) so the app compiles without it, but any target's link
-  step still fails if a referenced symbol is used. The `MIHOMO_CORE_LINKED`
-  conditional in `TunnelEngine.swift`, `SubscriptionConverter.swift`, and
-  `YamlEditorView.swift` routes around missing symbols.
+  step still fails if a referenced symbol is used.
 - **Simulator runs but no VPN prompt** — `NETunnelProviderManager` requires
   the VPN configuration to be installed and accepted at least once per
   simulator. Check `Settings ▸ VPN & Device Management`.

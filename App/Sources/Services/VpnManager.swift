@@ -12,6 +12,9 @@ final class VpnManager {
     private(set) var stage: VpnStage = .idle
     private(set) var lastError: String?
     private var manager: NETunnelProviderManager?
+    // nonisolated(unsafe): written only from attach() on MainActor, read from
+    // deinit (which is nonisolated). NotificationCenter.removeObserver is
+    // thread-safe, so a torn read here is harmless.
     nonisolated(unsafe) private var statusObserver: NSObjectProtocol?
 
     deinit {

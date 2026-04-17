@@ -9,6 +9,7 @@ import NetworkExtension
 /// memcpy, no ObjC round-trip beyond what `writePackets` does internally.
 final class PacketWriter {
     private let flow: NEPacketTunnelFlow
+    let egressPackets = ManagedAtomicCounter()
 
     init(flow: NEPacketTunnelFlow) {
         self.flow = flow
@@ -18,6 +19,27 @@ final class PacketWriter {
         let packet = Data(bytes: data, count: length)
         let proto: Int32 = ((packet.first ?? 0) >> 4) == 6 ? AF_INET6 : AF_INET
         flow.writePackets([packet], withProtocols: [NSNumber(value: proto)])
+        egressPackets.increment()
+    }
+}
+
+/// Atomic Int64 counter via `OSAtomic`-free `_Atomic` semantics. Used from the
+/// C callback (no isolation) and read from the traffic pump.
+final class ManagedAtomicCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Int64 = 0
+
+    func increment() {
+        lock.lock()
+        value &+= 1
+        lock.unlock()
+    }
+
+    func load() -> Int64 {
+        lock.lock()
+        let v = value
+        lock.unlock()
+        return v
     }
 }
 
