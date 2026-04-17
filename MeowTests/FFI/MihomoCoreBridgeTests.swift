@@ -2,47 +2,99 @@ import Testing
 import Foundation
 
 /// Thin smoke tests for the unified Rust `mihomo-ios-ffi` static library
-/// exposed via the `MihomoCore.xcframework` C ABI. These ride the C ABI
-/// directly — any drift in symbol names or parameter types breaks these
-/// tests before any view-layer test runs.
+/// exposed via `MihomoCore.xcframework`. The app target links the same
+/// library as the PacketTunnel extension, but this suite only exercises
+/// the pure-function / read-only subset — it never calls
+/// `meow_engine_start` or `meow_tun_start`, both of which belong to the
+/// extension-side coverage in `MeowIntegrationTests/EngineIntegration/`.
 ///
-/// The same header is linked into both the app target and the PacketTunnel
-/// extension; this suite lives in the app-side test bundle. Extension-side
-/// lifecycle coverage (engine start/stop, tun2socks) lives in
-/// `MeowIntegrationTests/EngineIntegration/` once the xcframework builds.
-@Suite("mihomo-core Swift bridge", .tags(.ffi))
+/// Purpose: catch C-ABI drift (symbol names, parameter types, return
+/// conventions) before any view-layer or integration test runs. Everything
+/// the engine mutates in-process — home dir, thread-local last-error, the
+/// running/stopped flag — is observed, not modified in destructive ways.
+///
+/// `.serialized` is mandatory: `meow_core_set_home_dir` writes to a process
+/// singleton and the last-error pointer is thread-local. Running these in
+/// parallel would race.
+@Suite("mihomo-core Swift bridge", .tags(.ffi), .serialized)
 struct MihomoCoreBridgeTests {
 
-    @Test("meow_core_init is callable and idempotent", .disabled("blocked on T2.4 xcframework"))
-    func testInitIdempotent() {
-        // meow_core_init()
-        // meow_core_init()
-        // #expect(true, "two init calls should not crash")
+    @Test("meow_core_init is callable and idempotent")
+    func initIdempotent() {
+        meow_core_init()
+        meow_core_init()
     }
 
-    @Test("meow_core_set_home_dir accepts UTF-8", .disabled("blocked on T2.4"))
-    func testSetHomeDirUtf8() {
-        // "非ASCII/路径".withCString { meow_core_set_home_dir($0) }
+    @Test("meow_core_set_home_dir accepts UTF-8")
+    func setHomeDirUtf8() {
+        let path = NSTemporaryDirectory() + "meow-ffi-tests-非ASCII路径"
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        path.withCString { meow_core_set_home_dir($0) }
     }
 
-    @Test("meow_core_last_error is empty before any failure", .disabled("blocked on T2.4"))
-    func testNoErrorInitially() {
-        // #expect(String(cString: meow_core_last_error()) == "")
+    @Test("meow_core_set_home_dir accepts NULL")
+    func setHomeDirNull() {
+        meow_core_set_home_dir(nil)
     }
 
-    @Test("meow_engine_is_running is 0 before start", .disabled("blocked on T2.4"))
-    func testIsRunningFalseByDefault() {
-        // #expect(meow_engine_is_running() == 0)
+    @Test("meow_core_last_error pointer is always readable")
+    func lastErrorIsReadable() {
+        meow_core_init()
+        let ptr = meow_core_last_error()
+        // Header guarantees a crate-owned, non-NULL pointer. The content is
+        // thread-local — may carry a prior error set by another test on this
+        // worker thread — so we don't assert emptiness, only readability.
+        #expect(ptr != nil)
+        _ = String(cString: ptr!)
     }
 
-    @Test("meow_engine_validate_config surfaces YAML errors", .disabled("blocked on T2.4"))
-    func testValidateConfigMalformed() {
-        // invalid YAML → non-zero return + populated last_error
+    @Test("meow_engine_is_running is 0 when no engine has been started")
+    func isRunningFalseByDefault() {
+        // App-side tests never call meow_engine_start. The defensive stop
+        // guards against contamination from a future app-side suite that
+        // might boot the engine; meow_engine_stop is documented idempotent.
+        meow_engine_stop()
+        #expect(meow_engine_is_running() == 0)
     }
 
-    @Test("meow_engine_convert_subscription roundtrips Clash YAML", .disabled("blocked on T2.4"))
-    func testConvertSubscriptionPassthrough() {
-        // Clash YAML body → same YAML out
+    @Test("meow_engine_validate_config surfaces YAML errors")
+    func validateConfigMalformed() {
+        let bad = "this: is: not: valid: ["
+        let rc = bad.withCString { ptr -> Int32 in
+            meow_engine_validate_config(ptr, Int32(bad.utf8.count))
+        }
+        #expect(rc != 0, "malformed YAML must not return success")
+        let err = String(cString: meow_core_last_error())
+        #expect(!err.isEmpty, "last_error must be populated after a validation failure")
+    }
+
+    @Test("meow_engine_convert_subscription accepts Clash YAML")
+    func convertSubscriptionClashYaml() {
+        let body = """
+        proxies:
+          - {name: smoke, type: direct}
+        """
+        let bodyLen = Int32(body.utf8.count)
+
+        // First call with out=nil to discover required capacity.
+        let needed = body.withCString { ptr -> Int32 in
+            meow_engine_convert_subscription(ptr, bodyLen, nil, 0)
+        }
+        #expect(needed >= 0, "valid Clash YAML must not return -1")
+
+        // Second call with a buffer sized `needed + 1` for the trailing NUL.
+        let cap = Int(needed) + 1
+        var out = [CChar](repeating: 0, count: cap)
+        let written = body.withCString { ptr -> Int32 in
+            out.withUnsafeMutableBufferPointer { buf -> Int32 in
+                meow_engine_convert_subscription(ptr, bodyLen, buf.baseAddress, Int32(cap))
+            }
+        }
+        #expect(written == needed, "second call must write exactly the reported byte count")
+
+        let yaml = String(cString: out)
+        #expect(!yaml.isEmpty)
+        #expect(yaml.contains("proxies"), "converted YAML must retain top-level proxies key")
     }
 }
 

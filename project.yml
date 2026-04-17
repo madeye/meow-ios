@@ -119,11 +119,17 @@ targets:
     dependencies:
       - target: meow-ios
       - package: MeowShared
+        product: MeowModels
+      - package: MeowShared
+        product: MeowIPC
     settings:
       base:
         BUNDLE_LOADER: $(TEST_HOST)
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/meow-ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/meow-ios
         GENERATE_INFOPLIST_FILE: YES
+        SWIFT_OBJC_BRIDGING_HEADER: App/Sources/BridgingHeader.h
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/include
 
   MeowUITests:
     type: bundle.ui-testing
@@ -135,6 +141,9 @@ targets:
     dependencies:
       - target: meow-ios
       - package: MeowShared
+        product: MeowModels
+      - package: MeowShared
+        product: MeowIPC
     settings:
       base:
         TEST_TARGET_NAME: meow-ios
@@ -150,6 +159,9 @@ targets:
     dependencies:
       - target: meow-ios
       - package: MeowShared
+        product: MeowModels
+      - package: MeowShared
+        product: MeowIPC
     settings:
       base:
         BUNDLE_LOADER: $(TEST_HOST)
