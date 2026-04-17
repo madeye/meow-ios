@@ -36,7 +36,7 @@ final class TunnelEngine {
         meow_core_init()
         homeDir.withCString { meow_core_set_home_dir($0) }
 
-        let configPath = AppGroup.configURL.path
+        let configPath = AppGroup.effectiveConfigURL.path
         let engineStarted = configPath.withCString { meow_engine_start($0) }
         if engineStarted != 0 {
             throw TunnelEngineError.engineStartFailed(lastRustError())
@@ -89,8 +89,12 @@ final class TunnelEngine {
     // MARK: - Private
 
     private func writeEffectiveConfig(prefs: Preferences) throws {
-        _ = prefs
-        _ = AppGroup.configURL
+        let source = try String(contentsOf: AppGroup.configURL, encoding: .utf8)
+        try EffectiveConfigWriter.write(
+            sourceYAML: source,
+            to: AppGroup.effectiveConfigURL,
+            prefs: prefs
+        )
     }
 
     private func openSocketPair() throws {

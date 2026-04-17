@@ -27,7 +27,7 @@ log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
 # HTTP / YAML / serialization
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "socks"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

@@ -41,6 +41,8 @@ Carthage/Build/
 # ---- Rust ----
 core/rust/**/target/
 core/rust/**/Cargo.lock.bak
+# cbindgen output — canonical copy lives at MeowCore/include/mihomo_core.h
+core/rust/mihomo-ios-ffi/include/
 **/*.rs.bk
 
 # ---- Go ----
