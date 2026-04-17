@@ -1,0 +1,52 @@
+[package]
+name = "mihomo-ios-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "tun2socks + DoH for meow-ios — C ABI, no JNI."
+
+[lib]
+# staticlib: linked into the iOS PacketTunnel extension via XCFramework.
+crate-type = ["staticlib"]
+
+[lints.rust]
+unsafe_code = "allow"  # raw fd / libc calls
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+needless_return = "allow"
+
+[dependencies]
+# Runtime & sync
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time"] }
+parking_lot = "0.12"
+futures = "0.3"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+log = "0.4"
+oslog = { version = "0.2", default-features = false, features = ["logger"] }
+
+# DoH client (HTTP over SOCKS5)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "socks"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+
+# Low-level
+libc = "0.2"
+anyhow = "1"
+
+# tun2socks
+netstack-smoltcp = "0.2"
+
+[build-dependencies]
+cbindgen = "0.28"
+
+[profile.release]
+# Shrink binary for the 50MB extension budget.
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
