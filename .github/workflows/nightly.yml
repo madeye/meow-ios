@@ -36,7 +36,10 @@ jobs:
 
       - name: Boot VM and wait for SSH
         run: |
-          tart run "$TART_VM" --no-graphics &
+          # --nested: vphone-cli inside the guest runs the virtual iPhone via
+          # Virtualization.framework, so the outer Tart VM needs nested-virt
+          # enabled. Requires Apple Silicon M3 or later on the runner host.
+          tart run "$TART_VM" --no-graphics --nested &
           for i in $(seq 1 60); do
             VM_IP=$(tart ip "$TART_VM" 2>/dev/null || true)
             [ -n "$VM_IP" ] && ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 admin@$VM_IP 'true' 2>/dev/null && break
