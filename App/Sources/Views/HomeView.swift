@@ -545,34 +545,3 @@ private struct NavRow<Destination: View>: View {
         .accessibilityIdentifier(identifier)
     }
 }
-
-// MARK: - Slug helper
-
-private extension String {
-    /// Identifier-safe slug for XCUITest `accessibilityIdentifier`. Lowercases
-    /// and collapses anything outside `[a-z0-9]` to single `-` separators. QA's
-    /// harness pins on deterministic IDs, so this must stay pure — no
-    /// locale-aware casing, no Unicode normalisation beyond ASCII.
-    var identifierSlug: String {
-        var out = ""
-        var trailingDash = true
-        for scalar in unicodeScalars {
-            let v = scalar.value
-            let isLower = v >= 0x61 && v <= 0x7A
-            let isUpper = v >= 0x41 && v <= 0x5A
-            let isDigit = v >= 0x30 && v <= 0x39
-            if isDigit || isLower {
-                out.append(Character(scalar))
-                trailingDash = false
-            } else if isUpper {
-                out.append(Character(Unicode.Scalar(v + 0x20)!))
-                trailingDash = false
-            } else if !trailingDash {
-                out.append("-")
-                trailingDash = true
-            }
-        }
-        while out.hasSuffix("-") { out.removeLast() }
-        return out.isEmpty ? "_" : out
-    }
-}
