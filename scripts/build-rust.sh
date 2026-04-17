@@ -6,8 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CRATE_DIR="$ROOT/core/rust/mihomo-ios-ffi"
 OUT_DIR="$ROOT/MeowCore/Frameworks"
-HEADER_SRC="$CRATE_DIR/include/mihomo_ios_ffi.h"
-HEADER_DST="$ROOT/MeowCore/include/mihomo_ios_ffi.h"
+HEADER_SRC="$CRATE_DIR/include/mihomo_core.h"
+HEADER_DST="$ROOT/MeowCore/include/mihomo_core.h"
 
 TARGETS_REQUIRED=(aarch64-apple-ios aarch64-apple-ios-sim)
 PROFILE="release"
@@ -36,7 +36,7 @@ if [[ ! -f "$DEVICE_LIB" || ! -f "$SIM_LIB" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
-rm -rf "$OUT_DIR/MihomoFfi.xcframework"
+rm -rf "$OUT_DIR/MihomoCore.xcframework"
 
 # Ensure the header we ship to Swift matches what cbindgen emitted.
 if [[ -f "$HEADER_SRC" ]]; then
@@ -44,13 +44,13 @@ if [[ -f "$HEADER_SRC" ]]; then
 fi
 
 HEADERS_STAGE="$(mktemp -d)"
-cp "$HEADER_DST" "$HEADERS_STAGE/mihomo_ios_ffi.h"
+cp "$HEADER_DST" "$HEADERS_STAGE/mihomo_core.h"
 
 echo "==> xcodebuild -create-xcframework"
 xcodebuild -create-xcframework \
     -library "$DEVICE_LIB" -headers "$HEADERS_STAGE" \
     -library "$SIM_LIB" -headers "$HEADERS_STAGE" \
-    -output "$OUT_DIR/MihomoFfi.xcframework"
+    -output "$OUT_DIR/MihomoCore.xcframework"
 
 rm -rf "$HEADERS_STAGE"
-echo "==> wrote $OUT_DIR/MihomoFfi.xcframework"
+echo "==> wrote $OUT_DIR/MihomoCore.xcframework"

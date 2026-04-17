@@ -42,7 +42,7 @@ struct SubscriptionParserTests {
 @Suite("Nodelist → Clash YAML conversion", .tags(.parsing, .ffi))
 struct NodelistConverterTests {
 
-    @Test("v2rayN base64 converts through meowConvertSubscription FFI", .disabled("blocked on T2.4"))
+    @Test("v2rayN base64 converts through meow_engine_convert_subscription FFI", .disabled("blocked on T2.4"))
     func testConvertsViaFfi() {
         // let b64 = loadFixture("nodelist/v2rayn_ss_pair.txt")
         // let yaml = NodelistConverter.convert(b64)

@@ -37,13 +37,13 @@ on iOS) forbids the Go runtime, so the proxy engine is
 [`mihomo-rust`](https://github.com/madeye/mihomo-rust) embedded into our FFI
 crate as a Cargo dependency. Only one static library ships.
 
-`scripts/build-rust.sh` produces `MeowCore/Frameworks/MihomoFfi.xcframework`
-and the `MeowCore/include/mihomo_ios_ffi.h` header. Swift source is gated
-behind `MIHOMO_FFI_LINKED` so the project still compiles before the
-XCFramework is built.
+`scripts/build-rust.sh` produces `MeowCore/Frameworks/MihomoCore.xcframework`
+and the `MeowCore/include/mihomo_core.h` header. Both the app and extension
+link the same XCFramework. Swift source is gated behind `MIHOMO_CORE_LINKED`
+so the project still compiles before the XCFramework is built.
 
 ```sh
-./scripts/build-rust.sh   # → MihomoFfi.xcframework
+./scripts/build-rust.sh   # → MihomoCore.xcframework
 ```
 
 ### Rust notes
@@ -52,11 +52,12 @@ XCFramework is built.
   locations, so we link statically into the extension.
 - `profile.release`: `opt-level = "z"`, LTO, `panic = "abort"` — keeps the
   binary under the NetworkExtension memory ceiling.
-- `cbindgen` emits `mihomo_ios_ffi.h` from `build.rs` on every build.
+- `cbindgen` emits `mihomo_core.h` from `build.rs` on every build.
 - Mihomo crates pulled as git deps (`mihomo-common`, `mihomo-config`,
-  `mihomo-dns`, `mihomo-tunnel`, `mihomo-listener`, `mihomo-api`,
-  `mihomo-proxy`) from `github.com/madeye/mihomo-rust`. The FFI crate owns the
-  tokio runtime and orchestrates the engine + tun2socks layer.
+  `mihomo-dns`, `mihomo-tunnel`, `mihomo-api`, `mihomo-proxy`) from
+  `github.com/madeye/mihomo-rust`. The FFI crate owns the tokio runtime,
+  hosts the mihomo-rust engine directly, and dispatches tun2socks flows
+  in-process through `mihomo_tunnel::tcp::handle_tcp` — no SOCKS5 loopback.
 
 ## Running locally
 
@@ -83,10 +84,10 @@ Both targets share the App Group; the provider bundle id is
 
 - **`error: ld: library not found for -lmihomo_ios_ffi`** — run
   `./scripts/build-rust.sh`. The XCFramework is optional in `project.yml`
-  (`optional: true`) so the app compiles without it, but the PacketTunnel
-  target's link step still fails if a referenced symbol is used. The
-  `MIHOMO_FFI_LINKED` conditional in `TunnelEngine.swift` routes around
-  missing symbols.
+  (`optional: true`) so the app compiles without it, but any target's link
+  step still fails if a referenced symbol is used. The `MIHOMO_CORE_LINKED`
+  conditional in `TunnelEngine.swift`, `SubscriptionConverter.swift`, and
+  `YamlEditorView.swift` routes around missing symbols.
 - **Simulator runs but no VPN prompt** — `NETunnelProviderManager` requires
   the VPN configuration to be installed and accepted at least once per
   simulator. Check `Settings ▸ VPN & Device Management`.

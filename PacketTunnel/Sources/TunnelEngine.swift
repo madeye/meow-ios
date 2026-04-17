@@ -4,10 +4,11 @@ import os.log
 import MeowIPC
 import MeowModels
 
-/// Orchestrates the mihomo-rust engine and the Rust tun2socks layer inside
-/// the packet-tunnel extension. Both halves live in the same static library
-/// (MihomoFfi.xcframework); the Rust side needs a file descriptor it can read
-/// from, and NEPacketTunnelFlow doesn't expose one, so TunnelEngine creates a
+/// Orchestrates the mihomo-rust engine and the tun2socks layer inside the
+/// packet-tunnel extension. Both halves live in the same static library
+/// (`MihomoCore.xcframework`) and dispatch in-process — no SOCKS5 loopback.
+/// The Rust side needs a file descriptor it can read from, and
+/// `NEPacketTunnelFlow` doesn't expose one, so `TunnelEngine` creates a
 /// socketpair and pumps packets between `packetFlow` and the Rust fd.
 final class TunnelEngine {
     private let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "engine")
@@ -31,13 +32,13 @@ final class TunnelEngine {
 
         try writeEffectiveConfig(prefs: prefs)
 
-        #if MIHOMO_FFI_LINKED
-        meow_tun_init()
-        homeDir.withCString { meow_tun_set_home_dir($0) }
+        #if MIHOMO_CORE_LINKED
+        meow_core_init()
+        homeDir.withCString { meow_core_set_home_dir($0) }
 
         let configPath = AppGroup.configURL.path
-        let started = configPath.withCString { meow_engine_start($0) }
-        if started != 0 {
+        let engineStarted = configPath.withCString { meow_engine_start($0) }
+        if engineStarted != 0 {
             throw TunnelEngineError.engineStartFailed(lastRustError())
         }
 
@@ -49,7 +50,7 @@ final class TunnelEngine {
             await PacketPump.run(fd: swiftSideFd, packetFlow: packetFlow)
         }
         #else
-        log.info("Rust engine placeholder — MIHOMO_FFI_LINKED not defined; skipping start")
+        log.info("Rust engine placeholder — MIHOMO_CORE_LINKED not defined; skipping start")
         #endif
 
         trafficTask = Task { await self.trafficPump() }
@@ -61,7 +62,7 @@ final class TunnelEngine {
         pumpTask?.cancel()
         trafficTask?.cancel()
 
-        #if MIHOMO_FFI_LINKED
+        #if MIHOMO_CORE_LINKED
         meow_tun_stop()
         meow_engine_stop()
         #endif
@@ -75,6 +76,14 @@ final class TunnelEngine {
         // extension ↔ API call lands with the reload flow in M3. For now a
         // full stop/start is the safe path.
         _ = prefs
+    }
+
+    var isEngineRunning: Bool {
+        #if MIHOMO_CORE_LINKED
+        return meow_engine_is_running() != 0
+        #else
+        return false
+        #endif
     }
 
     // MARK: - Private
@@ -109,7 +118,7 @@ final class TunnelEngine {
             try? await Task.sleep(for: .milliseconds(500))
             var up: Int64 = 0
             var down: Int64 = 0
-            #if MIHOMO_FFI_LINKED
+            #if MIHOMO_CORE_LINKED
             meow_engine_traffic(&up, &down)
             #endif
             let now = Date()
@@ -132,8 +141,8 @@ final class TunnelEngine {
     }
 
     private func lastRustError() -> String {
-        #if MIHOMO_FFI_LINKED
-        if let cstr = meow_tun_last_error() { return String(cString: cstr) }
+        #if MIHOMO_CORE_LINKED
+        if let cstr = meow_core_last_error() { return String(cString: cstr) }
         #endif
         return ""
     }

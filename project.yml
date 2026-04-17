@@ -78,14 +78,24 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         CODE_SIGN_ENTITLEMENTS: App/App.entitlements
-        SWIFT_OBJC_BRIDGING_HEADER: ""
+        SWIFT_OBJC_BRIDGING_HEADER: App/Sources/BridgingHeader.h
         GENERATE_INFOPLIST_FILE: NO
+        CLANG_ENABLE_MODULES: YES
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/include
+        LIBRARY_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/Frameworks
+        OTHER_LDFLAGS:
+          - -ObjC
     dependencies:
       - target: PacketTunnel
         embed: true
         codeSign: true
       - package: MeowShared
       - package: Yams
+      - framework: MeowCore/Frameworks/MihomoCore.xcframework
+        embed: false
+        optional: true
 
   PacketTunnel:
     type: app-extension
@@ -125,7 +135,7 @@ targets:
           - -ObjC
     dependencies:
       - package: MeowShared
-      - framework: MeowCore/Frameworks/MihomoFfi.xcframework
+      - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true
 

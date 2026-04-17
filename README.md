@@ -16,10 +16,9 @@ breakdown.
 App/              SwiftUI app target
 PacketTunnel/     NEPacketTunnelProvider extension target
 MeowShared/       Swift package shared between app and extension
-MeowCore/         Headers + XCFrameworks for Rust and Go native libs
-core/rust/        mihomo-ios-ffi (Rust tun2socks + DoH)
-core/go/          mihomo-ios (Go mihomo proxy engine)
-scripts/          Build scripts for native libs and Xcode project
+MeowCore/         Unified C header + XCFramework for the Rust native lib
+core/rust/        mihomo-ios-ffi (mihomo-rust engine + tun2socks + DoH)
+scripts/          Build scripts for the native lib and Xcode project
 docs/             PRD, project plan, build docs
 ```
 
@@ -33,11 +32,11 @@ brew install xcodegen
 ./scripts/generate-xcodeproj.sh
 ```
 
-Native libraries are built separately and wrapped as XCFrameworks:
+The native library is built separately and wrapped as a single XCFramework
+that both the app and extension link against:
 
 ```sh
-./scripts/build-rust.sh   # → MeowCore/Frameworks/MihomoFfi.xcframework
-./scripts/build-go.sh     # → MeowCore/Frameworks/MihomoGo.xcframework
+./scripts/build-rust.sh   # → MeowCore/Frameworks/MihomoCore.xcframework
 ```
 
 See [`docs/BUILD.md`](docs/BUILD.md) for toolchain requirements.

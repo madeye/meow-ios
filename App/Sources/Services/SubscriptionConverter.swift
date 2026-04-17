@@ -1,20 +1,43 @@
 import Foundation
 import Yams
 
-/// Normalizes a raw subscription body into Clash YAML. mihomo-rust only
-/// consumes Clash YAML, so non-YAML formats (v2rayN base64 URI lists,
-/// sing-box JSON, etc.) are rejected here rather than silently producing a
-/// broken config. Tests inject a stub to simulate fetch responses without
-/// hitting the network.
+/// Normalizes a raw subscription body into Clash YAML. The authoritative
+/// converter is Rust — `meow_engine_convert_subscription` handles Clash YAML
+/// passthrough, base64-wrapped v2rayN URI lists, and plain URI lists. Tests
+/// inject a stub to simulate fetch responses without hitting the network.
 protocol SubscriptionConverter: Sendable {
     func convert(_ body: Data) async throws -> String
 }
 
-/// Default converter: decodes UTF-8 and validates it's parseable YAML. Real
-/// conversion from provider-specific URI schemes belongs upstream in
-/// mihomo-rust once it lands there.
+/// Default converter: forwards the body to the Rust FFI. Before the
+/// `MihomoCore.xcframework` is first built, the compile-time conditional
+/// degrades to a YAML-parseability check so the app still builds.
 struct ClashYAMLConverter: SubscriptionConverter {
     func convert(_ body: Data) async throws -> String {
+        #if MIHOMO_CORE_LINKED
+        return try body.withUnsafeBytes { raw -> String in
+            guard let base = raw.baseAddress else {
+                throw SubscriptionError.decodeFailed
+            }
+            let ptr = base.assumingMemoryBound(to: CChar.self)
+            let len = Int32(raw.count)
+
+            // First pass: probe required buffer size.
+            let needed = meow_engine_convert_subscription(ptr, len, nil, 0)
+            if needed < 0 {
+                throw SubscriptionError.conversionFailed(lastCoreError())
+            }
+            let cap = Int(needed) + 1
+            var buffer = [CChar](repeating: 0, count: cap)
+            let wrote = buffer.withUnsafeMutableBufferPointer { buf -> Int32 in
+                meow_engine_convert_subscription(ptr, len, buf.baseAddress, Int32(cap))
+            }
+            if wrote < 0 {
+                throw SubscriptionError.conversionFailed(lastCoreError())
+            }
+            return String(cString: buffer)
+        }
+        #else
         guard let text = String(data: body, encoding: .utf8) else {
             throw SubscriptionError.decodeFailed
         }
@@ -26,5 +49,13 @@ struct ClashYAMLConverter: SubscriptionConverter {
             )
         }
         return text
+        #endif
     }
 }
+
+#if MIHOMO_CORE_LINKED
+private func lastCoreError() -> String {
+    if let cstr = meow_core_last_error() { return String(cString: cstr) }
+    return "unknown error"
+}
+#endif
