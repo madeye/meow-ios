@@ -7,10 +7,16 @@ on:
 
 jobs:
   testflight:
-    runs-on: macos-14
+    # macos-15 + Xcode 26: fastlane invokes xcodebuild, which resolves the
+    # MeowShared local SPM package (swift-tools-version: 6.2) — same
+    # substrate requirement as ci.yml's unit-test / ui-test / archive jobs.
+    runs-on: macos-15
     environment: release
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ^26.0
       - name: Install fastlane
         run: |
           brew install fastlane xcodegen
