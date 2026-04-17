@@ -123,6 +123,7 @@ targets:
           - "README.md"
     dependencies:
       - target: meow-ios
+      - package: MeowShared
     settings:
       base:
         TEST_TARGET_NAME: meow-ios

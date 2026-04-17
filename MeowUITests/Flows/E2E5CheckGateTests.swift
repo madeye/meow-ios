@@ -1,4 +1,5 @@
 import XCTest
+import MeowModels
 
 /// The five-check connectivity gate (TEST_STRATEGY §6.2, §7.6) driven on
 /// a virtual iPhone via vphone-cli. Direct parity target:
@@ -6,13 +7,12 @@ import XCTest
 ///
 /// This file defines the iOS-side *assertion shape*; the actual socket
 /// interactions happen through `VPhone` (see `Support/VPhone.swift`).
-/// The tests deliberately do NOT attempt to observe TUN state from
-/// outside the device — the app's in-app diagnostics panel (T3.6) is
-/// the signal surface. This keeps the harness reproducible across iOS
-/// versions.
+/// The checks map 1:1 onto the PRD §4.4 Diagnostics Surface Contract:
+/// if any label key here drifts from the `DiagnosticsCheck` enum, this
+/// file fails to compile — that's intentional.
 ///
-/// Status: STUB — all cases disabled until T3.6 diagnostics panel +
-/// T3.7 UI stabilization + Tart base image are ready. When enabled,
+/// Status: STUB — all cases disabled until T2.6 Debug Diagnostics Panel
+/// + T3.7 UI stabilization + Tart base image are ready. When enabled,
 /// this suite runs only in the nightly `e2e` job, not on PRs.
 final class E2E5CheckGateTests: XCTestCase {
 
@@ -24,35 +24,61 @@ final class E2E5CheckGateTests: XCTestCase {
         return super.defaultTestSuite
     }
 
-    // MARK: 5-check gate — one test per Android parity check
+    // MARK: PRD §4.4 frozen contract — all 5 checks in display order
 
-    func test01_tunInterfaceUp() throws {
-        // Connect, then assert diagnostics row "TUN up" == PASS.
-        throw XCTSkip("blocked on T3.6 + T3.7 + Tart image")
+    func test01_tunExists() throws {
+        try assertDiagnosticsPass(.tunExists)
     }
 
-    func test02_dnsResolvesThroughTunnel() throws {
-        throw XCTSkip("blocked on T3.6")
+    func test02_dnsOk() throws {
+        try assertDiagnosticsPass(.dnsOk)
     }
 
-    func test03_tcpReach_1_1_1_1_80() throws {
-        throw XCTSkip("blocked on T3.6")
+    func test03_tcpProxyOk() throws {
+        try assertDiagnosticsPass(.tcpProxyOk)
     }
 
-    func test04_tcpReach_8_8_8_8_443() throws {
-        throw XCTSkip("blocked on T3.6")
+    func test04_http204Ok() throws {
+        try assertDiagnosticsPass(.http204Ok)
     }
 
-    func test05_httpGenerate204() throws {
-        throw XCTSkip("blocked on T3.6")
+    func test05_memOk() throws {
+        // PRD §4.4 threshold: PASS iff extension resident memory ≤ 14 MB.
+        // Any sample ≥ 15 MB is reported as FAIL(mem=NNmb>=15mb); see
+        // TEST_STRATEGY §8.1 — this is a ship-blocker, not a regression.
+        try assertDiagnosticsPass(.memOk)
     }
 
-    // MARK: Performance guardrail — 15 MB extension memory ceiling
+    // MARK: Contract guard
 
-    func test06_extensionResidentMemoryUnder15MB() throws {
-        // After connect, repeatedly sample extension RSS via
-        // diagnostics panel; any sample ≥ 15 MB fails the test.
-        // See TEST_STRATEGY §8.1.
-        throw XCTSkip("blocked on T3.6 memory probe affordance")
+    /// Compile-time check that we reference every frozen key. If PRD
+    /// §4.4 adds a check, this test fails until someone adds a case
+    /// above — so "we forgot to test a new check" becomes impossible.
+    func test99_allFrozenKeysCovered() {
+        let covered: Set<DiagnosticsCheck> = [
+            .tunExists, .dnsOk, .tcpProxyOk, .http204Ok, .memOk
+        ]
+        XCTAssertEqual(
+            covered, Set(DiagnosticsCheck.allCases),
+            "PRD §4.4 added a diagnostics check without a matching test — add one above"
+        )
+    }
+
+    // MARK: Helper
+
+    private func assertDiagnosticsPass(_ check: DiagnosticsCheck, file: StaticString = #filePath, line: UInt = #line) throws {
+        throw XCTSkip("blocked on T2.6 diagnostics panel + Tart image")
+
+        // When T2.6 + Tart image land, the body becomes roughly:
+        //
+        //   let phone = VPhone()
+        //   try phone.home.tapConnect()
+        //   try phone.home.waitForConnected()
+        //   try phone.diagnostics.navigate()
+        //   try phone.diagnostics.tapRun()
+        //   let results = try phone.diagnostics.readResults()
+        //   XCTAssertEqual(results[check], .pass,
+        //                  "\(check.rawValue) failed: \(results[check] ?? .fail(reason: "missing"))",
+        //                  file: file, line: line)
     }
 }
