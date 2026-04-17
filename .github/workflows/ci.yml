@@ -81,9 +81,17 @@ jobs:
 
   unit-test:
     needs: [build-core]
-    runs-on: macos-14
+    # macos-15: required for Xcode 26 / Swift 6.2, which MeowShared/Package.swift
+    # pins via `swift-tools-version: 6.2`. The macos-14 image ships Xcode 15.x /
+    # Swift 5.10 and rejects the manifest at parse time — previously this job
+    # failed in ~17s with an unreadable Package.swift error that masked as a
+    # generic CI red. See task #34(a) for the triage trail.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ^26.0
       - uses: actions/download-artifact@v4
         with:
           name: MihomoCore.xcframework
@@ -100,7 +108,7 @@ jobs:
           xcodebuild test \
             -project meow-ios.xcodeproj \
             -scheme meow-ios \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
             -only-testing:MeowTests \
             -resultBundlePath build/unit.xcresult \
             -enableCodeCoverage YES \
@@ -113,9 +121,15 @@ jobs:
 
   ui-test:
     needs: [build-core]
-    runs-on: macos-14
+    # Same Xcode 26 / Swift 6.2 requirement as unit-test — xcodebuild resolves
+    # the MeowShared local SPM package (tools-version 6.2) before building
+    # the app host for XCUITest.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ^26.0
       - uses: actions/download-artifact@v4
         with:
           name: MihomoCore.xcframework
@@ -129,7 +143,7 @@ jobs:
           xcodebuild test \
             -project meow-ios.xcodeproj \
             -scheme meow-ios \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
             -only-testing:MeowUITests \
             -resultBundlePath build/ui.xcresult \
             | xcbeautify
@@ -141,9 +155,14 @@ jobs:
 
   archive:
     needs: [build-core, unit-test, ui-test, security-scan]
-    runs-on: macos-14
+    # Same Xcode 26 / Swift 6.2 requirement — the Release archive
+    # re-resolves MeowShared's SPM package.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ^26.0
       - uses: actions/download-artifact@v4
         with:
           name: MihomoCore.xcframework
