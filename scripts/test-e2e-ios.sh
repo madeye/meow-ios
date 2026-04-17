@@ -8,12 +8,13 @@
 # virtual iPhone through the same 5-check connectivity gate by speaking
 # the vm/vphone.sock protocol (tap / swipe / screenshot / clipboard).
 #
-# Status: P2 — Trojan + VLESS + VMess fixtures layered onto the P1 SS
-# scaffold (docs/TEST_FIXTURES.md §6). vphone drive steps (6-9) remain
-# TODO, blocked on T4.1 (deep-link handler) and T4.2 (Home Screen —
-# Connect button coords / accessibilityIdentifiers). T2.6 Diagnostics
-# Panel is live so Step 9 anchors are known; wiring the OCR flow lands
-# with the E2E gate flip itself.
+# Status: P3 — WG/Hy2/TUIC configs-as-code layered onto the P2 scaffold
+# (docs/TEST_FIXTURES.md §6). Those three are UDP-backed and remain
+# end-to-end-blocked until T2.9 wires non-DNS UDP forwarding; the
+# matching Swift tests carry `.disabled("blocked on T2.9")` tags so
+# the flip is a one-line change. vphone drive steps (7-9) remain TODO
+# behind T4.1 (deep-link handler) and T4.2 (Home Screen anchors); T2.6
+# Diagnostics Panel is live so Step 9 anchors are known.
 #
 # Required env:
 #   VPHONE_HOST           SSH target where vphone-cli and the virtual iPhone live
@@ -22,10 +23,13 @@
 #
 # Optional env:
 #   MEOW_FIXTURE_PROTOCOLS  Comma-separated protocols to stand up. Default "ss".
-#                           Supported: ss, trojan, vless, vmess. Unknown tokens fail;
-#                           known tokens whose server binary is absent on PATH
-#                           are skipped with a warning (the fixture still serves a
-#                           subscription, just without that protocol's proxy entry).
+#                           Supported: ss, trojan, vless, vmess, wg, hy2, tuic.
+#                           Unknown tokens fail; known tokens whose server binary
+#                           is absent on PATH are skipped with a warning (the
+#                           fixture still serves a subscription, just without
+#                           that protocol's proxy entry). wg/hy2/tuic are UDP
+#                           and remain end-to-end-blocked until T2.9 per
+#                           docs/TEST_FIXTURES.md §4.
 #   MEOW_FIXTURE_SEEDED     If set, use fixed seed credentials + a stable fixture
 #                           directory (/tmp/meow-fixtures/seeded) + stable ports.
 #                           Intended for local dev — the dev can point a running
@@ -70,15 +74,24 @@ if [[ -n "$MEOW_FIXTURE_SEEDED" ]]; then
     FIXTURE_DIR="${FIXTURE_BASE}/seeded"
     SS_PASSWORD="${SS_PASSWORD:-meow-seeded-local-dev-password}"
     SS_PORT="${SS_PORT:-18388}"
-    # Seeded ports for Trojan/VLESS/VMess — mirror the SS 18388 convention.
+    # Seeded ports for all protocols — mirror the SS 18388 convention.
     # Kept in docs/TEST_FIXTURES.md §5 so local-dev can pin subscription
     # profiles across reruns.
     TROJAN_PORT="${TROJAN_PORT:-18443}"
     VLESS_PORT="${VLESS_PORT:-18444}"
     VMESS_PORT="${VMESS_PORT:-18445}"
+    # UDP protocols (P3) — gated behind T2.9. Distinct ports from the
+    # TCP block so a simultaneous full-matrix run doesn't get confused
+    # if the kernel happens to permit overlap.
+    WG_PORT="${WG_PORT:-18451}"
+    HY2_PORT="${HY2_PORT:-18452}"
+    TUIC_PORT="${TUIC_PORT:-18453}"
     TROJAN_PASSWORD="${TROJAN_PASSWORD:-meow-seeded-trojan-password}"
     VLESS_UUID="${VLESS_UUID:-00000000-0000-4000-8000-000000000001}"
     VMESS_UUID="${VMESS_UUID:-00000000-0000-4000-8000-000000000002}"
+    HY2_PASSWORD="${HY2_PASSWORD:-meow-seeded-hy2-password}"
+    TUIC_UUID="${TUIC_UUID:-00000000-0000-4000-8000-000000000003}"
+    TUIC_PASSWORD="${TUIC_PASSWORD:-meow-seeded-tuic-password}"
 else
     FIXTURE_DIR="${FIXTURE_BASE}/$(uuidgen | tr 'A-Z' 'a-z')"
     SS_PASSWORD="$(openssl rand -hex 16)"
@@ -86,9 +99,15 @@ else
     TROJAN_PORT="$(alloc_port)"
     VLESS_PORT="$(alloc_port)"
     VMESS_PORT="$(alloc_port)"
+    WG_PORT="$(alloc_port)"
+    HY2_PORT="$(alloc_port)"
+    TUIC_PORT="$(alloc_port)"
     TROJAN_PASSWORD="$(openssl rand -hex 16)"
     VLESS_UUID="$(uuidgen | tr 'A-Z' 'a-z')"
     VMESS_UUID="$(uuidgen | tr 'A-Z' 'a-z')"
+    HY2_PASSWORD="$(openssl rand -hex 16)"
+    TUIC_UUID="$(uuidgen | tr 'A-Z' 'a-z')"
+    TUIC_PASSWORD="$(openssl rand -hex 16)"
 fi
 SS_ADDR="0.0.0.0:${SS_PORT}"
 
@@ -97,6 +116,9 @@ TROJAN_PID=""
 TROJAN_FALLBACK_PID=""
 XRAY_VLESS_PID=""
 XRAY_VMESS_PID=""
+WG_PID=""
+HY2_PID=""
+TUIC_PID=""
 HTTPD_PID=""
 KEEPALIVE_PID=""
 
@@ -106,7 +128,7 @@ ENABLED_PROTOCOLS=()
 cleanup() {
     echo ""
     echo "=== Cleanup ==="
-    for var in KEEPALIVE_PID HTTPD_PID XRAY_VMESS_PID XRAY_VLESS_PID TROJAN_PID TROJAN_FALLBACK_PID SSSERVER_PID; do
+    for var in KEEPALIVE_PID HTTPD_PID TUIC_PID HY2_PID WG_PID XRAY_VMESS_PID XRAY_VLESS_PID TROJAN_PID TROJAN_FALLBACK_PID SSSERVER_PID; do
         pid="${!var}"
         if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
             kill "$pid" 2>/dev/null || true
@@ -140,8 +162,8 @@ vphone() {
 IFS=',' read -r -a REQUESTED_PROTOCOLS <<<"$MEOW_FIXTURE_PROTOCOLS"
 for p in "${REQUESTED_PROTOCOLS[@]}"; do
     case "$p" in
-        ss|trojan|vless|vmess) ;;
-        *) fail "Unknown protocol '$p' in MEOW_FIXTURE_PROTOCOLS (supported: ss,trojan,vless,vmess)" ;;
+        ss|trojan|vless|vmess|wg|hy2|tuic) ;;
+        *) fail "Unknown protocol '$p' in MEOW_FIXTURE_PROTOCOLS (supported: ss,trojan,vless,vmess,wg,hy2,tuic)" ;;
     esac
 done
 
@@ -332,6 +354,162 @@ EOF
     ENABLED_PROTOCOLS+=(meow-fixture-vmess)
 }
 
+# --- P3 UDP-backed protocols. All three are gated behind T2.9 (PRD v1.3)
+# — non-DNS UDP forwarding isn't wired yet, so the iOS client cannot
+# actually reach these servers end-to-end. The fixtures bring up the
+# servers anyway (so a connect attempt would surface wire-protocol
+# errors, not "no such server"), and the corresponding Swift assertions
+# carry a `.disabled("blocked on T2.9")` tag per TEST_FIXTURES.md §4.
+# When T2.9 ships: drop the `.disabled` attribute; no fixture change.
+
+# tls_cert_pair: generate a one-day self-signed cert + key pair at
+# $FIXTURE_DIR/<label>-cert.pem / <label>-key.pem. Shared by Hy2 and TUIC.
+tls_cert_pair() {
+    local label="$1"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+        -keyout "$FIXTURE_DIR/${label}-key.pem" \
+        -out "$FIXTURE_DIR/${label}-cert.pem" \
+        -subj "/CN=meow-fixture.local" \
+        >/dev/null 2>>"$FIXTURE_DIR/openssl.log" \
+        || fail "openssl ${label} cert generation failed — see $FIXTURE_DIR/openssl.log"
+}
+
+setup_wg() {
+    if ! command -v wg &>/dev/null || ! command -v wireguard-go &>/dev/null; then
+        warn "wg + wireguard-go not on PATH — skipping WireGuard fixture. Install both via 'brew install wireguard-tools wireguard-go' or bake into the Tart base image (TEST_FIXTURES.md §5)."
+        return 0
+    fi
+    # WG's "server" is just another peer; generate keypairs for both sides
+    # so the client config in the Clash YAML knows the server's pubkey
+    # and the server's wg0.conf knows the client's pubkey.
+    wg genkey >"$FIXTURE_DIR/wg-server.priv"
+    wg pubkey <"$FIXTURE_DIR/wg-server.priv" >"$FIXTURE_DIR/wg-server.pub"
+    wg genkey >"$FIXTURE_DIR/wg-client.priv"
+    wg pubkey <"$FIXTURE_DIR/wg-client.priv" >"$FIXTURE_DIR/wg-client.pub"
+    local srv_priv srv_pub cli_priv cli_pub
+    srv_priv="$(cat "$FIXTURE_DIR/wg-server.priv")"
+    srv_pub="$(cat "$FIXTURE_DIR/wg-server.pub")"
+    cli_priv="$(cat "$FIXTURE_DIR/wg-client.priv")"
+    cli_pub="$(cat "$FIXTURE_DIR/wg-client.pub")"
+    cat >"$FIXTURE_DIR/wg0.conf" <<EOF
+[Interface]
+PrivateKey = ${srv_priv}
+ListenPort = ${WG_PORT}
+
+[Peer]
+PublicKey = ${cli_pub}
+AllowedIPs = 10.13.13.2/32
+EOF
+    # wireguard-go on macOS needs root + TUN creation. In the Tart VM
+    # the nightly runs as root so this succeeds; locally without sudo
+    # it will fail and we skip — exactly the same posture as the
+    # skip-if-absent branch above, so a missing WG proxy entry always
+    # means "either the binary is missing or privilege is insufficient,"
+    # not "the fixture is broken."
+    info "Start wireguard-go (port=$WG_PORT, needs TUN + root)"
+    WG_LOGFILE=1 wireguard-go -f utun-meow-fixture \
+        >"$FIXTURE_DIR/wg.log" 2>&1 &
+    WG_PID=$!
+    sleep 0.5
+    if ! kill -0 "$WG_PID" 2>/dev/null; then
+        warn "wireguard-go failed to start (likely needs root for TUN) — skipping WG fixture. See $FIXTURE_DIR/wg.log"
+        WG_PID=""
+        return 0
+    fi
+    # wg setconf would go here — but wireguard-go in userspace exposes
+    # its config socket path via WG_TUN_NAME_FILE. Deferred to the T2.9
+    # flip when end-to-end WG actually matters; for now config-as-code
+    # is the scoping goal and we already emit both sides of the keypair.
+    cat >"$FIXTURE_DIR/proxies.d/wg.yaml" <<EOF
+  - name: meow-fixture-wg
+    type: wireguard
+    server: ${SS_HOST}
+    port: ${WG_PORT}
+    private-key: "${cli_priv}"
+    public-key: "${srv_pub}"
+    ip: 10.13.13.2
+    udp: true
+EOF
+    ENABLED_PROTOCOLS+=(meow-fixture-wg)
+}
+
+setup_hy2() {
+    if ! command -v hysteria &>/dev/null; then
+        warn "hysteria not on PATH — skipping Hysteria2 fixture. Install from https://github.com/apernet/hysteria/releases (no brew formula as of 2026-04) or bake into the Tart base image (TEST_FIXTURES.md §5)."
+        return 0
+    fi
+    tls_cert_pair hy2
+    cat >"$FIXTURE_DIR/hy2.yaml" <<EOF
+listen: :${HY2_PORT}
+tls:
+  cert: ${FIXTURE_DIR}/hy2-cert.pem
+  key: ${FIXTURE_DIR}/hy2-key.pem
+auth:
+  type: password
+  password: ${HY2_PASSWORD}
+EOF
+    info "Start hysteria server (port=$HY2_PORT)"
+    hysteria server -c "$FIXTURE_DIR/hy2.yaml" \
+        >"$FIXTURE_DIR/hy2.log" 2>&1 &
+    HY2_PID=$!
+    sleep 0.5
+    kill -0 "$HY2_PID" 2>/dev/null \
+        || fail "hysteria failed to start — see $FIXTURE_DIR/hy2.log"
+    cat >"$FIXTURE_DIR/proxies.d/hy2.yaml" <<EOF
+  - name: meow-fixture-hy2
+    type: hysteria2
+    server: ${SS_HOST}
+    port: ${HY2_PORT}
+    password: "${HY2_PASSWORD}"
+    sni: meow-fixture.local
+    skip-cert-verify: true
+EOF
+    ENABLED_PROTOCOLS+=(meow-fixture-hy2)
+}
+
+setup_tuic() {
+    if ! command -v tuic-server &>/dev/null; then
+        warn "tuic-server not on PATH — skipping TUIC fixture. Install from https://github.com/EAimTY/tuic/releases (no brew formula as of 2026-04) or bake into the Tart base image (TEST_FIXTURES.md §5)."
+        return 0
+    fi
+    tls_cert_pair tuic
+    cat >"$FIXTURE_DIR/tuic.json" <<EOF
+{
+  "server": "[::]:${TUIC_PORT}",
+  "users": {
+    "${TUIC_UUID}": "${TUIC_PASSWORD}"
+  },
+  "certificate": "${FIXTURE_DIR}/tuic-cert.pem",
+  "private_key": "${FIXTURE_DIR}/tuic-key.pem",
+  "alpn": ["h3"],
+  "udp_relay_mode": "native",
+  "zero_rtt_handshake": false,
+  "auth_timeout": "3s",
+  "max_idle_time": "10s"
+}
+EOF
+    info "Start tuic-server (port=$TUIC_PORT)"
+    tuic-server -c "$FIXTURE_DIR/tuic.json" \
+        >"$FIXTURE_DIR/tuic.log" 2>&1 &
+    TUIC_PID=$!
+    sleep 0.5
+    kill -0 "$TUIC_PID" 2>/dev/null \
+        || fail "tuic-server failed to start — see $FIXTURE_DIR/tuic.log"
+    cat >"$FIXTURE_DIR/proxies.d/tuic.yaml" <<EOF
+  - name: meow-fixture-tuic
+    type: tuic
+    server: ${SS_HOST}
+    port: ${TUIC_PORT}
+    uuid: ${TUIC_UUID}
+    password: "${TUIC_PASSWORD}"
+    alpn: [h3]
+    sni: meow-fixture.local
+    skip-cert-verify: true
+    udp-relay-mode: native
+EOF
+    ENABLED_PROTOCOLS+=(meow-fixture-tuic)
+}
+
 info "Step 1: Prereqs (protocols=${MEOW_FIXTURE_PROTOCOLS})"
 [[ -f "$REPO_ROOT/meow-ios.xcodeproj/project.pbxproj" ]] || fail "Run 'xcodegen generate' first"
 if [[ -z "$VPHONE_HOST" ]] && ! command -v vphone-cli &>/dev/null; then
@@ -347,10 +525,13 @@ fi
 mkdir -p "$FIXTURE_DIR/proxies.d"
 
 info "Step 3: Bring up protocol servers"
-wants ss    && setup_ss
+wants ss     && setup_ss
 wants trojan && setup_trojan
-wants vless && setup_vless
-wants vmess && setup_vmess
+wants vless  && setup_vless
+wants vmess  && setup_vmess
+wants wg     && setup_wg
+wants hy2    && setup_hy2
+wants tuic   && setup_tuic
 
 if [[ ${#ENABLED_PROTOCOLS[@]} -eq 0 ]]; then
     fail "No protocols came up — check requested list '$MEOW_FIXTURE_PROTOCOLS' and logs under $FIXTURE_DIR"
@@ -368,7 +549,7 @@ log-level: info
 proxies:
 EOF
     # Staged per-protocol blocks in deterministic order.
-    for name in ss trojan vless vmess; do
+    for name in ss trojan vless vmess wg hy2 tuic; do
         [[ -f "$FIXTURE_DIR/proxies.d/${name}.yaml" ]] && cat "$FIXTURE_DIR/proxies.d/${name}.yaml"
     done
     echo "proxy-groups:"
@@ -427,6 +608,25 @@ SUBSCRIPTION_URL="http://${SS_HOST}:${SUB_PORT}/clash.yaml"
                 echo "VMESS_HOST=${SS_HOST}"
                 echo "VMESS_PORT=${VMESS_PORT}"
                 echo "VMESS_UUID=${VMESS_UUID}"
+                ;;
+            meow-fixture-wg)
+                echo "WG_HOST=${SS_HOST}"
+                echo "WG_PORT=${WG_PORT}"
+                echo "WG_CLIENT_PRIV=${FIXTURE_DIR}/wg-client.priv"
+                echo "WG_SERVER_PUB=${FIXTURE_DIR}/wg-server.pub"
+                ;;
+            meow-fixture-hy2)
+                echo "HY2_HOST=${SS_HOST}"
+                echo "HY2_PORT=${HY2_PORT}"
+                echo "HY2_PASSWORD=${HY2_PASSWORD}"
+                echo "HY2_CERT=${FIXTURE_DIR}/hy2-cert.pem"
+                ;;
+            meow-fixture-tuic)
+                echo "TUIC_HOST=${SS_HOST}"
+                echo "TUIC_PORT=${TUIC_PORT}"
+                echo "TUIC_UUID=${TUIC_UUID}"
+                echo "TUIC_PASSWORD=${TUIC_PASSWORD}"
+                echo "TUIC_CERT=${FIXTURE_DIR}/tuic-cert.pem"
                 ;;
         esac
     done
@@ -491,4 +691,4 @@ info "  TODO: diagnostics-panel gate — pending T4.2 to stabilize OCR surface"
 info "Step 10: Collect artifacts"
 mkdir -p "$REPO_ROOT/build/e2e"
 
-info "P2 SCAFFOLD COMPLETE — steps 7–9 land with T4.1/T4.2 + gate flip"
+info "P3 SCAFFOLD COMPLETE — steps 7–9 land with T4.1/T4.2 + gate flip; wg/hy2/tuic assertions flip with T2.9"

@@ -33,7 +33,7 @@ Assessing: does a local, native server binary (or lightweight container) exercis
 | Protocol | Server | Install | Exercises real protocol? | Notes |
 | --- | --- | --- | --- | --- |
 | **Shadowsocks** (`aes-256-gcm`, `chacha20-ietf-poly1305`) | `shadowsocks-rust` (ssserver) | `brew install shadowsocks-rust` | ✅ Yes — AEAD + salted stream framing end-to-end | Reference protocol, already used in Android `test-e2e.sh` |
-| **Trojan** | `trojan-go` | GitHub release binary (no brew formula as of 2026-04) | ✅ Yes — password auth over real TLS, fallthrough to HTTP backend on mismatch | Needs self-signed cert + the iOS client trusting it (test-bundle-scoped trust anchor, **never** `NSAllowsArbitraryLoads`) |
+| **Trojan** | `trojan-go` | `brew install trojan-go` (homebrew-core formula 0.10.6 as of 2026-04) | ✅ Yes — password auth over real TLS, fallthrough to HTTP backend on mismatch | Needs self-signed cert + the iOS client trusting it (test-bundle-scoped trust anchor, **never** `NSAllowsArbitraryLoads`). trojan-go does a startup reachability probe on its fallback `remote_addr:remote_port`; the fixture stands up a tiny loopback `http.server` on an ephemeral port just to satisfy that check. |
 | **VLESS** | `xray-core` | `brew install xray` | ✅ Yes — UUID + flow framing; XTLS/Reality variants configurable | One binary covers VLESS + VMess |
 | **VMess** | `xray-core` | `brew install xray` | ✅ Yes — VMess auth + WS/gRPC transport | Same binary as VLESS, different config block |
 | **WireGuard** | `wireguard-go` | `brew install wireguard-go` | ✅ Yes in principle — real Noise IK handshake | **⚠️ BLOCKED by T2.9** — see §4 below |
@@ -82,7 +82,7 @@ The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already re
 5. Point vphone-cli's iPhone at the subscription URL via the `meow://connect` deep link.
 6. Tear down: `launchctl bootout`, wipe `/tmp/meow-fixtures/<uuid>/`.
 
-**Tart image rebuild ask:** base image needs `brew install shadowsocks-rust xray wireguard-go` plus the manually-downloaded `trojan-go` / `hysteria` / `tuic-server` binaries placed in `/usr/local/bin`. Targeted delta from current base: ~80 MB. Not a blocker; the base is already rebuilt per §7.3.
+**Tart image rebuild ask:** base image needs `brew install shadowsocks-rust trojan-go xray wireguard-tools wireguard-go` plus the manually-downloaded `hysteria` / `tuic-server` binaries placed in `/usr/local/bin` (neither has a homebrew-core formula as of 2026-04, though apernet/hysteria has an unofficial tap). Targeted delta from current base: ~80 MB. Not a blocker; the base is already rebuilt per §7.3.
 
 ---
 
