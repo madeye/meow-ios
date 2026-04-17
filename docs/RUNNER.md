@@ -1,20 +1,25 @@
-# Self-hosted GitHub Actions Runner (Tart VM)
+# Self-hosted GitHub Actions Runner (Tart host)
 
 **Status:** 2026-04-17 — runner not yet registered on `github.com/madeye/meow-ios`. `nightly.yml` references `runs-on: [self-hosted, macOS, apple-silicon, tart]`; until the runner registers with that label set, the job sits queued.
 
-**Scope decision (2026-04-17 team-lead):** nightly E2E runs **only inside the Tart VM** — no Mac mini fallback. See [`TEST_FIXTURES.md §5`](./TEST_FIXTURES.md) for the image-reuse decision (`bld-e2e-base`, layered via `scripts/provision-tart-fixtures.sh`).
+**Scope decision (2026-04-17 team-lead):** nightly E2E uses Tart as the vphone sandbox (no Mac mini fallback). The runner itself and the fixture servers live on the **outer runner host**; the Tart guest only runs vphone-cli + SSH + SIP-disabled macOS. See [`TEST_FIXTURES.md §5`](./TEST_FIXTURES.md) for the wiring.
 
-This file is the manual setup runbook the user follows **once per VM build** to register a self-hosted runner inside that Tart image.
+This file is the manual setup runbook the user follows once per runner-host build to register a self-hosted runner.
 
 ---
 
-## 1. Prereqs inside the Tart VM
+## 1. Prereqs on the runner host (not inside the Tart VM)
+
+The runner and the fixture servers both live on the **outer macOS host** that boots Tart. The Tart guest only runs vphone-cli + SSH + SIP-disabled macOS; the virtual iPhone inside it reaches fixtures on the outer host via the Tart bridge IP (resolved inside `scripts/test-e2e-ios.sh` from `VPHONE_HOST`).
+
+Run on the runner host:
 
 ```bash
-# Fixture binaries (layered delta on the local base; idempotent)
-./scripts/provision-tart-fixtures.sh
+# Fixture binaries (shadowsocks-rust / trojan-go / xray / wireguard /
+# hysteria / tuic-server) — idempotent; installs only what's missing.
+bash scripts/provision-tart-fixtures.sh
 
-# Host-side build + virt tools the nightly workflow invokes
+# Virt + build tools the nightly workflow invokes on the host
 brew install tart xcodegen xcbeautify
 
 # Self-hosted runner bits
@@ -24,7 +29,7 @@ curl -fsSL -o actions-runner-osx-arm64.tar.gz \
 tar xzf actions-runner-osx-arm64.tar.gz
 ```
 
-Confirm the VM has SIP disabled (`csrutil status`) — vphone-cli requires it (see [`TEST_STRATEGY.md §7`](./TEST_STRATEGY.md)). If not, boot into Recovery and disable before continuing.
+SIP status matters **inside the Tart guest**, not on the host: vphone-cli needs SIP-disabled macOS, and that constraint is satisfied by `bld-e2e-base` itself (see [`TEST_STRATEGY.md §7`](./TEST_STRATEGY.md)). The host can keep SIP enabled.
 
 ---
 
