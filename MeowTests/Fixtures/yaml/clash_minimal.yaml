@@ -1,0 +1,15 @@
+mixed-port: 7890
+mode: rule
+proxies:
+  - name: test-ss
+    type: ss
+    server: 192.0.2.1
+    port: 8388
+    cipher: aes-256-gcm
+    password: testpassword123
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies: [test-ss]
+rules:
+  - MATCH,Proxy

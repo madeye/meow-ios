@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  testflight:
+    runs-on: macos-14
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install fastlane
+        run: |
+          brew install fastlane xcodegen
+      - name: Materialize ASC API key from secret
+        run: |
+          mkdir -p ~/.appstoreconnect
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}" > ~/.appstoreconnect/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+          cat > ~/.appstoreconnect/api_key.json <<EOF
+          {
+            "key_id": "${{ secrets.APP_STORE_CONNECT_KEY_ID }}",
+            "issuer_id": "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}",
+            "key": "$(base64 -i ~/.appstoreconnect/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8 | tr -d '\n')",
+            "in_house": false
+          }
+          EOF
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build + upload via fastlane
+        run: fastlane ios build_appstore && fastlane ios upload_testflight
+        env:
+          APP_STORE_CONNECT_API_KEY_PATH: ~/.appstoreconnect/api_key.json

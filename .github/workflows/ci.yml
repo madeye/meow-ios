@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: SwiftLint
+        run: |
+          brew install swiftlint
+          swiftlint --strict --reporter github-actions-logging
+      - name: SwiftFormat (check)
+        run: |
+          brew install swiftformat
+          swiftformat --lint .
+
+  security-scan:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: git-secrets
+        run: |
+          brew install git-secrets
+          git secrets --install
+          git secrets --register-aws
+          git secrets --scan
+      - name: Scan for forbidden entitlement patterns
+        run: |
+          # Ship-blocker: nothing in the repo may opt into these insecure defaults.
+          ! grep -r "NSAllowsArbitraryLoads" --include="*.plist" --include="*.yml" App/ PacketTunnel/ || exit 1
+          ! grep -r "kSecAttrAccessibleAlways" --include="*.swift" App/ PacketTunnel/ MeowShared/ || exit 1
+          echo "Security scan OK"
+      - name: Rust vulnerability audit
+        run: |
+          cargo install cargo-audit
+          # cd core/rust/mihomo-ios-ffi && cargo audit   # uncomment once crate exists
+          echo "Rust audit placeholder — enable after T1.1"
+
+  build-core:
+    # PRD v1.1: single pure-Rust MihomoCore.xcframework — no Go toolchain.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive  # mihomo-rust is a git submodule
+      - name: Set up Rust
+        run: |
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          cargo install cbindgen
+      - name: Build MihomoCore.xcframework
+        run: |
+          # scripts/build-rust.sh   # lands with T0.4 / T1.4
+          echo "Rust build placeholder — enable after T1.4"
+      - name: Enforce size budget (≤ 8 MB stripped — see TEST_STRATEGY §8.1)
+        run: |
+          # test $(stat -f %z MeowCore/Frameworks/MihomoCore.xcframework/ios-arm64/libmihomo_ios_ffi.a) -lt 8388608
+          echo "Size gate placeholder — enable after T1.4 (8 MB limit to stay inside the 15 MB NE memory cap)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MihomoCore.xcframework
+          path: MeowCore/Frameworks/MihomoCore.xcframework
+          if-no-files-found: warn
+
+  unit-test:
+    needs: [build-core]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MihomoCore.xcframework
+          path: MeowCore/Frameworks/MihomoCore.xcframework
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Test MeowShared package
+        run: |
+          cd MeowShared && swift test
+      - name: Test meow-ios unit bundle
+        run: |
+          xcodebuild test \
+            -project meow-ios.xcodeproj \
+            -scheme meow-ios \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+            -only-testing:MeowTests \
+            -resultBundlePath build/unit.xcresult \
+            -enableCodeCoverage YES \
+            | xcbeautify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-xcresult
+          path: build/unit.xcresult
+
+  ui-test:
+    needs: [build-core]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MihomoCore.xcframework
+          path: MeowCore/Frameworks/MihomoCore.xcframework
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Run UI tests
+        run: |
+          xcodebuild test \
+            -project meow-ios.xcodeproj \
+            -scheme meow-ios \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+            -only-testing:MeowUITests \
+            -resultBundlePath build/ui.xcresult \
+            | xcbeautify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-xcresult
+          path: build/ui.xcresult
+
+  archive:
+    if: github.ref == 'refs/heads/main'
+    needs: [unit-test, ui-test, security-scan]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive (no signing on PR)
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild archive \
+            -project meow-ios.xcodeproj \
+            -scheme meow-ios \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/meow-ios.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify

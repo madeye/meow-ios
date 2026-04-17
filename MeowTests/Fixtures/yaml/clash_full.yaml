@@ -1,0 +1,64 @@
+mixed-port: 7890
+mode: rule
+dns:
+  enable: true
+  nameserver:
+    - https://1.1.1.1/dns-query
+proxies:
+  - name: node-ss
+    type: ss
+    server: 192.0.2.1
+    port: 8388
+    cipher: aes-256-gcm
+    password: testpassword123
+  - name: node-trojan
+    type: trojan
+    server: 192.0.2.2
+    port: 443
+    password: testpassword123
+    sni: example.com
+  - name: node-vless
+    type: vless
+    server: 192.0.2.3
+    port: 443
+    uuid: 00000000-0000-0000-0000-000000000000
+    tls: true
+    servername: example.com
+  - name: node-vmess
+    type: vmess
+    server: 192.0.2.4
+    port: 443
+    uuid: 00000000-0000-0000-0000-000000000001
+    alterId: 0
+    cipher: auto
+    tls: true
+    network: ws
+    ws-opts:
+      path: /ws
+  - name: node-wg
+    type: wireguard
+    server: 192.0.2.5
+    port: 51820
+    private-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    public-key: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+    ip: 10.0.0.2/32
+  - name: node-hy2
+    type: hysteria2
+    server: 192.0.2.6
+    port: 443
+    password: testpassword123
+    sni: example.com
+  - name: node-tuic
+    type: tuic
+    server: 192.0.2.7
+    port: 443
+    uuid: 00000000-0000-0000-0000-000000000002
+    password: testpassword123
+    sni: example.com
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies: [node-ss, node-trojan, node-vless, node-vmess, node-wg, node-hy2, node-tuic]
+rules:
+  - DOMAIN-SUFFIX,example.com,Proxy
+  - MATCH,Proxy

@@ -1,0 +1,8 @@
+mixed-port: 7890
+proxies:
+  - name: broken
+    type: ss
+  server: 192.0.2.1
+    port: not_a_port
+proxy-groups
+  - name: oops

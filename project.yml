@@ -97,6 +97,53 @@ targets:
         embed: false
         optional: true
 
+  MeowTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MeowTests
+        excludes:
+          - "README.md"
+          - "Fixtures/README.md"
+    dependencies:
+      - target: meow-ios
+      - package: MeowShared
+    settings:
+      base:
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/meow-ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/meow-ios
+        GENERATE_INFOPLIST_FILE: YES
+
+  MeowUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MeowUITests
+        excludes:
+          - "README.md"
+    dependencies:
+      - target: meow-ios
+    settings:
+      base:
+        TEST_TARGET_NAME: meow-ios
+        GENERATE_INFOPLIST_FILE: YES
+
+  MeowIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MeowIntegrationTests
+        excludes:
+          - "README.md"
+    dependencies:
+      - target: meow-ios
+      - package: MeowShared
+    settings:
+      base:
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/meow-ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/meow-ios
+        GENERATE_INFOPLIST_FILE: YES
+
   PacketTunnel:
     type: app-extension
     platform: iOS
@@ -145,7 +192,21 @@ schemes:
       targets:
         meow-ios: all
         PacketTunnel: all
+        MeowTests: [test]
+        MeowUITests: [test]
+        MeowIntegrationTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - MeowTests
+        - MeowUITests
+        - MeowIntegrationTests
+      gatherCoverageData: true
+      coverageTargets:
+        - meow-ios
+        - MeowShared/MeowModels
+        - MeowShared/MeowIPC
     archive:
       config: Release

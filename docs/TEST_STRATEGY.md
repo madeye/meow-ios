@@ -1,10 +1,13 @@
 # meow-ios Test Strategy & Quality Plan
 
-**Version:** 1.0
+**Version:** 1.2
 **Date:** 2026-04-17
 **Author:** QA Lead
 **Status:** Draft
 **Applies to:** meow-ios v1.0 (MVP — see `PRD.md` §3.1)
+**Changelog:**
+- v1.2 — Added §7 *Device-class E2E via vphone-cli in a SIP-disabled Tart VM* (replaces the earlier "tethered iPhone" nightly model). Tightened §8.1 memory budget: Extension resident ≤ 14 MB with a 15 MB hard ceiling (enforced as a ship-blocker test) to live inside the iOS NE memory limit. Tightened `MihomoCore.xcframework` stripped size budget to ≤ 8 MB. Renumbered §7–§13 → §8–§14.
+- v1.1 — Aligned with PRD v1.1 (pure-Rust `MihomoCore.xcframework`, no Go toolchain). Merged Rust + Go FFI test sections into one; updated CI pipeline to drop the Go build job; updated C symbol names in stubs.
 
 ---
 
@@ -55,22 +58,31 @@ Target distribution: **60% unit, 25% integration, 10% UI, 5% E2E/manual.** If un
 
 **Target:** `MeowTests` bundle, linked against the main app target.
 
-### 3.1 FFI Bridge Tests
+### 3.1 FFI Bridge Tests — `MihomoCore.xcframework`
 
-Cover the Swift↔C boundary for both Rust and Go libraries. These are the thinnest, highest-value tests — they catch ABI drift the moment the native libraries are rebuilt.
+Cover the Swift↔C boundary for the single pure-Rust library (PRD v1.1 dropped the Go engine). These are the thinnest, highest-value tests — they catch ABI drift the moment `mihomo-ios-ffi` is rebuilt.
+
+Full exported surface per PRD §2.4. All exports return `int` status codes and write string output into caller-provided buffers (`dst`, `cap`).
 
 | Subject | What to assert | Notes |
 |---------|---------------|-------|
-| `MihomoFfi.meow_tun_init` | Callable without crash; repeat calls idempotent | Run on simulator |
-| `MihomoFfi.meow_tun_set_home_dir` | Accepts UTF-8 path, handles empty/long strings | Fuzz with invalid UTF-8 |
-| `MihomoFfi.meow_tun_last_error` | Returns `""` before any error; returns specific messages after forced failure | |
-| `MihomoFfi.meowValidateConfig` | Valid Clash YAML → ok; malformed YAML → specific error; empty → error | Load fixtures from `MeowTests/Fixtures/yaml/` |
-| `MihomoFfi.meowTestDirectTcp` | Loopback port closed → error; port open → success | Start a tiny TCP listener in setUp |
-| `MihomoFfi.meowTestDnsResolver` | Valid DoH URL → resolves; bad URL → error in <2s | |
-| `MihomoGo.meowEngineStart` | Starts with valid config path; returns error for missing file | |
-| `MihomoGo.meowEngineIsRunning` | Reflects real state after start/stop | |
-| `MihomoGo.meowGetUploadTraffic` / `meowGetDownloadTraffic` | Monotonic, non-negative, resets on engine restart | |
-| `MihomoGo.meowGetLastError` | Mirrors engine error after forced failure | |
+| `meow_engine_set_home_dir` | Accepts UTF-8 path; idempotent; handles empty string | Fuzz with non-ASCII |
+| `meow_engine_start` | Valid config → 0; missing config → non-zero + populated `last_error` | Seed tmp config.yaml in test bundle |
+| `meow_engine_is_running` | Reflects state after start/stop | |
+| `meow_engine_stop` | Safe to call without prior start (no-op) | |
+| `meow_engine_get_traffic` | Non-negative; monotonic within session; rebases to 0 on restart | |
+| `meow_engine_validate_config` | Valid YAML → 0; malformed → non-zero with specific error; empty → error | Fixtures in `MeowTests/Fixtures/yaml/` |
+| `meow_engine_convert_subscription` | v2rayN base64 nodelist → Clash YAML; buffer-too-small returns required size | Fixture `MeowTests/Fixtures/nodelist/` |
+| `meow_engine_last_error` | Empty before any error; populated after forced failure; truncates cleanly at `cap` | |
+| `meow_engine_version` | Returns semver string matching build | |
+| `meow_test_direct_tcp` | Open port → 0; closed port → non-zero within 5s | Start a tiny TCP listener in setUp |
+| `meow_test_proxy_http` | Valid URL through running engine → 200-class code | Requires engine started |
+| `meow_test_dns_resolver` | Valid DoH URL → resolves; bad URL → error in <2s | |
+| `meow_tun_start` | Accepts `c_int` fd; returns error if engine not running | Use a pipe fd or socketpair in tests |
+| `meow_tun_stop` | Safe without start | |
+| `meow_tun_last_error` | Populates on forced failure | |
+
+**Buffer contract tests:** for every function taking `(char *dst, int cap)`, verify three cases: (a) ample capacity → full string written, null-terminated; (b) exact capacity → truncated cleanly; (c) `cap == 0` → returns required size, no write. These catch the most common FFI memory safety bugs.
 
 **Tooling:** use Swift Testing (`@Test` macros, Swift 6+) for new tests, XCTest for tests that need `waitForExpectations` or `measure` blocks.
 
@@ -180,18 +192,19 @@ IPC tests that need the actual extension process live in the integration tier (�
 
 Implementation: use `NEVPNManager.shared().loadFromPreferences` then drive the provider and observe `NEVPNStatusDidChangeNotification`. Tests require network entitlements — cannot run on Xcode Cloud without a provisioned test runner.
 
-### 4.2 Rust + Go Engine Integration
+### 4.2 MihomoCore (Rust) Engine Integration
 
 These tests live in the extension target's `PacketTunnelTests` bundle (runs inside the extension process).
 
 | Scenario | Expected |
 |----------|---------|
 | Load GeoIP + Geosite assets | First launch copies from bundle to App Group; second launch uses cached copy |
-| Start Go engine with test config | `/configs` endpoint returns 200 within 2s |
-| Stop Go engine, start Rust tun2socks | Both can be started independently and coexist |
-| REST API reachable | `GET http://127.0.0.1:9090/version` from inside extension returns expected build string |
-| DoH bootstrap | Rust DoH client resolves a test domain via `1.1.1.1` → non-zero IP returned |
-| Memory footprint after 60s idle | `proc_task_info` reports < 40 MB resident |
+| `meow_engine_start` with test config | Returns 0 within 2s; `meow_engine_is_running()` → 1 |
+| `meow_tun_start` + engine coexistence | Both run in the same Rust library via Tokio channels; no SOCKS5 loopback |
+| REST API reachable | `GET http://127.0.0.1:9090/version` from inside extension returns `meow_engine_version()` output |
+| In-process tun2socks ↔ engine channel | Packet sent into TUN fd appears on upstream proxy socket within 20ms median (no loopback hop) |
+| DoH bootstrap | `meow_test_dns_resolver("https://1.1.1.1/dns-query")` returns 0 with at least one resolved IP |
+| Memory footprint after 60s idle | `proc_task_info` reports < 40 MB resident — must stay well under the ~50 MB iOS ceiling |
 
 ### 4.3 IPC Between App and Extension
 
@@ -325,20 +338,138 @@ Test pass criterion per protocol: all 5 connectivity checks pass, and the Go eng
 
 ---
 
-## 7. Performance Benchmarks
+## 7. Device-class E2E via vphone-cli (Virtual iPhone) in a Tart VM
 
-All benchmarks run on iPhone 14 (minimum supported device) on iOS 26.
+The E2E tier needs something that (a) runs iOS 26 builds unmodified, (b) is reproducible in CI, and (c) is cheaper than a self-hosted macOS host with a tethered iPhone on a desk. We adopt **[vphone-cli](https://github.com/Lakr233/vphone-cli)** — a virtual iPhone powered by Apple's Virtualization.framework and the PCC research VM image (NOT Xcode Simulator) — running inside a **[Tart](https://tart.run)** macOS VM. Tart gives us the SIP-disabled macOS environment vphone-cli requires; Tart images are OCI-compatible so the CI runner pulls them like container images.
 
-### 7.1 Memory
+This section describes the E2E automation layer. Individual connectivity assertions (the "5-check gate") live in §6.2; this section defines *how* they get driven on a virtual iPhone in CI.
+
+### 7.1 Why vphone-cli over Xcode Simulator
+
+The Xcode iOS Simulator cannot host a functioning `NEPacketTunnelProvider` — it ignores TUN interface bring-up, refuses to route traffic through the extension, and a significant fraction of our 5-check gate (see §6.2) is therefore unobservable in the simulator. Real-device CI worked but put a physical iPhone in the critical path (single point of failure, unattended reboots, cable drift). vphone-cli is the middle ground: a real iOS kernel, a real NetworkExtension runtime, but in a fully virtual, scriptable, disposable VM.
+
+### 7.2 Runtime architecture
+
+```
+   ┌────────────────────────────────────────────────────────────┐
+   │ GitHub Actions runner (macOS host, Apple Silicon)          │
+   │  SIP: enabled (default)                                    │
+   │                                                            │
+   │   ┌──────────────────────────────────────────────────────┐ │
+   │   │ Tart VM (macOS 15+, SIP DISABLED, AMFI bypass in ←── │ │   built once, pushed
+   │   │ boot-args)                                           │ │   to ghcr.io/.../meow-e2e
+   │   │                                                      │ │
+   │   │   • vphone-cli installed from Homebrew tap           │ │
+   │   │   • Virtualization.framework enabled                 │ │
+   │   │   •  ┌────────────────────────────────────────────┐  │ │
+   │   │      │ Virtual iPhone (iOS 26, arm64)             │  │ │
+   │   │      │  — meow-ios.ipa installed                  │  │ │
+   │   │      │  — controlled via vm/vphone.sock           │  │ │
+   │   │      └────────────────────────────────────────────┘  │ │
+   │   └──────────────────────────────────────────────────────┘ │
+   └────────────────────────────────────────────────────────────┘
+```
+
+### 7.3 Tart VM image contents
+
+A single base image `ghcr.io/<org>/meow-e2e-base:<macos-version>` is baked by the `e2e-image.yml` workflow on demand (monthly or on tool-version bumps) and pushed to GHCR. Contents:
+
+- macOS 15 (minimum supported by vphone-cli per its README)
+- **SIP disabled** (`csrutil disable` in recovery, persisted in NVRAM)
+- AMFI bypass boot-arg set (required by vphone-cli to load the PCC research VM image — per upstream README)
+- Homebrew + vphone-cli + vphone-mcp
+- Xcode Command Line Tools + `ios-deploy` equivalents needed to install .ipa into the virtual iPhone
+- Base iOS 26 PCC VM image pre-pulled (multi-GB; baking it in saves ~10 min per nightly run)
+- fastlane, xcodegen, xcbeautify for build assist
+
+Rebuilds are tracked by image tag; nightly runs pin to a specific digest so a Tart base change cannot silently drift E2E results.
+
+### 7.4 Firmware variant
+
+vphone-cli's README exposes three firmware variants: Regular, Development, and (research) PCC. We default to **Regular** — it matches what real users run in the App Store distribution path and is the strictest environment for code signing / entitlements. Development is fallback-only (used locally when iterating on a signing issue); PCC is reserved for future security research and is NOT used in CI.
+
+### 7.5 Automation surface
+
+vphone-cli exposes a host control socket at `vm/vphone.sock` (path-relative to the running VM). Our E2E scripts speak this socket directly (via `nc -U` or a small Swift helper). Operations we use:
+
+| Operation | Purpose in E2E |
+|-----------|----------------|
+| `screenshot` | Capture PNG of current screen; OCR / pixel-diff for visual assertions |
+| `tap x,y` | Drive UI flows (Connect button, list selection, picker confirm) |
+| `swipe x1,y1→x2,y2` | Unlock gesture, modal dismiss, scroll through node lists |
+| `keys "<text>"` | Input subscription URLs, passwords |
+| `clipboard set "<text>"` | Faster than typing for long YAML snippets |
+| `clipboard get` | Pull out the subscription URL after adding, verify round-trip |
+| `button home` / `button power` | Return to springboard, force-background the app |
+
+All test steps are wrapped in a thin `VPhone` Swift helper (`MeowUITests/Support/VPhone.swift`) that uses page-object method names (`home.tapConnect()`, `home.screenshot()`) rather than raw coordinates — so future iOS layout changes touch one file, not every test.
+
+#### 7.5.1 Optional: AI-driven tests via vphone-mcp
+
+For exploratory regression runs (weekly, not per-PR), we use **vphone-mcp** — the MCP companion to vphone-cli — to let an agent drive the UI and report unexpected states. This is not a CI gate (agent loops are not yet deterministic enough) but is a cheap way to catch layout regressions on every iOS beta.
+
+### 7.6 Mapping the 5-check connectivity gate onto vphone-cli
+
+The Android `test-e2e.sh` asserts five things. Here is how each maps onto vphone-cli automation:
+
+| # | Android assertion | iOS on vphone-cli |
+|---|-------------------|---------------------|
+| 1 | TUN interface `tun0` is up | Install .ipa → `tap Connect` via socket → poll app `/debug/status` via App Group IPC dump (screenshot + OCR of the Home tab's "Connected" label, plus `vphone-cli exec ifconfig` if SIP-disabled shell access allows) |
+| 2 | DNS resolves through tunnel | Script issues a DoH query targeting the test server and asserts the response IP matches a fixture |
+| 3 | TCP reach `1.1.1.1:80` via proxy | Tap an in-app "Run diagnostics" affordance (to be added under T3.6); it invokes `meow_test_direct_tcp` via FFI and writes the result to App Group; screenshot shows PASS/FAIL |
+| 4 | TCP reach `8.8.8.8:443` via proxy | Same as #3 but different endpoint |
+| 5 | HTTP `generate_204` through proxy | `meow_test_proxy_http`; asserted the same way |
+
+Checks 3–5 lean on a **test-only diagnostics panel** inside the app (behind a debug flag, stripped in Release). This keeps the virtual iPhone driver simple: the app surfaces signals, the harness screenshots/OCRs them. The alternative (injecting assertions via a private XPC into the NetworkExtension) is riskier and non-reproducible across iOS versions.
+
+### 7.7 Script layout
+
+- `scripts/test-e2e-ios.sh` — orchestrator. Boots Tart VM, waits for vphone-cli ready, installs .ipa, drives `VPhone` helper, collects xcresult + screenshots, tears down.
+- `scripts/tart/bootstrap-e2e-vm.sh` — one-time VM build (pulled from image cache in CI).
+- `MeowUITests/Support/VPhone.swift` — Swift wrapper around the `vm/vphone.sock` protocol.
+- `MeowUITests/Flows/E2E5CheckGateTests.swift` — the five assertions tied 1:1 to the Android script.
+
+### 7.8 Risks & mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| **Nested virtualization** — vphone-cli's README explicitly warns Virtualization.framework does not support nesting. Running vphone-cli inside a Tart VM is inherently in that nested regime. | Validate end-to-end on a scratch runner before baking the CI workflow. If nested virt is rejected by the macOS kernel, the fallback is a **dedicated SIP-disabled bare-metal host** (Mac mini M2 on-prem or Scaleway/MacStadium) running vphone-cli directly; Tart is dropped in that fallback. Either way, the test code above is unchanged — only the runner mapping differs. This decision is recorded in an ADR before M4 closes. |
+| SIP-disabled hosts cannot receive macOS security updates via normal MDM | Image is rebuilt monthly from a fresh SIP-disabled install; old digests rotate out |
+| vphone-cli upstream is a solo-maintainer project | Pin to a specific tag/commit; mirror the release tarball into our artifact storage so a deleted upstream release does not break CI |
+| AMFI bypass + SIP disabled = the Tart VM is untrusted | Never run release signing inside the E2E Tart VM. Release flow (see §11) runs in a separate clean runner with SIP enabled. |
+| iOS version drift between vphone-cli's PCC VM image and our deployment target | Bake a known-good PCC VM image into the Tart base; rebuild (and re-baseline perf benchmarks) when the deployment target changes |
+
+### 7.9 When E2E fails in CI
+
+On nightly failure:
+1. All screenshots captured by `VPhone.screenshot()` are uploaded as artifacts
+2. `vm/vphone.sock` event log (tap/swipe/key history) is uploaded
+3. xcresult bundle is uploaded
+4. Slack `#meow-ios-alerts` gets a link with the failing check, last screenshot, and the mapped Android parity check
+5. The failure does NOT auto-block `main` (see §11.5) but opens an issue with label `e2e-flaky` for triage within 24h
+
+---
+
+## 8. Performance Benchmarks
+
+All benchmarks run on iPhone 14 (minimum supported device) on iOS 26. E2E-adjacent perf (memory ceilings, connection-setup latency) is also validated on the vphone-cli virtual iPhone (§7) in nightly CI.
+
+### 8.1 Memory
+
+The iOS NetworkExtension process is capped at **~15 MB resident memory** by the system — exceeding it is a hard jetsam kill with no recovery. This is the single largest architectural constraint on meow-ios and the reason we moved from Go mihomo to pure-Rust mihomo (PRD v1.1). Our test targets are therefore tight, and the "ceiling" test is a ship-blocker.
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Extension resident memory at idle (60s post-connect) | ≤ 40 MB | `task_info` via Instruments Allocations |
-| Extension peak memory under load (100 Mbps sustained) | ≤ 48 MB | iOS hard limit ~50 MB — less than 48 MB leaves headroom |
+| Extension resident memory at idle (60s post-connect) | ≤ **14 MB** | `task_info` via Instruments Allocations; ship-blocker |
+| Extension peak memory under load (100 Mbps sustained, 60s) | ≤ **14.5 MB** | Instruments Allocations — any sample ≥ 15 MB fails build |
+| Extension memory headroom stress test | No jetsam over 30 min at 50 Mbps + 200 concurrent connections | Instruments Allocations + `log stream` for jetsam events |
+| `MihomoCore.xcframework` stripped on-disk | ≤ **8 MB** per-slice | CI gate via `size`/`stat`; revisit if core gains new protocols |
 | App-side memory at idle | ≤ 80 MB | Instruments Allocations |
-| Memory growth after 1h session | ≤ +10 MB | Identify leaks via Instruments Leaks |
+| Memory growth after 1h session | ≤ +0.5 MB in extension; ≤ +10 MB in app | Identify leaks via Instruments Leaks |
 
-### 7.2 CPU
+The 14 MB target leaves a 1 MB cushion below the ~15 MB jetsam threshold. There is intentionally no "peak target ≥ 14.5" row — anything that high is in the kill zone.
+
+### 8.2 CPU
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
@@ -346,7 +477,7 @@ All benchmarks run on iPhone 14 (minimum supported device) on iOS 26.
 | Extension CPU at 50 Mbps sustained | < 15% single-core | Instruments Time Profiler |
 | App CPU while on Home screen (1Hz traffic updates) | < 3% single-core | Instruments Time Profiler |
 
-### 7.3 Battery
+### 8.3 Battery
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
@@ -354,7 +485,7 @@ All benchmarks run on iPhone 14 (minimum supported device) on iOS 26.
 | 1-hour active session (10 Mbps average) | ≤ 8% battery drain | Instruments Energy Log |
 | Background drain over 8h overnight idle VPN | ≤ 5% | Manual overnight test |
 
-### 7.4 Connection Setup Latency
+### 8.4 Connection Setup Latency
 
 | Stage | Target |
 |-------|--------|
@@ -363,7 +494,7 @@ All benchmarks run on iPhone 14 (minimum supported device) on iOS 26.
 | TUN up → first successful proxied TCP handshake | ≤ 3 s |
 | **Total: tap → first byte through proxy** | **≤ 5 s** |
 
-### 7.5 Throughput
+### 8.5 Throughput
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
@@ -371,7 +502,7 @@ All benchmarks run on iPhone 14 (minimum supported device) on iOS 26.
 | TCP throughput via WireGuard | ≥ 150 Mbps | Same setup |
 | TCP round-trip latency penalty vs direct | < 20 ms median on same LAN | Compare `ping` (direct) vs TCP SYN-ACK timing through proxy |
 
-### 7.6 UI Responsiveness
+### 8.6 UI Responsiveness
 
 | Metric | Target |
 |--------|--------|
@@ -384,11 +515,11 @@ Benchmarks captured to `.trace` files, uploaded as CI artifacts on every nightly
 
 ---
 
-## 8. Security Checklist
+## 9. Security Checklist
 
 Security checks are automated where possible and reviewed manually pre-release. A failing item is a **ship-blocker**, not a recommendation.
 
-### 8.1 Credentials & Secrets
+### 9.1 Credentials & Secrets
 
 - [ ] No subscription credentials, proxy passwords, or API tokens written to `UserDefaults`, plist, or SwiftData unencrypted
 - [ ] Subscription URL tokens (if any) stored in Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`
@@ -397,41 +528,41 @@ Security checks are automated where possible and reviewed manually pre-release. 
 - [ ] No secrets in bundled `.plist` / `.strings` / `.yaml` fixtures
 - [ ] Git-secrets pre-commit hook enforces the above on every commit
 
-### 8.2 App Transport Security (ATS)
+### 9.2 App Transport Security (ATS)
 
 - [ ] `NSAppTransportSecurity` → no global `NSAllowsArbitraryLoads`
 - [ ] Subscription URLs: HTTPS required by default; user-initiated HTTP allowed only with explicit warning + per-URL exception
 - [ ] `NSExceptionDomains` empty in production build; only populated in debug for local test servers
 
-### 8.3 Data Protection at Rest
+### 9.3 Data Protection at Rest
 
 - [ ] App container marked `NSFileProtectionCompleteUntilFirstUserAuthentication` (minimum)
 - [ ] Sensitive files (config.yaml, state.json) marked `NSFileProtectionComplete`
 - [ ] App Group container files inherit protection class from their first writer — verify via `xattr -l` on a live device
 - [ ] SwiftData store uses encrypted configuration (iOS 26+ offers this; verify support)
 
-### 8.4 Certificate Validation
+### 9.4 Certificate Validation
 
 - [ ] Default `URLSession` config: no `serverTrust` overrides, no pinning bypass
 - [ ] REST client to `127.0.0.1:9090` uses HTTP (loopback-only, no cert needed) — document why, verify binding
 - [ ] Proxy protocols (Trojan, VLESS over TLS) use system trust store; no `insecure-skip-verify` accessible in user-facing settings
 - [ ] DoH client validates upstream certificates
 
-### 8.5 Network Extension Hardening
+### 9.5 Network Extension Hardening
 
 - [ ] Extension does not read from App Group files it doesn't own
 - [ ] `includedRoutes` matches the expected TUN network; no `0.0.0.0/0` in `excludedRoutes` (would defeat VPN)
 - [ ] No `NEProxyServer` with hardcoded credentials
 - [ ] Extension does not make outbound HTTP requests except through its own tunnel
 
-### 8.6 Code-Level Security
+### 9.6 Code-Level Security
 
 - [ ] No `@_cdecl` or `@objc` functions exported from the app target that shouldn't be
 - [ ] No `fatalError` or `preconditionFailure` on user-controlled input (denial of service vector)
 - [ ] YAML parser configured to reject anchors/aliases targeting external resources
 - [ ] Subscription URL scheme check: only `http` / `https` (reject `file://`, `javascript:`, `data:`)
 
-### 8.7 Privacy
+### 9.7 Privacy
 
 - [ ] `PrivacyInfo.xcprivacy` declares all required reason APIs (file timestamp, user defaults, etc.)
 - [ ] No IDFA collection; no third-party SDKs at MVP (Firebase TBD — see PRD §Open Question 3)
@@ -441,7 +572,7 @@ Security checks are automated where possible and reviewed manually pre-release. 
 
 ---
 
-## 9. Acceptance Criteria by MVP Feature
+## 10. Acceptance Criteria by MVP Feature
 
 Each MVP feature ships only when all listed criteria pass in CI and manual review.
 
@@ -542,13 +673,13 @@ Each MVP feature ships only when all listed criteria pass in CI and manual revie
 
 ---
 
-## 10. CI/CD Pipeline Proposal
+## 11. CI/CD Pipeline Proposal
 
 **Recommendation: GitHub Actions + fastlane.**
 
 Rationale: Xcode Cloud is simpler but (a) limits Rust/Go cross-compilation flexibility, (b) lacks the free-tier runner hours the project will need for nightly E2E, (c) constrains us to Apple's workflow syntax. GitHub Actions with self-hosted macOS runners (for device E2E) and GitHub-hosted runners (for simulator builds) gives us the needed flexibility.
 
-### 10.1 Workflows
+### 11.1 Workflows
 
 #### `ci.yml` (on every push / PR)
 
@@ -574,8 +705,8 @@ Runners: self-hosted macOS with a tethered iPhone 14 on iOS 26.
 1. Rebuild xcframeworks
 2. Run full test suite against simulator
 3. Deploy to tethered device via `ios-deploy`
-4. Run `scripts/test-e2e-ios.sh` (iOS port of Android's E2E script — see §6)
-5. Run performance benchmarks (§7), compare to baseline, fail if regression > 15%
+4. Run `scripts/test-e2e-ios.sh` (iOS port of Android's E2E script — see §6, driven on vphone-cli per §7)
+5. Run performance benchmarks (§8), compare to baseline, fail if regression > 15%
 6. Upload `.trace` files + screenshots as artifacts
 7. Post Slack / email summary on failure
 
@@ -587,7 +718,7 @@ Runners: self-hosted macOS with a tethered iPhone 14 on iOS 26.
 4. Tag notes generated from `git log --pretty=format:'- %s'` since previous tag
 5. Manual approval gate before App Store submission via `fastlane deliver`
 
-### 10.2 fastlane Lanes
+### 11.2 fastlane Lanes
 
 ```ruby
 # Fastfile sketch
@@ -616,7 +747,7 @@ end
 
 ASC API key `5MC8U9Z7P9` (issuer `1200242f-e066-47cc-9ac8-b3affd0eee32`) is loaded from CI secrets — never committed to the repo.
 
-### 10.3 Required Secrets
+### 11.3 Required Secrets
 
 | Secret | Purpose |
 |--------|--------|
@@ -626,14 +757,14 @@ ASC API key `5MC8U9Z7P9` (issuer `1200242f-e066-47cc-9ac8-b3affd0eee32`) is load
 | `MATCH_PASSWORD` | If we adopt fastlane match |
 | `SLACK_WEBHOOK_URL` | Nightly build notifications |
 
-### 10.4 Test Result Reporting
+### 11.4 Test Result Reporting
 
 - `xcresulttool` extracts test results from `.xcresult` bundles
 - PR comment with test/coverage summary via custom Action
 - `XCResult → JUnit XML` conversion for GitHub's native test display
 - Coverage posted to Codecov on every PR
 
-### 10.5 Branch Protection
+### 11.5 Branch Protection
 
 On `main`:
 - Required checks: `lint`, `security-scan`, `unit-test`, `ui-test`
@@ -642,29 +773,30 @@ On `main`:
 
 ---
 
-## 11. Risk-Based Test Prioritization
+## 12. Risk-Based Test Prioritization
 
 | Risk (from PRD §8) | Test Mitigation | Priority |
 |---------------------|-----------------|----------|
-| Extension memory limit | Performance benchmarks §7.1 run nightly on device; fail build on regression | P0 |
-| Go binary size bloat | Build artifact size check in CI; fail if `MihomoGo.xcframework` > 50 MB | P0 |
+| Extension memory limit (iOS NE cap ≈ 15 MB) | Performance benchmarks §8.1 run nightly on vphone-cli (§7); CI fails build if `MihomoCore.xcframework` > 8 MB stripped; fails runtime if resident > 14 MB sustained or any sample ≥ 15 MB | P0 |
+| mihomo-rust protocol parity gaps vs. Go mihomo | Protocol matrix §6.3 exercises SS/Trojan/VLESS/VMess/WG/Hy2/TUIC through real test servers; missing/broken protocol = ship-blocker for that protocol | P0 |
 | Apple review rejection | Static scan for ATS / privacy violations; manual pre-submission checklist | P0 |
 | NetworkExtension sandbox file I/O | Integration tests §4.1 exercise only App Group paths; any direct path triggers test failure | P1 |
-| TUN fd bridging (Option A vs B) | §4.2 covers both paths; decision recorded in ADR before M1 closes | P0 |
+| TUN fd bridging (Option A vs B) | §4.2 covers chosen path; decision recorded in ADR before M1 closes | P0 |
 | CFNotification latency | §4.3 asserts ≤ 500ms round-trip; fallback to polling documented | P1 |
-| Go cgo build toolchain | CI builds Go xcframework from scratch every PR; toolchain versions pinned | P0 |
+| Rust cross-compile + cbindgen toolchain | CI builds `MihomoCore.xcframework` from scratch every PR; Rust toolchain + cbindgen versions pinned | P0 |
 | smoltcp iOS packet framing | §6.2 nightly E2E on device is the authoritative signal | P0 |
+| In-process Tokio channel (no loopback) correctness | §4.2 asserts packet-in-packet-out latency stays in-process (<20ms median); watch for deadlocks under load | P1 |
 
 ---
 
-## 12. Exit Criteria for MVP Ship
+## 13. Exit Criteria for MVP Ship
 
 All must be true before App Store submission:
 
-- [ ] All acceptance criteria §9 pass on iPhone 14 (minimum device) and iPhone 16 Pro
-- [ ] All 5 network checks §6.2 pass for SS, Trojan, VLESS, VMess, and WireGuard protocols
-- [ ] Performance benchmarks §7 meet targets on iPhone 14
-- [ ] Security checklist §8 is 100% complete
+- [ ] All acceptance criteria §10 pass on iPhone 14 (minimum device) and iPhone 16 Pro
+- [ ] All 5 network checks §6.2 pass for SS, Trojan, VLESS, VMess, and WireGuard protocols (driven via vphone-cli per §7)
+- [ ] Performance benchmarks §8 meet targets on iPhone 14, **including the 15 MB extension memory ceiling (§8.1)**
+- [ ] Security checklist §9 is 100% complete
 - [ ] Zero known P0/P1 bugs
 - [ ] Full regression pass on device matrix (PROJECT_PLAN §T7.5)
 - [ ] TestFlight beta running for ≥ 1 week with no crash reports in Xcode Organizer
@@ -672,9 +804,9 @@ All must be true before App Store submission:
 
 ---
 
-## 13. Open Questions
+## 14. Open Questions
 
-1. **Real device for CI nightly** — do we have budget for a dedicated self-hosted macOS + tethered iPhone, or do we run E2E only on simulator with reduced confidence? If simulator-only, §6.2 check 1 (TUN interface) still runs but §7 battery benchmarks must move to manual pre-release.
+1. **vphone-cli nested-virt viability** — the nightly E2E pipeline (§7) assumes vphone-cli runs inside a Tart VM. vphone-cli's README explicitly calls out that Virtualization.framework does not support nesting. We need to prove this works end-to-end on a scratch runner before M4. If it doesn't, fallback is a dedicated SIP-disabled Mac mini on-prem; decision and ADR by M4.
 2. **Test proxy server host** — where does the ssserver live in the nightly pipeline? Option A: on the runner itself (localhost, reachable via `host.docker.internal`-style addressing). Option B: a shared test-infra box reachable by CI.
 3. **Protocol fixture sources** — Trojan/WG/Hy2 need real test endpoints; do we stand up dedicated test servers, or piggyback on existing infra?
 4. **Swift Testing vs XCTest** — fully commit to Swift Testing for new tests (requires Swift 6 / Xcode 16+) or stick with XCTest for broader compat? Recommend Swift Testing given iOS 26 minimum.
