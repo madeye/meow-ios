@@ -24,11 +24,19 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
 ## Regenerating the Xcode project
 
+`project.yml` is the source of truth. `meow-ios.xcodeproj` is git-ignored
+and generated output — never hand-edit `project.pbxproj`. If you add or
+rename a target, source folder, or dependency, resync with:
+
 ```sh
-./scripts/generate-xcodeproj.sh
+./scripts/generate-xcodeproj.sh   # wraps `xcodegen generate`
 ```
 
-`meow-ios.xcodeproj` is git-ignored; always regenerate it from `project.yml`.
+If adding a new test bundle or source path and the generator misbehaves,
+`xcodegen generate` can be invoked directly from the repo root to surface
+its diagnostics. CI always regenerates from `project.yml`, so any drift
+between the checked-in `project.yml` and a hand-edited `project.pbxproj`
+will be silently overwritten.
 
 ## Native library builds
 
