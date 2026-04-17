@@ -1,18 +1,18 @@
 import Foundation
 import MeowModels
 
-/// T4.2 navigation seam — the only UI-surface step in the five-check gate
-/// whose selectors aren't known at this point in the milestone. When T4.2
-/// (Home Screen) + T2.6 (Debug Diagnostics Panel) land, Dev wires up a
-/// concrete closure that taps through whatever the shipping entry point
-/// turns out to be (tab-bar button, settings menu, gear icon, long-press,
-/// shake gesture — TBD). The driver never touches those anchors directly;
-/// everything else in the state machine is anchor-independent.
+/// T4.2 navigation seam. The default implementation
+/// (`FiveCheckGateDriver.defaultNavigateToDiagnostics`) taps the
+/// `home.nav.diagnostics` accessibility identifier Dev wired on T4.2
+/// — so once T-infra lands the vphone-cli primitives, callers get a
+/// working navigation step for free. The closure is still injectable
+/// for tests that need an alternative entry point (shake gesture,
+/// debug menu, deep link) without editing the driver.
 ///
 /// Mirrors the `drive(proxy:assertion:)` stub pattern in
 /// `MeowIntegrationTests/ProtocolFixtures/UDPProtocolTests.swift`:
 /// abstract the unknown, exercise the known.
-typealias NavigateToDiagnostics = (VPhone) throws -> Void
+typealias NavigateToDiagnostics = @Sendable (VPhone) throws -> Void
 
 /// Anchor-independent driver for the 5-check diagnostics gate
 /// (TEST_STRATEGY §6.2 / §7.6; PRD §4.4 frozen label contract). Composes
@@ -47,21 +47,43 @@ typealias NavigateToDiagnostics = (VPhone) throws -> Void
 ///
 ///     let driver = FiveCheckGateDriver(
 ///         phone: VPhone(),
-///         subscriptionDeepLink: URL(string: "meow://connect?url=\(encoded)")!,
-///         navigateToDiagnostics: { phone in
-///             // T4.2 concrete — e.g. settingsTab → "Debug" → "Diagnostics"
-///             try phone.tap(x: 0, y: 0)
-///         }
+///         subscriptionDeepLink: URL(string: "meow://connect?url=\(encoded)")!
 ///     )
 ///     let results = try driver.runToResults()
 ///     // Caller picks whichever rows they care about:
 ///     XCTAssertEqual(results[.tcpProxyOk], .pass)
+///
+/// The default navigation closure taps the T4.2 `home.nav.diagnostics`
+/// anchor; pass `navigateToDiagnostics:` explicitly only when targeting
+/// an alternative entry point.
 struct FiveCheckGateDriver {
     let phone: VPhone
     let subscriptionDeepLink: URL
     let navigateToDiagnostics: NavigateToDiagnostics
     var connectTimeout: TimeInterval = 10
     var diagnosticsReadTimeout: TimeInterval = 20
+
+    /// Default navigation: tap the `home.nav.diagnostics` anchor exposed
+    /// by T4.2. Most callers get this for free via `init(..., navigateToDiagnostics:)`'s
+    /// default; inject a different closure only for alternative entry
+    /// points (shake gesture, debug menu, deep link).
+    static let defaultNavigateToDiagnostics: NavigateToDiagnostics = { phone in
+        try phone.home.tapNavDiagnostics()
+    }
+
+    init(
+        phone: VPhone,
+        subscriptionDeepLink: URL,
+        navigateToDiagnostics: @escaping NavigateToDiagnostics = FiveCheckGateDriver.defaultNavigateToDiagnostics,
+        connectTimeout: TimeInterval = 10,
+        diagnosticsReadTimeout: TimeInterval = 20
+    ) {
+        self.phone = phone
+        self.subscriptionDeepLink = subscriptionDeepLink
+        self.navigateToDiagnostics = navigateToDiagnostics
+        self.connectTimeout = connectTimeout
+        self.diagnosticsReadTimeout = diagnosticsReadTimeout
+    }
 
     enum DriverError: Error, CustomStringConvertible {
         case stillNotRunning(after: TimeInterval)
@@ -100,12 +122,12 @@ struct FiveCheckGateDriver {
         try phone.home.tapConnect()
     }
 
-    /// Step 3. Block until the extension reports running. The current
-    /// backing mechanism is `HomeScreen.waitForConnected`, which will
-    /// resolve once T4.2 lands the "Connected" anchor. If the REST
-    /// external-controller path (`/configs`, `is_running == 1`) becomes
-    /// preferable later, swap the impl behind this phase — the driver's
-    /// contract with callers is unchanged.
+    /// Step 3. Block until `home.badge.state` reads `connected` per the
+    /// T4.2 spec — `HomeScreen.waitForConnected` polls the anchor text
+    /// rather than OCR'ing a visual. If the REST external-controller
+    /// path (`/configs`, `is_running == 1`) becomes preferable later,
+    /// swap the impl behind this phase; the driver's caller contract
+    /// is unchanged.
     func waitForRunning(timeout: TimeInterval? = nil) throws {
         let t = timeout ?? connectTimeout
         do {
@@ -115,8 +137,8 @@ struct FiveCheckGateDriver {
         }
     }
 
-    /// Step 4. The one T4.2-dependent step. Concrete closure taps
-    /// through whatever navigation pattern ships.
+    /// Step 4. Delegate to the injected closure (defaults to tapping
+    /// `home.nav.diagnostics`).
     func navigateToDiagnosticsPanel() throws {
         try navigateToDiagnostics(phone)
     }

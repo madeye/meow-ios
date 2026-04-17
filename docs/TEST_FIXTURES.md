@@ -73,16 +73,22 @@ Consequence for fixtures:
 
 ## 5. Tart VM Integration
 
-The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already referenced in `TEST_STRATEGY.md` §7 as the Android-parity entry point; currently stub). Inside the Tart VM, the script will:
+**Runner scope (2026-04-17 team-lead decision):** the nightly E2E runs **inside the Tart VM only** — no Mac mini fallback. We accept the nested-virtualisation risk for macOS guests on Apple Silicon. If `Virtualization.framework` refuses to nest reliably in practice, that re-raises as a real blocker; until then we proceed on the assumption it works.
 
-1. `brew install` (cached in the Tart base image — rebuilt quarterly per §7.3 cadence).
+**Image strategy (2026-04-17 team-lead decision):** **reuse the existing local `bld-e2e-base` Tart VM** (already present per `tart list`; last accessed 2026-04-14, 32 GB disk-used). Rather than rebaking the base every time a fixture binary set shifts, we layer a delta on top via `scripts/provision-tart-fixtures.sh` (idempotent — installs only what's missing). Rebake becomes a last resort, not the default path.
+
+The fixture orchestrator is a shell script `scripts/test-e2e-ios.sh` (already referenced in `TEST_STRATEGY.md` §7 as the Android-parity entry point; P1–P3 live). Inside the Tart VM, the script will:
+
+1. `brew install` + release-binary drops are laid down once by `scripts/provision-tart-fixtures.sh` (see below). Subsequent runs are no-ops against the `bld-e2e-base` image; the orchestrator itself doesn't reach for `brew`.
 2. Generate per-run ephemeral credentials (Trojan passwords, VLESS UUIDs, WG keypairs) into `/tmp/meow-fixtures/<uuid>/`.
 3. Fork each fixture as a background process from the orchestrator itself (`binary … &; FIXTURE_PID=$!`), track its PID in a shell variable, and register an `EXIT INT TERM` trap that reaps every tracked PID in reverse-start order and then wipes `/tmp/meow-fixtures/<uuid>/`. Fork-and-trap over `launchctl bootstrap` (speculated in v1): one script owns the whole lifecycle, no per-run LaunchAgent plist pollution of the Tart guest, and interactive Ctrl-C plus programmatic `kill -TERM` both land on the same cleanup path. Trojan's fallback-probe requirement is handled in the same style — a dedicated loopback `python3 -m http.server` on an ephemeral port is forked alongside trojan-go and reaped by the trap.
 4. Serve a Clash subscription YAML via `python3 -m http.server 18080` — same port as the Android `test-e2e.sh` pattern, so local devs don't have to rediscover it. Claimed port allocation for future Tart VM conflict bookkeeping.
 5. Point vphone-cli's iPhone at the subscription URL via the `meow://connect` deep link.
 6. Tear down: the trap from step 3 fires (on exit, Ctrl-C, or SIGTERM), `kill -TERM`s each tracked PID, and removes `/tmp/meow-fixtures/<uuid>/`. No post-run LaunchAgent cleanup needed because no LaunchAgents were ever registered.
 
-**Tart image rebuild ask:** base image needs `brew install shadowsocks-rust trojan-go xray wireguard-tools wireguard-go` plus the manually-downloaded `hysteria` / `tuic-server` binaries placed in `/usr/local/bin` (neither has a homebrew-core formula as of 2026-04, though apernet/hysteria has an unofficial tap). Targeted delta from current base: ~80 MB. Not a blocker; the base is already rebuilt per §7.3.
+**Tart image provisioning — `scripts/provision-tart-fixtures.sh`:** layered delta on top of `bld-e2e-base`, not a rebuild. Idempotent. Installs the Homebrew-core set (`shadowsocks-rust`, `trojan-go`, `xray`, `wireguard-tools`, `wireguard-go`) and drops the two GitHub-release binaries (`hysteria` from `apernet/hysteria`, `tuic-server` from `EAimTY/tuic` — neither has a homebrew-core formula as of 2026-04) into `/usr/local/bin`. Pin versions via `HYSTERIA_VERSION` / `TUIC_VERSION` env. `DRY_RUN=1` prints a present/missing summary without mutating the guest — useful for probing what the existing base already has.
+
+Operational note: the same script also runs cleanly on a developer laptop, so `MEOW_FIXTURE_SEEDED=1` local-dev loops don't require a Tart boot. Targeted delta vs a clean `bld-e2e-base` is ~80 MB; subsequent invocations are no-ops.
 
 ---
 
