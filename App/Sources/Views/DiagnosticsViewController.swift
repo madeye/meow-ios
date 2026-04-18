@@ -6,9 +6,9 @@ import UIKit
 
 /// UIKit debug panel per PRD §4.4 Diagnostics Surface Contract. Rendered as
 /// a plain `UIViewController` with `UILabel` rows in a vertical stack — not
-/// SwiftUI — so the vphone-cli nightly OCR harness sees pixel-stable
-/// positions. `accessibilityIdentifier` on each row gives XCUITest a stable
-/// anchor. Text format: `CHECK_NAME: PASS` or `CHECK_NAME: FAIL(reason)`,
+/// SwiftUI — so the manual on-device smoke (PROJECT_PLAN T2.8) reads stable,
+/// glanceable rows. `accessibilityIdentifier` on each row gives XCUITest a
+/// stable anchor. Text format: `CHECK_NAME: PASS` or `CHECK_NAME: FAIL(reason)`,
 /// uppercase, ASCII, no emoji; `DiagnosticsLabelParser.render(_:)` is the
 /// single source of truth for formatting.
 final class DiagnosticsViewController: UIViewController {

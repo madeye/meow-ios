@@ -1,16 +1,12 @@
 import Foundation
 
-// PRD v1.2 §4.4 "Diagnostics Surface Contract" — the OCR-stable text
-// format used by the Debug Diagnostics Panel (T2.6) and consumed by
-// the vphone-cli nightly E2E harness (TEST_STRATEGY v1.2 §7).
+// PRD §4.4 "Diagnostics Surface Contract" — stable, glanceable text
+// format rendered by the Debug Diagnostics Panel (T2.6) for the manual
+// on-device smoke (PROJECT_PLAN T2.8).
 //
-// This file is the single source of truth. All three consumers —
-// the panel's UIViewController (renders labels), the XCUITest
-// assertions (`MeowUITests/Flows/E2E5CheckGateTests`), and the OCR
-// helper (`scripts/assert-ocr.py`, which reads `rawValue` via a
-// generated header) — must reference these types, not literal
-// strings. Renaming any case here breaks the build, which is the
-// point.
+// This file is the single source of truth. Renaming any case here
+// breaks the build (panel UIViewController + XCUITest assertions both
+// reference the typed enum, not literal strings), which is the point.
 
 /// Fixed ASCII label keys. Display order equals declaration order and
 /// must match the PRD §4.4 table.
@@ -46,9 +42,9 @@ public enum DiagnosticsLabelParser {
         case missingKeys([DiagnosticsCheck])
     }
 
-    /// Parse a complete diagnostics panel OCR dump. Fails closed on any
-    /// malformed row, unknown key, duplicate key, or missing key — so
-    /// the nightly gate cannot silently pass on partial output.
+    /// Parse a complete diagnostics panel text dump. Fails closed on any
+    /// malformed row, unknown key, duplicate key, or missing key — so a
+    /// partial panel output can't silently appear to pass.
     public static func parse(_ text: String) throws -> [DiagnosticsCheck: DiagnosticsResult] {
         var out: [DiagnosticsCheck: DiagnosticsResult] = [:]
 
