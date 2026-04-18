@@ -30,6 +30,16 @@ URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_COMMIT}/${UPS
 
 mkdir -p "$DEST_DIR"
 
+if [ -f "$DEST_FILE" ]; then
+    EXISTING_SIZE=$(wc -c <"$DEST_FILE" | tr -d ' ')
+    EXISTING_SHA256=$(shasum -a 256 "$DEST_FILE" | awk '{print $1}')
+    if [ "$EXISTING_SIZE" = "$EXPECTED_SIZE_BYTES" ] && [ "$EXISTING_SHA256" = "$EXPECTED_SHA256" ]; then
+        echo "==> Country.mmdb already staged at ${DEST_FILE} (sha256 match) — skipping fetch"
+        exit 0
+    fi
+    echo "==> Existing Country.mmdb does not match pin (size=${EXISTING_SIZE} sha256=${EXISTING_SHA256}); refetching"
+fi
+
 echo "==> Fetching ${URL}"
 curl --fail --silent --show-error --location --output "$TMP_FILE" "$URL"
 

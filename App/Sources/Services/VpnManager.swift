@@ -11,6 +11,13 @@ import Observation
 final class VpnManager {
     private(set) var stage: VpnStage = .idle
     private(set) var lastError: String?
+
+    /// Clear the user-visible error banner. Called when the user dismisses it
+    /// or when a new connect attempt starts.
+    func clearError() {
+        lastError = nil
+    }
+
     private var manager: NETunnelProviderManager?
     // nonisolated(unsafe): written only from attach() on MainActor, read from
     // deinit (which is nonisolated). NotificationCenter.removeObserver is
@@ -42,6 +49,7 @@ final class VpnManager {
     /// Kick off a connect. Caller should have already written the selected
     /// profile YAML into the App Group container.
     func connect() async {
+        lastError = nil
         do {
             if manager == nil { await refresh() }
             guard let manager else { return }
@@ -83,6 +91,14 @@ final class VpnManager {
             let status = mgr.connection.status
             Task { @MainActor in
                 self.stage = self.map(status)
+                // When the extension aborts startup (engine.start throws) the
+                // connection transitions straight to .disconnected with no
+                // thrown NEVPNManagerError. The provider writes the Rust error
+                // into shared state before returning — surface it here so the
+                // UI can show the actual reason instead of a silent toggle.
+                if status == .disconnected, let msg = SharedStore.readState()?.errorMessage, !msg.isEmpty {
+                    self.lastError = msg
+                }
             }
         }
     }

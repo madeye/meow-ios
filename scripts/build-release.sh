@@ -139,6 +139,8 @@ if [[ "$SKIP_RUST_BUILD" -eq 0 ]]; then
     "$ROOT/scripts/build-rust.sh"
 fi
 
+"$ROOT/scripts/fetch-geo-assets.sh"
+
 DESTINATION="generic/platform=iOS"
 if [[ -n "$DEVICE_ID" ]]; then
     DESTINATION="id=$DEVICE_ID"

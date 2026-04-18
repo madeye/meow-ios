@@ -16,6 +16,9 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                if let message = vpnManager.lastError {
+                    errorBanner(message)
+                }
                 primaryCard
                 trafficRow
                 proxyGroupsSection
@@ -29,6 +32,35 @@ struct HomeView: View {
             await refreshGroupsIfConnected()
         }
         .refreshable { await refreshGroupsIfConnected() }
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("home.error.tunnelFailed.title")
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 8)
+            Button {
+                vpnManager.clearError()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("home.error.dismiss")
+            .accessibilityIdentifier("home.error.dismiss")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: .rect(cornerRadius: 12))
+        .accessibilityIdentifier("home.error.banner")
     }
 
     // MARK: - Primary card

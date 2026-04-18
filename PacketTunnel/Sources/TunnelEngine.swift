@@ -154,7 +154,7 @@ final class TunnelEngine: @unchecked Sendable {
                 try SharedStore.writeTraffic(snapshot)
                 DarwinBridge.post(.traffic)
             } catch {
-                log.error("traffic write failed: \(error.localizedDescription)")
+                log.error("traffic write failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -165,7 +165,16 @@ final class TunnelEngine: @unchecked Sendable {
     }
 }
 
-enum TunnelEngineError: Error {
+enum TunnelEngineError: LocalizedError {
     case engineStartFailed(String)
     case tunStartFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .engineStartFailed(detail):
+            "engine start failed" + (detail.isEmpty ? "" : ": \(detail)")
+        case let .tunStartFailed(detail):
+            "tun start failed" + (detail.isEmpty ? "" : ": \(detail)")
+        }
+    }
 }
