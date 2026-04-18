@@ -10,23 +10,40 @@ struct YamlEditorView: View {
     @State private var saving = false
 
     var body: some View {
-        CodeTextView(text: $text)
+        CodeTextView(text: $text, accessibilityIdentifier: "yamlEditor.editor")
+            .overlay {
+                if text.isEmpty {
+                    ContentUnavailableView(
+                        "Empty config",
+                        systemImage: "doc.text",
+                        description: Text("Paste a Clash YAML config to start editing."),
+                    )
+                    .accessibilityIdentifier("yamlEditor.emptyState")
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let error {
+                    errorBanner(error)
+                }
+            }
             .navigationTitle("Edit Config")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Revert") { text = profile.yamlBackup }
+                        .accessibilityLabel("Revert to last saved config")
+                        .accessibilityIdentifier("yamlEditor.revertButton")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(saving ? "Saving…" : "Save", action: save)
-                        .disabled(saving)
+                        .disabled(saving || text.isEmpty)
+                        .accessibilityLabel("Save config")
+                        .accessibilityIdentifier("yamlEditor.saveButton")
                 }
             }
             .onAppear { text = profile.yamlContent }
-            .alert("Save failed", isPresented: .constant(error != nil)) {
-                Button("OK") { error = nil }
-            } message: {
-                Text(error ?? "")
+            .onChange(of: text) { _, _ in
+                if error != nil { error = nil }
             }
     }
 
@@ -42,6 +59,22 @@ struct YamlEditorView: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.caption)
+                .lineLimit(2)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: .rect(cornerRadius: 8))
+        .padding(.horizontal)
+        .accessibilityIdentifier("yamlEditor.errorBanner")
     }
 }
 
@@ -72,6 +105,12 @@ enum MihomoConfigError: LocalizedError {
 /// will replace this with CodeEditView once the YAML editor milestone lands.
 struct CodeTextView: UIViewRepresentable {
     @Binding var text: String
+    let accessibilityIdentifier: String?
+
+    init(text: Binding<String>, accessibilityIdentifier: String? = nil) {
+        _text = text
+        self.accessibilityIdentifier = accessibilityIdentifier
+    }
 
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
@@ -83,6 +122,7 @@ struct CodeTextView: UIViewRepresentable {
         view.smartInsertDeleteType = .no
         view.delegate = context.coordinator
         view.backgroundColor = .clear
+        view.accessibilityIdentifier = accessibilityIdentifier
         return view
     }
 
