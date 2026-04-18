@@ -59,6 +59,9 @@ MeowCore/Frameworks/*.a
 MeowCore/include/generated/
 build-output/
 
+# ---- Bundled geo assets (fetched via scripts/fetch-geo-assets.sh) ----
+App/Resources/geox/*.mmdb
+
 # ---- Secrets / local ----
 local.properties
 *.mobileprovision
