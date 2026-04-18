@@ -102,12 +102,15 @@ final class TunnelEngine: @unchecked Sendable {
     // MARK: - Ingress
 
     private static func runIngressLoop(flow: NEPacketTunnelFlow, counter: ManagedAtomicCounter) async {
+        // DIAGNOSTIC: remove once tunnel ingest is verified stable in v1.0.
+        let log = Logger(subsystem: "io.github.madeye.meow.PacketTunnel", category: "engine")
         while !Task.isCancelled {
             let packets = await withCheckedContinuation { (cont: CheckedContinuation<[Data], Never>) in
                 flow.readPackets { packets, _ in
                     cont.resume(returning: packets)
                 }
             }
+            log.info("ingress batch: count=\(packets.count, privacy: .public)")
             for packet in packets {
                 packet.withUnsafeBytes { buf in
                     guard let base = buf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
