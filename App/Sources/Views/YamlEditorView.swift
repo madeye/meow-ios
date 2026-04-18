@@ -114,7 +114,8 @@ struct CodeTextView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
-        view.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        view.font = UIFontMetrics.default.scaledFont(for: .monospacedSystemFont(ofSize: 14, weight: .regular))
+        view.adjustsFontForContentSizeCategory = true
         view.autocapitalizationType = .none
         view.autocorrectionType = .no
         view.smartQuotesType = .no

@@ -105,6 +105,7 @@ private struct DirectTcpCard: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
+                .accessibilityLabel("Host and port")
                 .accessibilityIdentifier("userDiagnostics.directTcp.input")
             HStack {
                 Button(running ? "Testing…" : "Test", action: runTest)
@@ -160,6 +161,7 @@ private struct ProxyHttpCard: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
+                .accessibilityLabel("HTTP URL")
                 .accessibilityIdentifier("userDiagnostics.proxyHttp.input")
             HStack {
                 Button(running ? "Testing…" : "Test", action: runTest)
@@ -200,6 +202,7 @@ private struct DnsCard: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
+                .accessibilityLabel("Domain name")
                 .accessibilityIdentifier("userDiagnostics.dns.input")
             HStack {
                 Button(running ? "Testing…" : "Test", action: runTest)
