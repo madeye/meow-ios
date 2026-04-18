@@ -79,11 +79,11 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.debug.diagnosticsPanel")
             }
         #endif
-        .onChange(of: preferences.allowLan) { _, _ in persist() }
-        .onChange(of: preferences.ipv6) { _, _ in persist() }
-        .onChange(of: preferences.logLevel) { _, _ in persist() }
-        .onChange(of: preferences.dohServer) { _, _ in persist() }
-        .task { await pollMemory() }
+            .onChange(of: preferences.allowLan) { _, _ in persist() }
+            .onChange(of: preferences.ipv6) { _, _ in persist() }
+            .onChange(of: preferences.logLevel) { _, _ in persist() }
+            .onChange(of: preferences.dohServer) { _, _ in persist() }
+            .task { await pollMemory() }
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<Preferences, Value>) -> Binding<Value> {
