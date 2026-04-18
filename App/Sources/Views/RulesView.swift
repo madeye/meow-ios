@@ -1,39 +1,84 @@
+import MeowModels
 import SwiftUI
 
 struct RulesView: View {
     @Environment(MihomoAPI.self) private var api
     @State private var rules: [Rule] = []
-    @State private var error: String?
+    @State private var errorMessage: String?
 
     var body: some View {
-        List(rules) { rule in
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(rule.type)
-                        .font(.caption.monospaced())
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.secondary.opacity(0.15), in: .capsule)
-                    Text(rule.payload).lineLimit(1)
-                    Spacer()
-                    Text(rule.proxy).foregroundStyle(.secondary)
-                }
+        List {
+            ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
+                row(for: rule, index: index)
             }
         }
         .listStyle(.plain)
-        .navigationTitle("Rules")
+        .overlay {
+            if rules.isEmpty {
+                ContentUnavailableView(
+                    "No rules",
+                    systemImage: "arrow.triangle.branch",
+                    description: Text("Rules appear when a profile is loaded."),
+                )
+                .accessibilityIdentifier("rules.emptyState")
+            }
+        }
+        .safeAreaInset(edge: .top) {
+            if let errorMessage {
+                errorBanner(errorMessage)
+            }
+        }
+        .navigationTitle("Rules (\(rules.count))")
         .refreshable { await load() }
         .task { await load() }
-        .overlay(alignment: .center) {
-            if let error { Text(error).foregroundStyle(.secondary) }
+    }
+
+    private func row(for rule: Rule, index: Int) -> some View {
+        GlassCard {
+            HStack(spacing: 8) {
+                Text(rule.type)
+                    .font(.caption.monospaced())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.secondary.opacity(0.15), in: .capsule)
+                    .accessibilityIdentifier("rules.row.\(index).type")
+                Text(rule.payload)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("rules.row.\(index).payload")
+                Spacer()
+                Text(rule.proxy)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("rules.row.\(index).proxy")
+            }
         }
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .accessibilityIdentifier("rules.row.\(index)")
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.caption)
+                .lineLimit(2)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: .rect(cornerRadius: 8))
+        .padding(.horizontal)
+        .accessibilityIdentifier("rules.errorBanner")
     }
 
     private func load() async {
         do {
             rules = try await api.getRules().rules
-            error = nil
+            errorMessage = nil
         } catch {
-            self.error = error.localizedDescription
+            errorMessage = error.localizedDescription
         }
     }
 }
