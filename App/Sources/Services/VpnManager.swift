@@ -12,6 +12,12 @@ final class VpnManager {
     private(set) var stage: VpnStage = .idle
     private(set) var lastError: String?
 
+    /// Fires once each time `stage` transitions into `.connected`. Wired by
+    /// `AppModel` to replay persisted proxy-group selections via
+    /// `SelectedProxyRestorer` — mihomo-rust resets group state on every
+    /// engine start, so the app owns persistence.
+    var onConnected: (@MainActor () -> Void)?
+
     /// Clear the user-visible error banner. Called when the user dismisses it
     /// or when a new connect attempt starts.
     func clearError() {
@@ -94,7 +100,9 @@ final class VpnManager {
             guard let self else { return }
             let status = mgr.connection.status
             Task { @MainActor in
-                self.stage = self.map(status)
+                let previous = self.stage
+                let next = self.map(status)
+                self.stage = next
                 // When the extension aborts startup (engine.start throws) the
                 // connection transitions straight to .disconnected with no
                 // thrown NEVPNManagerError. The provider writes the Rust error
@@ -102,6 +110,12 @@ final class VpnManager {
                 // UI can show the actual reason instead of a silent toggle.
                 if status == .disconnected, let msg = SharedStore.readState()?.errorMessage, !msg.isEmpty {
                     self.lastError = msg
+                }
+                // Fire onConnected exactly once per connect transition. The
+                // observer can run repeatedly (e.g. .reasserting → .connected
+                // round trips), so guard on the actual stage edge.
+                if next == .connected, previous != .connected {
+                    self.onConnected?()
                 }
             }
         }
