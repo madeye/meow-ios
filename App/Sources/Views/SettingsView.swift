@@ -36,11 +36,7 @@ struct SettingsView: View {
             }
             Section("Diagnostics") {
                 NavigationLink {
-                    ContentUnavailableView(
-                        "Diagnostics",
-                        systemImage: "stethoscope",
-                        description: Text("Coming in T4.10."),
-                    )
+                    UserDiagnosticsView()
                 } label: {
                     Label("Diagnostics", systemImage: "stethoscope")
                 }

@@ -48,28 +48,44 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
-        guard DiagnosticsIPC.isRequest(messageData) else {
-            completionHandler?(nil)
+        // Diagnostics checks (both canned T2.6 and T4.10 user-initiated) call
+        // into blocking Rust FFI (DNS, TCP connect, HTTP fetch). Run off the
+        // provider queue on a GCD-managed worker so we don't stall
+        // `handleAppMessage`'s caller. The NE completion handler is not
+        // @Sendable, so we can't hop through a Task; GCD is the correct tool
+        // here.
+        if DiagnosticsIPC.isRequest(messageData) {
+            let engine = engine
+            let handler = UnsafeSendableBox(completionHandler)
+            DispatchQueue.global(qos: .userInitiated).async {
+                let report = engine?.runDiagnostics() ?? DiagnosticsReport(
+                    tunExists: .fail("engine_not_running"),
+                    dnsOk: .fail("engine_not_running"),
+                    tcpProxyOk: .fail("engine_not_running"),
+                    http204Ok: .fail("engine_not_running"),
+                    memOk: .fail("engine_not_running"),
+                )
+                let data = (try? DiagnosticsIPC.encodeResponse(report)) ?? Data()
+                handler.value?(data)
+            }
             return
         }
-        // Diagnostics checks call into blocking Rust FFI (DNS, TCP connect,
-        // HTTP fetch). Run off the provider queue on a GCD-managed worker so
-        // we don't stall `handleAppMessage`'s caller. The NE completion
-        // handler is not @Sendable, so we can't hop through a Task; GCD is
-        // the correct tool here.
-        let engine = engine
-        let handler = UnsafeSendableBox(completionHandler)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let report = engine?.runDiagnostics() ?? DiagnosticsReport(
-                tunExists: .fail("engine_not_running"),
-                dnsOk: .fail("engine_not_running"),
-                tcpProxyOk: .fail("engine_not_running"),
-                http204Ok: .fail("engine_not_running"),
-                memOk: .fail("engine_not_running"),
-            )
-            let data = (try? DiagnosticsIPC.encodeResponse(report)) ?? Data()
-            handler.value?(data)
+
+        if DiagnosticsIPC.isUserRequest(messageData) {
+            guard let request = try? DiagnosticsIPC.decodeUserRequest(messageData) else {
+                completionHandler?(nil)
+                return
+            }
+            let handler = UnsafeSendableBox(completionHandler)
+            DispatchQueue.global(qos: .userInitiated).async {
+                let response = DiagnosticsRunner.runUser(request: request)
+                let data = (try? DiagnosticsIPC.encodeUserResponse(response)) ?? Data()
+                handler.value?(data)
+            }
+            return
         }
+
+        completionHandler?(nil)
     }
 
     /// `NEPacketTunnelProvider.handleAppMessage` hands us a non-Sendable
