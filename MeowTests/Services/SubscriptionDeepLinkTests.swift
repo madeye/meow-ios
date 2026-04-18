@@ -15,8 +15,8 @@ import Testing
 struct SubscriptionDeepLinkTests {
     @Test
     func `accepts well-formed meow://connect with http(s) url`() throws {
-        let link = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml")),
+        let link = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml")!,
         ))
         #expect(link.subscriptionURL == URL(string: "https://example.com/sub.yaml"))
         #expect(link.name == "example.com")
@@ -25,64 +25,64 @@ struct SubscriptionDeepLinkTests {
 
     @Test
     func `http subscription urls are accepted (not every user has TLS)`() throws {
-        let link = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=http%3A%2F%2F10.0.0.1%2Fsub.yaml")),
+        let link = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=http%3A%2F%2F10.0.0.1%2Fsub.yaml")!,
         ))
         #expect(link.subscriptionURL.scheme == "http")
     }
 
     @Test
     func `explicit name query parameter overrides host-derived default`() throws {
-        let link = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml&name=My%20VPN")),
+        let link = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml&name=My%20VPN")!,
         ))
         #expect(link.name == "My VPN")
     }
 
     @Test
     func `select=1 opts in to auto-select; absent or any other value stays off`() throws {
-        let on = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fe.com%2Fs&select=1")),
+        let on = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fe.com%2Fs&select=1")!,
         ))
         #expect(on.autoSelect)
 
-        let absent = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fe.com%2Fs")),
+        let absent = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fe.com%2Fs")!,
         ))
         #expect(absent.autoSelect == false)
 
-        let wrongValue = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fe.com%2Fs&select=yes")),
+        let wrongValue = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fe.com%2Fs&select=yes")!,
         ))
         #expect(wrongValue.autoSelect == false)
     }
 
     @Test
-    func `rejects wrong host — only meow://connect is this handler's business`() throws {
-        #expect(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://diagnostics?url=https%3A%2F%2Fe.com%2Fs")),
+    func `rejects wrong host — only meow://connect is this handler's business`() {
+        #expect(SubscriptionDeepLink.parse(
+            URL(string: "meow://diagnostics?url=https%3A%2F%2Fe.com%2Fs")!,
         ) == nil)
-        #expect(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://random?url=https%3A%2F%2Fe.com%2Fs")),
-        ) == nil)
-    }
-
-    @Test
-    func `rejects wrong scheme — https://connect is not our URL scheme`() throws {
-        #expect(try SubscriptionDeepLink.parse(
-            #require(URL(string: "https://connect?url=https%3A%2F%2Fe.com%2Fs")),
+        #expect(SubscriptionDeepLink.parse(
+            URL(string: "meow://random?url=https%3A%2F%2Fe.com%2Fs")!,
         ) == nil)
     }
 
     @Test
-    func `rejects missing ?url= entirely`() throws {
-        #expect(try SubscriptionDeepLink.parse(#require(URL(string: "meow://connect"))) == nil)
-        #expect(try SubscriptionDeepLink.parse(#require(URL(string: "meow://connect?name=foo"))) == nil)
+    func `rejects wrong scheme — https://connect is not our URL scheme`() {
+        #expect(SubscriptionDeepLink.parse(
+            URL(string: "https://connect?url=https%3A%2F%2Fe.com%2Fs")!,
+        ) == nil)
     }
 
     @Test
-    func `rejects empty ?url= value`() throws {
-        #expect(try SubscriptionDeepLink.parse(#require(URL(string: "meow://connect?url="))) == nil)
+    func `rejects missing ?url= entirely`() {
+        #expect(SubscriptionDeepLink.parse(URL(string: "meow://connect")!) == nil)
+        #expect(SubscriptionDeepLink.parse(URL(string: "meow://connect?name=foo")!) == nil)
+    }
+
+    @Test
+    func `rejects empty ?url= value`() {
+        #expect(SubscriptionDeepLink.parse(URL(string: "meow://connect?url=")!) == nil)
     }
 
     @Test
@@ -101,21 +101,21 @@ struct SubscriptionDeepLinkTests {
     }
 
     @Test
-    func `rejects http url with empty host`() throws {
-        #expect(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2F%2Fsub.yaml")),
+    func `rejects http url with empty host`() {
+        #expect(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2F%2Fsub.yaml")!,
         ) == nil)
     }
 
     @Test
     func `blank explicit name falls back to host-derived default`() throws {
-        let link = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fs&name=")),
+        let link = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fs&name=")!,
         ))
         #expect(link.name == "example.com")
 
-        let whitespace = try #require(try SubscriptionDeepLink.parse(
-            #require(URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fs&name=%20%20%20")),
+        let whitespace = try #require(SubscriptionDeepLink.parse(
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fs&name=%20%20%20")!,
         ))
         #expect(whitespace.name == "example.com")
     }
