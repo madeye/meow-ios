@@ -88,8 +88,8 @@ the release configuration.
 
 - App Group: `group.io.github.madeye.meow`
 - NetworkExtension capability: `packet-tunnel-provider`
-- Team: `345Y8TX7HZ` — managed via the App Store Connect API key under
-  `~/.appstoreconnect/AuthKey_5MC8U9Z7P9.p8`.
+- Team: `<TEAM_ID>` — managed via the App Store Connect API key under
+  `~/.appstoreconnect/AuthKey_<ASC_KEY_ID>.p8`.
 
 Both targets share the App Group; the provider bundle id is
 `io.github.madeye.meow.PacketTunnel` and is embedded in the main app bundle.

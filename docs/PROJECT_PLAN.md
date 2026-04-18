@@ -26,7 +26,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Configure minimum deployment target: iOS 26.0
 - Set up App Group `group.io.github.madeye.meow` on both targets
 - Add entitlements: `com.apple.developer.networking.networkextension` (`packet-tunnel-provider`)
-- Configure signing (App Store Connect API key `5MC8U9Z7P9`, team `345Y8TX7HZ`)
+- Configure signing (App Store Connect API key `<ASC_KEY_ID>`, team `<TEAM_ID>`)
 - **Output:** Buildable Xcode project, both targets compile with empty implementations
 
 #### T0.2 — CI/CD Pipeline
