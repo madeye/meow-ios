@@ -1,31 +1,38 @@
 //! tun2socks using netstack-smoltcp: Swift pushes raw IP packets in via
-//! [`ingest`], netstack terminates TCP sessions in a userspace smoltcp stack,
-//! and each accepted stream dispatches directly into
-//! `mihomo_tunnel::tcp::handle_tcp` — no SOCKS5 loopback, no cross-process hop.
+//! [`ingest`], netstack terminates TCP and UDP sessions in a userspace
+//! smoltcp stack, and each flow dispatches directly into
+//! `mihomo_tunnel::{tcp,udp}::handle_*` — no SOCKS5 loopback, no cross-process
+//! hop.
 //!
 //! Egress packets (netstack output + DNS replies) are handed back to Swift via
 //! a C callback registered in [`start`]. No file descriptors cross the FFI.
-//! UDP DNS is short-circuited via DoH (iOS-side primary path); non-DNS UDP is
-//! not yet plumbed through mihomo — see PRD v1.3 §3.3 known MVP limitations.
+//! UDP DNS is short-circuited pre-stack to DoH; non-DNS UDP flows through
+//! netstack's `UdpSocket` into `mihomo_tunnel::udp::handle_udp`, and a
+//! per-NAT-session reader drains proxy replies back through netstack's
+//! `WriteHalf` so the IP packet emitted to Swift is synthesized with
+//! source = external peer.
 
 use crate::dns_table;
 use crate::doh_client;
 use crate::logging;
 use futures::{SinkExt, StreamExt};
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
+use mihomo_tunnel::tunnel::TunnelInner;
+use mihomo_tunnel::udp::UdpSession;
 use parking_lot::Mutex;
+use std::collections::HashSet;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::os::raw::c_void;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc;
 use tracing::info;
 
-use netstack_smoltcp::{AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
+use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
 
 /// Matches the cbindgen-emitted typedef in `mihomo_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
@@ -123,15 +130,20 @@ async fn run_tun2socks(
 ) -> io::Result<()> {
     logging::bridge_log("tun2socks: building netstack-smoltcp stack");
 
-    let (mut stack, tcp_runner, _udp_socket, tcp_listener) = StackBuilder::default()
+    let (mut stack, tcp_runner, udp_socket, tcp_listener) = StackBuilder::default()
         .enable_tcp(true)
-        .enable_udp(false)
+        .enable_udp(true)
         .stack_buffer_size(1024)
         .tcp_buffer_size(512)
         .build()?;
 
     let tcp_runner = tcp_runner.expect("TCP runner");
     let mut tcp_listener = tcp_listener.expect("TCP listener");
+    let udp_socket = udp_socket.expect("UDP socket");
+    let (mut udp_read, udp_write) = udp_socket.split();
+
+    let (udp_reply_tx, mut udp_reply_rx) = mpsc::unbounded_channel::<UdpMsg>();
+    let reply_readers: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -186,7 +198,31 @@ async fn run_tun2socks(
         }
     });
 
-    let udp_reply_tx = egress_tx.clone();
+    // Single writer task owns `UdpWriteHalf`; per-session readers feed it via
+    // `udp_reply_tx`. Using an mpsc serializer avoids an Arc<Mutex<WriteHalf>>.
+    let udp_writer_handle = tokio::spawn(async move {
+        let mut udp_write = udp_write;
+        while let Some(msg) = udp_reply_rx.recv().await {
+            if let Err(e) = udp_write.send(msg).await {
+                logging::bridge_log(&format!("tun2socks: UDP reply send error: {}", e));
+                break;
+            }
+        }
+    });
+
+    let udp_reply_tx_accept = udp_reply_tx.clone();
+    let reply_readers_accept = reply_readers.clone();
+    let udp_accept_handle = tokio::spawn(async move {
+        while let Some((payload, src, dst)) = udp_read.next().await {
+            let reply_tx = udp_reply_tx_accept.clone();
+            let readers = reply_readers_accept.clone();
+            tokio::spawn(async move {
+                dispatch_udp(payload, src, dst, reply_tx, readers).await;
+            });
+        }
+    });
+
+    let doh_reply_tx = egress_tx.clone();
     while let Some(ip_data) = ingress_rx.recv().await {
         if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
             break;
@@ -194,7 +230,7 @@ async fn run_tun2socks(
 
         if let Some((src_ip, src_port, dst_ip, dst_port, payload)) = parse_udp_packet(&ip_data) {
             if dst_port == 53 {
-                let reply_tx = udp_reply_tx.clone();
+                let reply_tx = doh_reply_tx.clone();
                 let query = payload.to_vec();
                 tokio::spawn(async move {
                     handle_dns_query(src_ip, src_port, dst_ip, dst_port, query, reply_tx).await;
@@ -215,7 +251,10 @@ async fn run_tun2socks(
     runner_handle.abort();
     stack_handle.abort();
     tcp_accept_handle.abort();
+    udp_accept_handle.abort();
+    udp_writer_handle.abort();
     egress_handle.abort();
+    drop(udp_reply_tx);
 
     logging::bridge_log("tun2socks: exiting");
     Ok(())
@@ -293,6 +332,99 @@ impl ProxyConn for NetstackConn {
     fn remote_destination(&self) -> String {
         String::new()
     }
+}
+
+// ---------------------------------------------------------------------------
+// In-process UDP dispatch into mihomo_tunnel
+//
+// `mihomo_tunnel::udp::handle_udp` installs the outbound session into the NAT
+// table on the first packet of a flow but does not drive the reply side — the
+// caller owns the reader loop. We key replies on the same NAT key
+// mihomo-tunnel uses internally (`"{src}:{remote_address}"`) so reader
+// spawns stay deduped without a second source of truth.
+// ---------------------------------------------------------------------------
+
+async fn dispatch_udp(
+    payload: Vec<u8>,
+    src: SocketAddr,
+    dst: SocketAddr,
+    reply_tx: mpsc::UnboundedSender<UdpMsg>,
+    reply_readers: Arc<Mutex<HashSet<String>>>,
+) {
+    let Some(tunnel) = crate::engine::tunnel() else {
+        logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
+        return;
+    };
+
+    let (host, dst_ip) = match dns_table::dns_table_lookup(dst.ip()) {
+        Some(hostname) => (hostname, None),
+        None => (String::new(), Some(dst.ip())),
+    };
+
+    let metadata = Metadata {
+        network: Network::Udp,
+        conn_type: ConnType::Inner,
+        src_ip: Some(src.ip()),
+        src_port: src.port(),
+        dst_ip,
+        dst_port: dst.port(),
+        host,
+        ..Default::default()
+    };
+
+    // Matches mihomo_tunnel::udp::handle_udp's NAT key shape. `remote_address`
+    // prefers host over dst_ip, which is stable across the internal
+    // pre_resolve call.
+    let key = format!("{}:{}", src, metadata.remote_address());
+
+    mihomo_tunnel::udp::handle_udp(tunnel.inner(), &payload, src, metadata).await;
+
+    if !reply_readers.lock().insert(key.clone()) {
+        return;
+    }
+
+    let inner = tunnel.inner().clone();
+    let Some(session) = inner.nat_table.get(&key).map(|r| r.value().clone()) else {
+        // handle_udp bailed before NAT insert (no matching rule / dial error).
+        reply_readers.lock().remove(&key);
+        return;
+    };
+
+    spawn_udp_reply_reader(key, session, src, dst, reply_tx, reply_readers, inner);
+}
+
+fn spawn_udp_reply_reader(
+    key: String,
+    session: Arc<UdpSession>,
+    app_src: SocketAddr,
+    app_dst: SocketAddr,
+    reply_tx: mpsc::UnboundedSender<UdpMsg>,
+    reply_readers: Arc<Mutex<HashSet<String>>>,
+    tunnel_inner: Arc<TunnelInner>,
+) {
+    tokio::spawn(async move {
+        let mut buf = vec![0u8; 64 * 1024];
+        loop {
+            match session.conn.read_packet(&mut buf).await {
+                Ok((n, _from)) => {
+                    // Reply injection: the IP frame handed back to the app
+                    // must look like it came FROM the external peer (app_dst)
+                    // TO the app (app_src). netstack's Sink builds the header
+                    // from (src, dst) in that argument order.
+                    let msg: UdpMsg = (buf[..n].to_vec(), app_dst, app_src);
+                    if reply_tx.send(msg).is_err() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    info!("UDP reply reader closing for {}: {}", key, e);
+                    break;
+                }
+            }
+        }
+        tunnel_inner.nat_table.remove(&key);
+        reply_readers.lock().remove(&key);
+    });
 }
 
 // ---------------------------------------------------------------------------

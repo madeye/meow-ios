@@ -3,14 +3,16 @@
 //! `MihomoCore.xcframework`.
 //!
 //! Embeds the mihomo-rust proxy engine and the tun2socks layer in one static
-//! library. TCP flows are dispatched in-process:
+//! library. Both TCP and UDP flows are dispatched in-process:
 //!
-//!   NEPacketTunnelFlow ⇆ socketpair ⇆ netstack-smoltcp ⇆ mihomo_tunnel::handle_tcp
+//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ⇆ mihomo_tunnel::{tcp,udp}::handle_*
 //!                                                              ↓
 //!                                          rules / proxies / DNS / REST API
 //!
 //! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
-//! owns a single tokio runtime that both halves share.
+//! owns a single tokio runtime that both halves share. UDP DNS is
+//! short-circuited pre-stack to DoH; everything else flows through netstack's
+//! UDP socket.
 
 mod diagnostics;
 mod dns_table;
