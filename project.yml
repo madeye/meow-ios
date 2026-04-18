@@ -160,6 +160,8 @@ targets:
       - path: MeowIntegrationTests
         excludes:
           - "README.md"
+      - path: PacketTunnel/Sources/TunnelSettings.swift
+        group: PacketTunnel/Sources
     dependencies:
       - target: meow-ios
       - package: MeowShared
