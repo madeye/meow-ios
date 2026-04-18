@@ -4,6 +4,9 @@ import SwiftUI
 struct SettingsView: View {
     @State private var preferences: Preferences = .load(from: AppGroup.defaults)
     @State private var memoryMB: Int64?
+    #if DEBUG
+        @State private var showDebugPanel = false
+    #endif
     @Environment(MihomoAPI.self) private var api
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
@@ -12,7 +15,9 @@ struct SettingsView: View {
         Form {
             Section("General") {
                 Toggle("Allow LAN", isOn: binding(\.allowLan))
+                    .accessibilityIdentifier("settings.toggle.allowLan")
                 Toggle("IPv6", isOn: binding(\.ipv6))
+                    .accessibilityIdentifier("settings.toggle.ipv6")
                 Picker("Log Level", selection: binding(\.logLevel)) {
                     Text("Debug").tag("debug")
                     Text("Info").tag("info")
@@ -20,16 +25,36 @@ struct SettingsView: View {
                     Text("Error").tag("error")
                     Text("Silent").tag("silent")
                 }
+                .accessibilityIdentifier("settings.picker.logLevel")
             }
             Section("DNS") {
                 TextField("DoH Server", text: binding(\.dohServer), prompt: Text("https://1.1.1.1/dns-query"))
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
+                    .accessibilityIdentifier("settings.field.dohServer")
+            }
+            Section("Diagnostics") {
+                NavigationLink {
+                    ContentUnavailableView(
+                        "Diagnostics",
+                        systemImage: "stethoscope",
+                        description: Text("Coming in T4.10."),
+                    )
+                } label: {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                }
+                .accessibilityIdentifier("settings.nav.diagnostics")
             }
             Section("About") {
                 LabeledContent("Version", value: appVersion)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("settings.about.version")
+                #if DEBUG
+                    .onTapGesture(count: 3) { showDebugPanel = true }
+                #endif
                 LabeledContent("Memory", value: memoryMB.map { "\($0) MB" } ?? "—")
+                    .accessibilityIdentifier("settings.about.memory")
             }
             #if DEBUG
                 Section("Debug Tunnel") {
@@ -47,11 +72,18 @@ struct SettingsView: View {
             #endif
         }
         .navigationTitle("Settings")
+        #if DEBUG
+            .navigationDestination(isPresented: $showDebugPanel) {
+                DiagnosticsPanelView()
+                    .ignoresSafeArea(edges: .bottom)
+                    .accessibilityIdentifier("settings.debug.diagnosticsPanel")
+            }
+        #endif
         .onChange(of: preferences.allowLan) { _, _ in persist() }
         .onChange(of: preferences.ipv6) { _, _ in persist() }
         .onChange(of: preferences.logLevel) { _, _ in persist() }
         .onChange(of: preferences.dohServer) { _, _ in persist() }
-        .task { await refreshMemory() }
+        .task { await pollMemory() }
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<Preferences, Value>) -> Binding<Value> {
@@ -65,9 +97,18 @@ struct SettingsView: View {
         preferences.save(to: AppGroup.defaults)
     }
 
+    private func pollMemory() async {
+        while !Task.isCancelled {
+            await refreshMemory()
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
     private func refreshMemory() async {
         if let mem = try? await api.getMemory() {
             memoryMB = mem.inuse / (1024 * 1024)
+        } else {
+            memoryMB = nil
         }
     }
 
