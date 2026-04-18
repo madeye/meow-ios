@@ -292,7 +292,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Pushed from Settings
 - Three test cards: Direct TCP, Proxy HTTP, DNS Resolver (user-supplied inputs)
 - Each with host/URL input field and "Test" button; results show latency or error
-- Calls `meow_test_direct_tcp()`, `meow_test_proxy_http()`, `meow_test_dns_resolver()` C FFI (backed by `src/diagnostics.rs` in Rust)
+- Calls `meow_engine_test_direct_tcp()`, `meow_engine_test_proxy_http()`, `meow_engine_test_dns()` C FFI (backed by `src/diagnostics.rs` in Rust)
 - Distinct from T2.6 (debug-build diagnostics for manual smoke): T4.10 is the shipping user-facing diagnostics view, always available
 - **Depends on:** T1.4, T4.8
 
