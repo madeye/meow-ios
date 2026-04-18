@@ -23,7 +23,10 @@ enum TunnelSettings {
             route(address: "172.24.0.0", mask: "255.248.0.0"), // 172.24-172.31 (/13)
             route(address: "192.168.0.0", mask: "255.255.0.0"), // RFC 1918 Class C
             route(address: "169.254.0.0", mask: "255.255.0.0"), // Link-local (DHCP fallback)
-            route(address: "127.0.0.0", mask: "255.0.0.0"), // Loopback
+            // Loopback (127/8) intentionally omitted: iOS's NEIPv4Route validator rejects
+            // any loopback destination and throws out the ENTIRE excludedRoutes payload, so
+            // including it silently broke all other exclusions. The kernel handles 127/8
+            // host-locally without needing a TUN exclusion anyway.
             route(address: "224.0.0.0", mask: "240.0.0.0"), // Multicast (mDNS, Bonjour, AirPlay)
             route(address: "255.255.255.255", mask: "255.255.255.255"), // Limited broadcast
         ]
@@ -37,9 +40,12 @@ enum TunnelSettings {
         // diff for the recovery PR — tunnel uses fdfe:dcba:9876::/126, which
         // sits inside fc00::/7, so the same interface-route shadowing risk
         // applies until we split this the same way IPv4 is split.
+        // Loopback (::1/128) intentionally omitted: NEIPv6Route validator
+        // rejects loopback destinations and drops the entire settings payload
+        // when present — same failure mode as IPv4 127/8. Kernel handles
+        // loopback host-locally without a TUN exclusion.
         [
             route6(address: "fe80::", prefix: 10), // Link-local
-            route6(address: "::1", prefix: 128), // Loopback
             route6(address: "ff00::", prefix: 8), // Multicast
         ]
     }
