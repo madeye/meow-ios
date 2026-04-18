@@ -1,12 +1,13 @@
 # meow-ios Project Plan
 
-**Version:** 1.3  
-**Date:** 2026-04-17  
+**Version:** 1.4  
+**Date:** 2026-04-18  
 **Status:** Draft  
 **Changelog:**
 - v1.1 — Removed Go toolchain (T0.5) and Phase 2 (Go Core). All engine functionality in single Rust `MihomoCore.xcframework` via mihomo-rust.
 - v1.2 — T2.6 (Debug Diagnostics Panel) inserted as nightly E2E gate. Memory budget aligned to TEST_STRATEGY v1.2.
 - v1.3 — Removed `mihomo-listener` from Rust dep list (confirmed not needed in in-process path, commit `dd3d44a`). Added T2.9 (non-DNS UDP path) as post-M1.5 backlog task with upstream dependency gate. Noted `src/subscription.rs` and `src/diagnostics.rs` as Rust-native replacements for old Go paths; T3.5 and T4.10 depend on T1.4 directly.
+- v1.4 — Automated E2E scope retired per user directive 2026-04-18. T6.5 (Nightly E2E Gate, vphone-cli harness) deleted. T2.6 no longer flagged as nightly gate blocker — now feeds a manual on-device smoke owned by the user. T2.8 reframed from automated E2E smoke to manual device smoke. T6.3 UI Tests scope clarified: unit-level UI only, not full-tunnel. M1.5 milestone row rewritten to "Manual Smoke Passes". Critical path updated — nightly gate removed. Self-hosted runner docs, `nightly.yml`, tart/vphone scripts, LocalE2ETests target all queued for deletion in a separate QA-led audit PR.
 
 ---
 
@@ -130,18 +131,18 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Document socket-pair approach in `docs/BUILD.md`
 - **Depends on:** T1.4, T2.4
 
-#### T2.6 — Debug Diagnostics Panel  ⚑ **NIGHTLY E2E GATE**
+#### T2.6 — Debug Diagnostics Panel  ⚑ **MANUAL SMOKE SURFACE**
 - Implement an in-extension diagnostics surface, visible only when `MEOW_DEBUG=1` launch argument is set (or Settings → triple-tap version label, debug builds only)
 - Implemented as `DiagnosticsPanel.swift` — a `UIViewController` (not SwiftUI) for pixel-stable label positions
-- The panel runs 5 checks in sequence and renders each as a stable, OCR-readable `UILabel` (see PRD §4.4 for exact format contract)
+- The panel runs 5 checks in sequence and renders each as a stable `UILabel` (see PRD §4.4 for exact format contract)
 - **The 5 checks:**
   1. `TUN_EXISTS` — `meow_engine_is_running()` == 1 AND utun interface active
   2. `DNS_OK` — resolve `apple.com` via 172.19.0.2:53; expect ≥1 A record within 3 s
   3. `TCP_PROXY_OK` — TCP connect to `connectivitycheck.gstatic.com:443` through proxy within 5 s
   4. `HTTP_204_OK` — HTTP GET `http://connectivitycheck.gstatic.com/generate_204` returns 204
   5. `MEM_OK` — extension resident memory ≤ 14 MB; FAIL if ≥ 15 MB
-- Each `UILabel` has `accessibilityIdentifier` = `CHECK_NAME` for XCUITest anchoring
-- **Blocks:** T2.8 (E2E smoke test) and T6.5 (nightly CI job)
+- Each `UILabel` has `accessibilityIdentifier` = `CHECK_NAME` for unit-level UI test anchoring + VoiceOver
+- **Blocks:** T2.8 (manual device smoke)
 - **Depends on:** T2.3, T2.5
 
 #### T2.7 — IPC Bridge (Extension side)
@@ -151,11 +152,12 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Traffic update timer: every 500ms, call `meow_engine_get_traffic(&upload, &download)`, write to shared container, post `com.meow.vpn.traffic`
 - **Depends on:** T0.3, T2.3
 
-#### T2.8 — End-to-End Smoke Test
-- Connect to a real proxy server via the extension
-- Verify TCP traffic flows (open Safari, load a page)
-- Verify traffic counters increment
-- Activate Debug Diagnostics Panel; verify all 5 checks show `PASS`
+#### T2.8 — Manual Device Smoke (user-owned)
+- User runs the app on their iPhone (iOS 26 real device), connects to a real proxy server via the extension, and verifies:
+  - TCP traffic flows (open Safari, load a page)
+  - Traffic counters increment
+  - Debug Diagnostics Panel (`MEOW_DEBUG=1` launch arg) shows all 5 checks as `PASS`
+- **Owner:** user (per v1.4 directive — no automated harness reproduces this)
 - **Note:** WireGuard/QUIC tests are deferred (non-DNS UDP not wired until T2.9)
 - **Depends on:** T2.3, T2.5, T2.6, T2.7
 
@@ -291,7 +293,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Three test cards: Direct TCP, Proxy HTTP, DNS Resolver (user-supplied inputs)
 - Each with host/URL input field and "Test" button; results show latency or error
 - Calls `meow_test_direct_tcp()`, `meow_test_proxy_http()`, `meow_test_dns_resolver()` C FFI (backed by `src/diagnostics.rs` in Rust)
-- Distinct from T2.6 (QA OCR panel): this is user-facing, not harness-facing
+- Distinct from T2.6 (debug-build diagnostics for manual smoke): T4.10 is the shipping user-facing diagnostics view, always available
 - **Depends on:** T1.4, T4.8
 
 #### T4.11 — Providers Screen
@@ -339,11 +341,12 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Config file written correctly to App Group container
 - GeoIP/Geosite seeding on first launch
 
-#### T6.3 — UI Tests (XCUITest)
+#### T6.3 — UI Tests (XCUITest, unit-level only)
+- **Scope (v1.4):** unit-level UI tests only — NO full-tunnel scenarios. "VPN connected" state is proven by T2.8 manual device smoke, not by XCUITest.
 - Add subscription → appears in list
-- Select profile → VPN connects
-- Proxy group selection → persists after reconnect
+- Proxy group selection → persists after reconnect (UI-only assertion; no live tunnel)
 - YAML editor save → validates and persists
+- Subscription seeder + NE-error-surface UX tests: **retired with LocalE2ETests** (v1.4)
 
 #### T6.4 — Performance Tests
 - **Extension resident memory during active VPN:** target ≤ 14 MB; hard-fail at 15 MB (TEST_STRATEGY v1.2)
@@ -351,11 +354,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Battery usage (Instruments Energy Log, 1-hour session)
 - TUN throughput (iperf3 through proxy, target: ≥ 100 Mbps on WiFi)
 
-#### T6.5 — Nightly E2E Gate (vphone-cli harness)  ⚑ **Requires T2.6**
-- vphone-cli boots device image, launches meow-ios with `MEOW_DEBUG=1`, connects to nightly proxy pool
-- OCR asserts all 5 check labels match `CHECK_NAME: PASS` format (see PRD §4.4)
-- Gate fails if any label reads `CHECK_NAME: FAIL(...)` or label is absent
-- Runs nightly on `main`; blocking gate for any release cut
+> **T6.5 — Nightly E2E Gate (vphone-cli harness):** RETIRED in v1.4 per user directive 2026-04-18. Replaced by T2.8 (manual device smoke, user-owned). `nightly.yml` workflow, self-hosted tart runner, and `scripts/test-e2e-ios.sh` queued for deletion in a separate QA-led audit PR.
 
 #### T6.6 — Device Regression Matrix
 
@@ -380,8 +379,8 @@ T1.1 + T1.2 + T1.3 → T1.4
 T1.4 + T2.4 → T2.5
 T1.4 + T2.2 → T2.3
 T2.1 → T2.2, T2.4
-T2.3 + T2.5 → T2.6          ← nightly E2E gate blocker
-T2.3 + T2.5 + T2.6 + T2.7 → T2.8
+T2.3 + T2.5 → T2.6          ← M1.5 manual-smoke surface
+T2.3 + T2.5 + T2.6 + T2.7 → T2.8 (manual device smoke, user-owned)
 T1.2 + [upstream UDP API] → T2.9   ← post-M1.5 backlog
 T3.1 + T1.4 → T3.5
 T3.1 + T3.3 → T3.6
@@ -393,7 +392,6 @@ T3.1 + T1.4 + T4.3 → T4.9
 T1.4 + T4.8 → T4.10
 All T4.* → T5.1
 T6.* after T5.*
-T6.5 requires T2.6
 ```
 
 ---
@@ -404,7 +402,7 @@ T6.5 requires T2.6
 |-----------|-------|-----------------|
 | M0: Infrastructure | 1 | Xcode project builds on CI; Rust toolchain + mihomo-rust submodule ready |
 | M1: Native Core | 2–3 | `MihomoCore.xcframework` ≤8 MB stripped; TCP + DoH traffic flows on device; UDP gap documented |
-| M1.5: Nightly Gate Unblocked | end of week 3 | T2.6 (Debug Diagnostics Panel) complete; nightly E2E harness can assert green |
+| M1.5: Manual Smoke Passes | end of week 3 | T2.6 (Debug Diagnostics Panel) complete on device; user confirms all 5 checks `PASS` on their iPhone via T2.8 manual smoke |
 | M2: Basic UI | 4–5 | Connect/disconnect, subscriptions, settings |
 | M3: Proxy & Realtime | 6–7 | Proxy selection, connections, rules, logs |
 | M4: Config & Diag | 8 | YAML editor, validation, user diagnostics, providers |
@@ -415,16 +413,16 @@ T6.5 requires T2.6
 
 ## Critical Path
 
-The critical path runs through the single Rust integration and the nightly E2E gate:
+The critical path runs through the single Rust integration to the M1.5 manual-smoke checkpoint:
 
 ```
-T0.1 → T0.4 → T1.1 → T1.2/T1.3 → T1.4 → T2.3/T2.5 → T2.6 (nightly gate) → T2.8 → T3.2 → T4.2 (Home) → M2
+T0.1 → T0.4 → T1.1 → T1.2/T1.3 → T1.4 → T2.3/T2.5 → T2.6 (manual-smoke surface) → T2.8 (user smoke) → T3.2 → T4.2 (Home) → M2
 ```
 
 Three tasks define critical-path risk:
 1. **T1.2** — in-process tun2socks ↔ mihomo-rust Tokio channel wiring
 2. **T2.5** — Swift `packetFlow.readPackets()` → Unix socket pair → Rust TUN reader
-3. **T2.6** — Debug Diagnostics Panel; must ship end of week 3 so nightly harness is operational before UI milestones are signed off
+3. **T2.6** — Debug Diagnostics Panel; must ship end of week 3 so user can run T2.8 manual smoke before UI milestones are signed off
 
 T2.9 (non-DNS UDP) is off the critical path — it's a known M0 limitation with a disclosed patch timeline (M5).
 

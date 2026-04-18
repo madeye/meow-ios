@@ -1,13 +1,14 @@
 # meow-ios Product Requirements Document
 
-**Version:** 1.3  
-**Date:** 2026-04-17  
+**Version:** 1.4  
+**Date:** 2026-04-18  
 **Author:** Architecture Team  
 **Status:** Draft  
 **Changelog:**
 - v1.1 — Dropped Go mihomo core; replaced with pure-Rust mihomo-rust engine (single `MihomoCore.xcframework`). iOS NetworkExtension 15 MB memory limit motivation documented.
 - v1.2 — Added §4.4 Diagnostics Surface Contract (OCR-stable label format for QA nightly harness). Memory budget tightened to TEST_STRATEGY v1.2: Extension ≤14 MB / 15 MB hard-fail; xcframework ≤8 MB.
 - v1.3 — Removed `mihomo-listener` crate from Rust dependency list (not needed in in-process path). Noted subscription conversion (`src/subscription.rs`) and diagnostics (`src/diagnostics.rs`) as Rust-native replacements for old Go paths. Added non-DNS UDP gap as MVP known limitation and new risk row.
+- v1.4 — Automated E2E scope retired per user directive 2026-04-18: vphone-cli nightly harness, tart-in-harness topology, and LocalE2ETests (Option 2 seeder + NE-error-surface) all dropped in favor of manual device verification on user's iPhone. §4.4 retitled to reflect manual-QA framing (label format stays useful for on-device readability; OCR contract removed). M1.5 milestone rewritten from "Nightly Gate Unblocked" to "Manual Smoke Passes".
 
 ---
 
@@ -388,7 +389,7 @@ Uses `CodeEditView` (Swift package) or fallback `UITextView` with monospace font
 
 ### 4.4 Diagnostics Surface Contract
 
-> This section defines the OCR-stable text format used by the vphone-cli nightly E2E harness (TEST_STRATEGY v1.2). **Do not change label key strings without coordinating with QA.**
+> This section defines the label format for the Debug Diagnostics Panel used during **manual on-device verification** (v1.4, 2026-04-18). Prior v1.2/v1.3 framing around an OCR-stable contract for the vphone-cli nightly harness is superseded — the harness path is retired. The label format is kept because stable, glanceable text still helps the user run the smoke check on their iPhone. **Do not change label key strings unilaterally; they also back accessibilityIdentifier-based unit UI tests.**
 
 The Debug Diagnostics Panel is accessible via `MEOW_DEBUG=1` launch argument or Settings → triple-tap version label (debug builds only). When active, it displays exactly 5 result labels, one per line, in the following fixed format:
 
@@ -402,7 +403,7 @@ CHECK_NAME: FAIL(<reason>)
 - The `: ` separator is always ASCII colon + space
 - `PASS` is always the literal 4-character uppercase string
 - `FAIL(` is always the literal 5-character prefix; `<reason>` is a short ASCII diagnostic; `)` closes it
-- Labels are rendered in a monospace `UILabel` with `accessibilityIdentifier` matching `CHECK_NAME` (e.g. `"TUN_EXISTS"`) — XCUITest and OCR both use this anchor
+- Labels are rendered in a monospace `UILabel` with `accessibilityIdentifier` matching `CHECK_NAME` (e.g. `"TUN_EXISTS"`) — supports unit-level UI test anchoring and VoiceOver
 
 **The 5 checks in display order:**
 
@@ -427,7 +428,7 @@ CHECK_NAME: FAIL(<reason>)
 └──────────────────────────────────────────┘
 ```
 
-The panel is a `UIViewController` (not SwiftUI) to ensure pixel-stable label positions across iOS versions, which improves OCR anchor reliability.
+The panel is a `UIViewController` (not SwiftUI) to ensure pixel-stable label positions across iOS versions — useful for glance-based manual verification.
 
 ---
 
@@ -569,7 +570,7 @@ meow-ios/
 ├── PacketTunnel/
 │   ├── PacketTunnelProvider.swift
 │   ├── TunnelEngine.swift
-│   ├── DiagnosticsPanel.swift    # UIViewController for OCR harness (§4.4)
+│   ├── DiagnosticsPanel.swift    # UIViewController for manual on-device smoke (§4.4)
 │   ├── IPCListener.swift
 │   └── BridgingHeader.h           # #import "mihomo_core.h"
 ├── MeowCore/
@@ -611,9 +612,10 @@ Both app target and PacketTunnel extension must share:
 - DoH DNS working (UDP:53 short-circuit)
 - **Known limitation at M1:** non-DNS UDP not forwarded (WireGuard/QUIC degraded); disclosed in release notes
 
-### Milestone 1.5: Nightly Gate Unblocked (End of Week 3)
-- T2.6 (Debug Diagnostics Panel) complete; all 5 OCR checks rendering
-- Nightly E2E harness can assert green against M1 build
+### Milestone 1.5: Manual Smoke Passes (End of Week 3)
+- T2.6 (Debug Diagnostics Panel) complete; all 5 checks rendering on device with `MEOW_DEBUG=1`
+- User runs manual smoke on their iPhone (iOS 26, real device) and confirms all 5 checks read `PASS`
+- Gate is user sign-off, not an automated assertion; vphone-cli nightly harness is retired (v1.4)
 
 ### Milestone 2: VPN Toggle + Basic UI (Weeks 4–5)
 - Home screen with VPN connect/disconnect
