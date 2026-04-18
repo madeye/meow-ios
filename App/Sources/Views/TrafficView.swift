@@ -17,7 +17,7 @@ struct TrafficView: View {
                 chartsScrollView
             }
         }
-        .navigationTitle("Traffic")
+        .navigationTitle("traffic.nav.title")
         .onChange(of: ipcBridge.currentTraffic) { _, snapshot in
             let sample = RateSample(
                 timestamp: snapshot.timestamp,
@@ -36,9 +36,9 @@ struct TrafficView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No traffic data yet",
+            "traffic.empty.title",
             systemImage: "chart.line.uptrend.xyaxis",
-            description: Text("Start the VPN to begin recording usage."),
+            description: Text("traffic.empty.description"),
         )
         .accessibilityIdentifier("traffic.emptyState")
     }
@@ -49,13 +49,13 @@ struct TrafficView: View {
                 speedCard
                 HStack(spacing: 12) {
                     TotalsTile(
-                        title: "Today",
+                        title: "traffic.tile.today",
                         tx: todayTotals.tx,
                         rx: todayTotals.rx,
                         identifier: "traffic.todayTile",
                     )
                     TotalsTile(
-                        title: "This Month",
+                        title: "traffic.tile.thisMonth",
                         tx: monthTotals.tx,
                         rx: monthTotals.rx,
                         identifier: "traffic.monthTile",
@@ -70,7 +70,7 @@ struct TrafficView: View {
     private var speedCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Speed")
+                Text("traffic.label.speed")
                     .font(.caption.smallCaps())
                     .foregroundStyle(.secondary)
                 Chart(samples) { sample in
@@ -88,7 +88,7 @@ struct TrafficView: View {
     private var historyCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Last 7 Days")
+                Text("traffic.label.last7Days")
                     .font(.caption.smallCaps())
                     .foregroundStyle(.secondary)
                 Chart(last7Days) { day in
@@ -132,7 +132,7 @@ struct TrafficView: View {
 }
 
 private struct TotalsTile: View {
-    let title: String
+    let title: LocalizedStringKey
     let tx: Int64
     let rx: Int64
     let identifier: String

@@ -14,9 +14,9 @@ struct YamlEditorView: View {
             .overlay {
                 if text.isEmpty {
                     ContentUnavailableView(
-                        "Empty config",
+                        "yamlEditor.empty.title",
                         systemImage: "doc.text",
-                        description: Text("Paste a Clash YAML config to start editing."),
+                        description: Text("yamlEditor.empty.description"),
                     )
                     .accessibilityIdentifier("yamlEditor.emptyState")
                 }
@@ -26,19 +26,22 @@ struct YamlEditorView: View {
                     errorBanner(error)
                 }
             }
-            .navigationTitle("Edit Config")
+            .navigationTitle("yamlEditor.nav.title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Revert") { text = profile.yamlBackup }
-                        .accessibilityLabel("Revert to last saved config")
+                    Button("yamlEditor.button.revert") { text = profile.yamlBackup }
+                        .accessibilityLabel("yamlEditor.a11y.revert")
                         .accessibilityIdentifier("yamlEditor.revertButton")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Saving…" : "Save", action: save)
-                        .disabled(saving || text.isEmpty)
-                        .accessibilityLabel("Save config")
-                        .accessibilityIdentifier("yamlEditor.saveButton")
+                    Button(
+                        LocalizedStringKey(saving ? "yamlEditor.button.saving" : "yamlEditor.button.save"),
+                        action: save,
+                    )
+                    .disabled(saving || text.isEmpty)
+                    .accessibilityLabel("yamlEditor.a11y.save")
+                    .accessibilityIdentifier("yamlEditor.saveButton")
                 }
             }
             .onAppear { text = profile.yamlContent }
@@ -96,8 +99,12 @@ enum MihomoConfigValidator {
 enum MihomoConfigError: LocalizedError {
     case invalid(String)
     var errorDescription: String? {
-        if case let .invalid(msg) = self { return msg.isEmpty ? "Invalid config" : msg }
-        return "Invalid config"
+        let fallback = String(
+            localized: "yamlEditor.error.invalid",
+            comment: "Fallback message when config validation fails without engine detail",
+        )
+        if case let .invalid(msg) = self { return msg.isEmpty ? fallback : msg }
+        return fallback
     }
 }
 

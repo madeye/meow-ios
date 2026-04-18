@@ -16,9 +16,9 @@ struct RulesView: View {
         .overlay {
             if rules.isEmpty {
                 ContentUnavailableView(
-                    "No rules",
+                    "rules.empty.title",
                     systemImage: "arrow.triangle.branch",
-                    description: Text("Rules appear when a profile is loaded."),
+                    description: Text("rules.empty.description"),
                 )
                 .accessibilityIdentifier("rules.emptyState")
             }
@@ -28,7 +28,10 @@ struct RulesView: View {
                 errorBanner(errorMessage)
             }
         }
-        .navigationTitle("Rules (\(rules.count))")
+        .navigationTitle(Text(
+            "rules.nav.titleFormat \(rules.count)",
+            comment: "Rules screen navigation title; %lld = rule count",
+        ))
         .refreshable { await load() }
         .task { await load() }
     }

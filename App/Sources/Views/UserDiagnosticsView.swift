@@ -42,23 +42,23 @@ struct UserDiagnosticsView: View {
                 errorBanner(error)
             }
         }
-        .navigationTitle("Diagnostics")
+        .navigationTitle("userDiagnostics.nav.title")
     }
 
     private var directTcpSection: some View {
-        Section("Direct TCP") {
+        Section("userDiagnostics.section.directTcp") {
             DirectTcpCard(errorSink: $error)
         }
     }
 
     private var proxyHttpSection: some View {
-        Section("Proxy HTTP") {
+        Section("userDiagnostics.section.proxyHttp") {
             ProxyHttpCard(errorSink: $error)
         }
     }
 
     private var dnsSection: some View {
-        Section("DNS Resolver") {
+        Section("userDiagnostics.section.dns") {
             DnsCard(errorSink: $error)
         }
     }
@@ -66,9 +66,9 @@ struct UserDiagnosticsView: View {
     private var vpnRequiredSection: some View {
         Section {
             ContentUnavailableView(
-                "VPN required",
+                "userDiagnostics.empty.title",
                 systemImage: "network.slash",
-                description: Text("Connect to the proxy to run Proxy HTTP and DNS Resolver checks."),
+                description: Text("userDiagnostics.empty.description"),
             )
             .accessibilityIdentifier("userDiagnostics.emptyState")
         }
@@ -108,9 +108,12 @@ private struct DirectTcpCard: View {
                 .accessibilityLabel("Host and port")
                 .accessibilityIdentifier("userDiagnostics.directTcp.input")
             HStack {
-                Button(running ? "Testing…" : "Test", action: runTest)
-                    .disabled(running || input.isEmpty)
-                    .accessibilityIdentifier("userDiagnostics.directTcp.button")
+                Button(
+                    LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"),
+                    action: runTest,
+                )
+                .disabled(running || input.isEmpty)
+                .accessibilityIdentifier("userDiagnostics.directTcp.button")
                 Spacer()
                 if let result {
                     resultLabel(result)
@@ -125,7 +128,10 @@ private struct DirectTcpCard: View {
         guard !snapshot.isEmpty else { return }
         let parsed = parseHostPort(snapshot)
         guard let (host, port) = parsed else {
-            errorSink = "Expected host:port (e.g. 1.1.1.1:443)"
+            errorSink = String(
+                localized: "userDiagnostics.error.parseHostPort",
+                comment: "Shown when user-entered Direct TCP target doesn't parse as host:port",
+            )
             return
         }
         errorSink = nil
@@ -164,9 +170,12 @@ private struct ProxyHttpCard: View {
                 .accessibilityLabel("HTTP URL")
                 .accessibilityIdentifier("userDiagnostics.proxyHttp.input")
             HStack {
-                Button(running ? "Testing…" : "Test", action: runTest)
-                    .disabled(running || input.isEmpty)
-                    .accessibilityIdentifier("userDiagnostics.proxyHttp.button")
+                Button(
+                    LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"),
+                    action: runTest,
+                )
+                .disabled(running || input.isEmpty)
+                .accessibilityIdentifier("userDiagnostics.proxyHttp.button")
                 Spacer()
                 if let result {
                     resultLabel(result)
@@ -205,9 +214,12 @@ private struct DnsCard: View {
                 .accessibilityLabel("Domain name")
                 .accessibilityIdentifier("userDiagnostics.dns.input")
             HStack {
-                Button(running ? "Testing…" : "Test", action: runTest)
-                    .disabled(running || input.isEmpty)
-                    .accessibilityIdentifier("userDiagnostics.dns.button")
+                Button(
+                    LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"),
+                    action: runTest,
+                )
+                .disabled(running || input.isEmpty)
+                .accessibilityIdentifier("userDiagnostics.dns.button")
                 Spacer()
                 if let result {
                     resultLabel(result)

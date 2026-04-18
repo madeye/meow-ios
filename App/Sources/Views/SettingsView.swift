@@ -13,43 +13,47 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("General") {
-                Toggle("Allow LAN", isOn: binding(\.allowLan))
+            Section("settings.section.general") {
+                Toggle("settings.toggle.allowLan", isOn: binding(\.allowLan))
                     .accessibilityIdentifier("settings.toggle.allowLan")
-                Toggle("IPv6", isOn: binding(\.ipv6))
+                Toggle("settings.toggle.ipv6", isOn: binding(\.ipv6))
                     .accessibilityIdentifier("settings.toggle.ipv6")
-                Picker("Log Level", selection: binding(\.logLevel)) {
-                    Text("Debug").tag("debug")
-                    Text("Info").tag("info")
-                    Text("Warning").tag("warning")
-                    Text("Error").tag("error")
-                    Text("Silent").tag("silent")
+                Picker("settings.picker.logLevel", selection: binding(\.logLevel)) {
+                    Text("settings.logLevel.debug").tag("debug")
+                    Text("settings.logLevel.info").tag("info")
+                    Text("settings.logLevel.warning").tag("warning")
+                    Text("settings.logLevel.error").tag("error")
+                    Text("settings.logLevel.silent").tag("silent")
                 }
                 .accessibilityIdentifier("settings.picker.logLevel")
             }
-            Section("DNS") {
-                TextField("DoH Server", text: binding(\.dohServer), prompt: Text("https://1.1.1.1/dns-query"))
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .accessibilityIdentifier("settings.field.dohServer")
+            Section("settings.section.dns") {
+                TextField(
+                    "settings.field.dohServer",
+                    text: binding(\.dohServer),
+                    prompt: Text("https://1.1.1.1/dns-query"),
+                )
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .accessibilityIdentifier("settings.field.dohServer")
             }
-            Section("Diagnostics") {
+            Section("settings.section.diagnostics") {
                 NavigationLink {
                     UserDiagnosticsView()
                 } label: {
-                    Label("Diagnostics", systemImage: "stethoscope")
+                    Label("settings.label.diagnostics", systemImage: "stethoscope")
                 }
                 .accessibilityIdentifier("settings.nav.diagnostics")
             }
-            Section("About") {
-                LabeledContent("Version", value: appVersion)
+            Section("settings.section.about") {
+                LabeledContent("settings.about.version", value: appVersion)
                     .contentShape(Rectangle())
                     .accessibilityIdentifier("settings.about.version")
                 #if DEBUG
                     .onTapGesture(count: 3) { showDebugPanel = true }
                 #endif
-                LabeledContent("Memory", value: memoryMB.map { "\($0) MB" } ?? "—")
+                LabeledContent("settings.about.memory", value: memoryMB.map { "\($0) MB" } ?? "—")
                     .accessibilityIdentifier("settings.about.memory")
             }
             #if DEBUG
@@ -67,7 +71,7 @@ struct SettingsView: View {
                 }
             #endif
         }
-        .navigationTitle("Settings")
+        .navigationTitle("settings.nav.title")
         #if DEBUG
             .navigationDestination(isPresented: $showDebugPanel) {
                 DiagnosticsPanelView()

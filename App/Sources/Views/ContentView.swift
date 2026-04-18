@@ -8,19 +8,19 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            Tab("Home", systemImage: "house.fill") {
+            Tab("tabs.home", systemImage: "house.fill") {
                 NavigationStack { HomeView() }
             }
-            Tab("Subscriptions", systemImage: "text.document.fill") {
+            Tab("tabs.subscriptions", systemImage: "text.document.fill") {
                 NavigationStack { SubscriptionsView() }
             }
-            Tab("Traffic", systemImage: "chart.bar.fill") {
+            Tab("tabs.traffic", systemImage: "chart.bar.fill") {
                 NavigationStack { TrafficView() }
             }
-            Tab("Logs", systemImage: "list.bullet.rectangle.fill") {
+            Tab("tabs.logs", systemImage: "list.bullet.rectangle.fill") {
                 NavigationStack { LogsView() }
             }
-            Tab("Settings", systemImage: "gearshape.fill") {
+            Tab("tabs.settings", systemImage: "gearshape.fill") {
                 NavigationStack { SettingsView() }
             }
         }
@@ -37,17 +37,17 @@ struct ContentView: View {
             NavigationStack {
                 DiagnosticsPanelView()
                     .ignoresSafeArea(edges: .bottom)
-                    .navigationTitle("Diagnostics")
+                    .navigationTitle("content.diagnostics.nav.title")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { showDiagnostics = false }
+                            Button("common.close") { showDiagnostics = false }
                         }
                     }
             }
         }
-        .alert("Couldn't import subscription", isPresented: .constant(importError != nil)) {
-            Button("OK") { importError = nil }
+        .alert("subscriptions.import.errorTitle", isPresented: .constant(importError != nil)) {
+            Button("common.ok") { importError = nil }
         } message: {
             Text(importError ?? "")
         }

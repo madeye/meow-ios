@@ -17,9 +17,9 @@ struct ConnectionsView: View {
         .overlay {
             if connections.isEmpty {
                 ContentUnavailableView(
-                    "No connections",
+                    "connections.empty.title",
                     systemImage: "link",
-                    description: Text("Active traffic will appear here."),
+                    description: Text("connections.empty.description"),
                 )
                 .accessibilityIdentifier("connections.emptyState")
             } else if filtered.isEmpty {
@@ -33,10 +33,13 @@ struct ConnectionsView: View {
             }
         }
         .searchable(text: $query)
-        .navigationTitle("Connections (\(connections.count))")
+        .navigationTitle(Text(
+            "connections.nav.titleFormat \(connections.count)",
+            comment: "Connections screen navigation title; %lld = current count",
+        ))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Close All") {
+                Button("connections.toolbar.closeAll") {
                     Task { try? await api.closeAllConnections() }
                 }
                 .accessibilityIdentifier("connections.toolbar.closeAll")
@@ -86,7 +89,7 @@ struct ConnectionsView: View {
             Button(role: .destructive) {
                 Task { try? await api.closeConnection(id: conn.id) }
             } label: {
-                Label("Close", systemImage: "xmark")
+                Label("connections.swipe.close", systemImage: "xmark")
             }
             .accessibilityIdentifier("connections.row.\(slug).close")
         }
