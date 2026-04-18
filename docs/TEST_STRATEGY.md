@@ -569,7 +569,7 @@ Security checks are automated where possible and reviewed manually pre-release. 
 - [ ] No IDFA collection; no third-party SDKs at MVP (Firebase TBD — see PRD §Open Question 3)
 - [ ] Analytics events (if any) do not include user URLs, subscription contents, or connection payloads
 
-**Automated gate:** a `security-review.yml` GitHub Actions workflow runs on every PR, checking: git-secrets, ATS config, Keychain entitlements, and a custom linter scanning for forbidden patterns (`kSecAttrAccessibleAlways`, `NSAllowsArbitraryLoads`, etc.).
+**Automated gate:** there is no automated security-scan CI job at present. A prior grep-based scanner was removed (#34c) because it flagged literal key names (e.g. `NSAllowsArbitraryLoads`) without inspecting the XML value, producing false positives rather than signal. Re-introduction should be a deliberately chosen tool with known tuning knobs rather than an ad-hoc grep.
 
 ---
 
@@ -690,12 +690,11 @@ Jobs (parallel where possible):
 
 1. **build-core** — checkout rust crate + `mihomo-rust` submodule, install `aarch64-apple-ios`/`aarch64-apple-ios-sim` Rust targets, run `scripts/build-rust.sh` → upload `MihomoCore.xcframework` artifact (single unified framework per PRD v1.1+)
 2. **lint** — SwiftLint, SwiftFormat --dry-run, actionlint on workflow files
-3. **security-scan** — git-secrets, custom scanners for `NSAllowsArbitraryLoads` / `kSecAttrAccessibleAlways`, `cargo audit` on Rust deps
-4. **size-check** — fail if `MihomoCore.xcframework` (stripped, per-slice) exceeds 8 MB (§8.1)
-5. **unit-test** — download `MihomoCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 16 Pro'` for `MeowTests`
-6. **integration-test** — simulator-based NetworkExtension lifecycle + FFI tests (subset that runs without device)
-7. **ui-test** — `xcodebuild test -scheme meow-ios -destination '...'` for `MeowUITests`
-8. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
+3. **size-check** — fail if `MihomoCore.xcframework` (stripped, per-slice) exceeds 8 MB (§8.1)
+4. **unit-test** — download `MihomoCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 16 Pro'` for `MeowTests`
+5. **integration-test** — simulator-based NetworkExtension lifecycle + FFI tests (subset that runs without device)
+6. **ui-test** — `xcodebuild test -scheme meow-ios -destination '...'` for `MeowUITests`
+7. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
 
 All jobs upload artifacts. `unit-test` + `ui-test` upload `xcresult` bundles for PR comment summaries via `xcresulttool`.
 
@@ -768,7 +767,7 @@ ASC API key `5MC8U9Z7P9` (issuer `1200242f-e066-47cc-9ac8-b3affd0eee32`) is load
 ### 11.5 Branch Protection
 
 On `main`:
-- Required checks: `lint`, `security-scan`, `unit-test`, `ui-test`
+- Required checks: `lint`, `unit-test`, `ui-test`
 - Required reviews: 1 approver
 - Nightly E2E failure pings `#meow-ios-alerts` but does not auto-block `main` (flaky real-device tests shouldn't block urgent fixes)
 

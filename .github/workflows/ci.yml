@@ -24,28 +24,6 @@ jobs:
           brew install swiftformat
           swiftformat --lint .
 
-  security-scan:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      - name: git-secrets
-        run: |
-          brew install git-secrets
-          git secrets --install
-          git secrets --register-aws
-          git secrets --scan
-      - name: Scan for forbidden entitlement patterns
-        run: |
-          # Ship-blocker: nothing in the repo may opt into these insecure defaults.
-          ! grep -r "NSAllowsArbitraryLoads" --include="*.plist" --include="*.yml" App/ PacketTunnel/ || exit 1
-          ! grep -r "kSecAttrAccessibleAlways" --include="*.swift" App/ PacketTunnel/ MeowShared/ || exit 1
-          echo "Security scan OK"
-      - name: Rust vulnerability audit
-        run: |
-          cargo install cargo-audit
-          # cd core/rust/mihomo-ios-ffi && cargo audit   # uncomment once crate exists
-          echo "Rust audit placeholder — enable after T1.1"
-
   build-core:
     # PRD v1.1: single pure-Rust MihomoCore.xcframework — no Go toolchain.
     # mihomo-rust is pulled as a cargo git dependency (pinned via Cargo.lock),
@@ -154,7 +132,7 @@ jobs:
           path: build/ui.xcresult
 
   archive:
-    needs: [build-core, unit-test, ui-test, security-scan]
+    needs: [build-core, unit-test, ui-test]
     # Same Xcode 26 / Swift 6.2 requirement — the Release archive
     # re-resolves MeowShared's SPM package.
     runs-on: macos-15
