@@ -108,7 +108,7 @@ struct CodeTextView: UIViewRepresentable {
     let accessibilityIdentifier: String?
 
     init(text: Binding<String>, accessibilityIdentifier: String? = nil) {
-        self._text = text
+        _text = text
         self.accessibilityIdentifier = accessibilityIdentifier
     }
 
