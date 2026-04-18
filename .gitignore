@@ -68,6 +68,10 @@ local.properties
 .env
 .env.*
 
+# Per-contributor Apple Team ID (see DevelopmentTeam.xcconfig.example).
+# The .example file is checked in as a template; the real xcconfig is not.
+DevelopmentTeam.xcconfig
+
 # ---- IDE ----
 .vscode/
 .idea/

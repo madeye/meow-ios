@@ -1,0 +1,14 @@
+// Per-contributor Apple Team ID for local Xcode signing.
+//
+// Setup:
+//   1. Copy this file to `DevelopmentTeam.xcconfig` (gitignored).
+//   2. Replace <YOUR_TEAM_ID> with your 10-character Apple Developer Team ID
+//      (App Store Connect → Membership → Team ID).
+//   3. Export it before running xcodegen, e.g.:
+//        export DEVELOPMENT_TEAM="$(sed -n 's/^DEVELOPMENT_TEAM *= *//p' DevelopmentTeam.xcconfig)"
+//        scripts/generate-xcodeproj.sh
+//
+// CI resolves DEVELOPMENT_TEAM from the `APPLE_TEAM_ID` repo secret at
+// build time, so this file never ships to GitHub.
+
+DEVELOPMENT_TEAM = <YOUR_TEAM_ID>

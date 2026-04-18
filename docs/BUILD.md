@@ -22,6 +22,38 @@ brew install xcodegen
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 ```
 
+### Local signing — `DEVELOPMENT_TEAM`
+
+`project.yml` reads the Apple Team ID from the `DEVELOPMENT_TEAM` environment
+variable (xcodegen substitutes `${DEVELOPMENT_TEAM}` at project-generation
+time). CI resolves it from the `APPLE_TEAM_ID` repo secret; contributors
+set it locally one of two ways:
+
+**Option A — xcconfig file (recommended for repeat contributors)**
+
+```sh
+cp DevelopmentTeam.xcconfig.example DevelopmentTeam.xcconfig
+# Edit DevelopmentTeam.xcconfig and replace <YOUR_TEAM_ID> with your
+# 10-character Apple Developer Team ID (App Store Connect →
+# Membership → Team ID).
+export DEVELOPMENT_TEAM="$(sed -n 's/^DEVELOPMENT_TEAM *= *//p' DevelopmentTeam.xcconfig)"
+./scripts/generate-xcodeproj.sh
+```
+
+`DevelopmentTeam.xcconfig` is gitignored; only `DevelopmentTeam.xcconfig.example`
+is checked in.
+
+**Option B — one-shot export**
+
+```sh
+export DEVELOPMENT_TEAM=ABC1234DEF
+./scripts/generate-xcodeproj.sh
+```
+
+Running `xcodegen generate` without `DEVELOPMENT_TEAM` exported will substitute
+the literal string `${DEVELOPMENT_TEAM}` into `project.pbxproj`, which Xcode
+will flag as an invalid team ID when you open the project.
+
 ## Regenerating the Xcode project
 
 `project.yml` is the source of truth. `meow-ios.xcodeproj` is git-ignored
