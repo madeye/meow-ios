@@ -1,4 +1,5 @@
 import Foundation
+@testable import meow_ios
 import SwiftData
 import Testing
 
@@ -17,9 +18,24 @@ struct ProfileTests {
         // calling markSelected on profile B should deselect A
     }
 
-    @Test(.disabled("blocked on T4.1"))
-    func `selectedProxies encodes/decodes as JSON dict`() {
-        // set ["Proxy": "node-01", "Auto": "auto"], save, reload, compare
+    @Test
+    func `selectedProxies accessor round-trips through JSON`() {
+        let profile = Profile(name: "p", url: "https://example.com/a.yaml", yamlContent: "")
+        profile.selectedProxies = ["Auto": "auto", "Proxy": "node-01"]
+        let parsed = try? JSONDecoder().decode(
+            [String: String].self,
+            from: Data(profile.selectedProxiesJSON.utf8),
+        )
+        #expect(parsed == ["Auto": "auto", "Proxy": "node-01"])
+        #expect(profile.selectedProxies == ["Auto": "auto", "Proxy": "node-01"])
+    }
+
+    @Test
+    func `selectedProxies setter overwrites prior entries`() {
+        let profile = Profile(name: "p", url: "https://example.com/a.yaml", yamlContent: "")
+        profile.selectedProxies = ["Proxy": "node-01"]
+        profile.selectedProxies = ["Auto": "auto"]
+        #expect(profile.selectedProxies == ["Auto": "auto"])
     }
 }
 

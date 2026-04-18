@@ -6,6 +6,7 @@ struct HomeView: View {
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
     @Environment(MihomoAPI.self) private var mihomoAPI
+    @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
     @State private var groups: [ProxyGroupModel] = []
@@ -319,6 +320,10 @@ struct HomeView: View {
     private func select(group: String, proxy: String) async {
         do {
             try await mihomoAPI.selectProxy(group: group, name: proxy)
+            if let profile = selected.first {
+                profile.selectedProxies[group] = proxy
+                try? modelContext.save()
+            }
             await refreshGroupsIfConnected()
         } catch {
             groupsLoadError = String(

@@ -2,6 +2,7 @@ import Foundation
 import MeowIPC
 import MeowModels
 import Observation
+import SwiftData
 
 /// Top-level observable that wires the app's long-lived services together and
 /// performs first-launch setup (asset seeding, IPC observer registration).
@@ -38,8 +39,38 @@ final class AppModel {
         guard !didBootstrap else { return }
         didBootstrap = true
 
+        vpnManager.onConnected = { [weak self] in
+            self?.replaySelectedProxiesOnConnect()
+        }
         await AssetSeeder.seedIfNeeded()
         await vpnManager.refresh()
         ipcBridge.start()
+    }
+
+    /// Re-issues the active profile's persisted `selectedProxies` after the
+    /// engine starts. mihomo-rust drops in-memory group state on every
+    /// engine.start, so without this the UI shows the YAML defaults instead
+    /// of what the user last picked. Stale entries (group/proxy renamed or
+    /// removed since the last save) are dropped and persisted back.
+    private func replaySelectedProxiesOnConnect() {
+        let context = AppModelContainer.shared.container.mainContext
+        let descriptor = FetchDescriptor<Profile>(predicate: #Predicate { $0.isSelected })
+        guard let profile = try? context.fetch(descriptor).first else { return }
+        let selections = profile.selectedProxies
+        guard !selections.isEmpty else { return }
+        let api = mihomoAPI
+        Task { @MainActor in
+            let stale = await SelectedProxyRestorer.restore(
+                selections: selections,
+                select: { group, name in try await api.selectProxy(group: group, name: name) },
+            )
+            guard !stale.isEmpty else { return }
+            var updated = profile.selectedProxies
+            for group in stale {
+                updated.removeValue(forKey: group)
+            }
+            profile.selectedProxies = updated
+            try? context.save()
+        }
     }
 }
