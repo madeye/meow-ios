@@ -6,11 +6,14 @@ import Yams
 ///
 ///   1. Remove user-managed `dns:` and `subscriptions:` blocks — the extension
 ///      owns DNS (DoH + fake-ip) and the app owns subscription fetching.
-///   2. Pin `mixed-port` (defaults to 7890) so the tun2socks dispatcher and the
+///   2. Strip `secret:` so the REST API runs open on loopback — the app talks
+///      to the engine via `MihomoAPI(secret: "")` and would 401 if the user's
+///      profile happened to ship a token.
+///   3. Pin `mixed-port` (defaults to 7890) so the tun2socks dispatcher and the
 ///      REST API know the listener port without consulting the YAML.
-///   3. Pin `external-controller: 127.0.0.1:9090` so the app can talk to the
+///   4. Pin `external-controller: 127.0.0.1:9090` so the app can talk to the
 ///      engine's REST API over loopback.
-///   4. Inject a `geox-url:` block (jsDelivr-hosted) when the user didn't
+///   5. Inject a `geox-url:` block (jsDelivr-hosted) when the user didn't
 ///      provide one, so the engine has somewhere to fetch geoip/geosite from.
 ///
 /// The source YAML stays intact in `AppGroup.configURL`; the patched output
@@ -46,6 +49,7 @@ public enum EffectiveConfigWriter {
 
         root.removeValue(forKey: "dns")
         root.removeValue(forKey: "subscriptions")
+        root.removeValue(forKey: "secret")
 
         let mixedPort = prefs.mixedPort > 0 ? prefs.mixedPort : defaultMixedPort
         root["mixed-port"] = mixedPort

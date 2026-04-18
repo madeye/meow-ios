@@ -29,6 +29,24 @@ struct EffectiveConfigWriterTests {
     }
 
     @Test
+    func `strips secret so REST API runs open on loopback`() throws {
+        let source = """
+        secret: "deadbeef-token"
+        proxies:
+          - name: n1
+            type: ss
+            server: 1.2.3.4
+            port: 443
+            cipher: aes-256-gcm
+            password: p
+        """
+        let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: Preferences())
+        let parsed = try Yams.load(yaml: out) as? [String: Any]
+        #expect(parsed?["secret"] == nil)
+        #expect(out.contains("proxies:"))
+    }
+
+    @Test
     func `pins mixed-port from preferences`() throws {
         let source = "proxies: []\n"
         var prefs = Preferences()
