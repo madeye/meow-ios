@@ -9,7 +9,7 @@ To save GitHub Actions minutes and keep the red-main failure mode from coming ba
 - Before `git push` on any Swift / Rust / YAML change, run the local equivalents of the CI jobs your diff touches:
   - **Swift:** `xcodebuild test -project meow-ios.xcodeproj -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` against the relevant test bundles (`MeowTests`, `MeowUITests`, `MeowIntegrationTests`).
   - **Rust:** `scripts/build-rust.sh`, plus `cargo test` in `core/rust/mihomo-ios-ffi/` where relevant.
-  - **Lint:** `swiftlint` at the repo root.
+  - **Swift lint:** `swiftlint` **and** `swiftformat --lint .` at the repo root. CI's `lint` job runs both and fails if either does — passing one is not sufficient. The two tools have non-overlapping rule sets: swiftlint catches style/API-usage issues, swiftformat catches formatting/structural ones (`redundantSelf`, spacing, ordering, etc.). Install via `brew install swiftlint swiftformat` if missing.
 - If a local run fails, fix it before pushing. Do not push "to see what CI says."
 - Docs / infra-only changes (no Swift / Rust / YAML touched) don't need the full suite — skip what isn't relevant.
 - Also check `gh run list --branch main --workflow=ci.yml --limit=1` before opening a PR so you know whether main's baseline is green. "Merging to red main" should be a known condition, not a discovery.
