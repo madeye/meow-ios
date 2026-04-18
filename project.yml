@@ -35,9 +35,10 @@ targets:
     platform: iOS
     sources:
       - path: App/Sources
-    resources:
       - path: App/Resources
         optional: true
+        excludes:
+          - "**/*.md"
     info:
       path: App/Info.plist
       properties:

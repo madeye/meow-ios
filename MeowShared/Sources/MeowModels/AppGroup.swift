@@ -33,20 +33,18 @@ public enum AppGroup {
         containerURL.appending(path: "traffic.json")
     }
 
-    public static var assetsDir: URL {
-        containerURL.appending(path: "assets", directoryHint: .isDirectory)
+    /// Directory the engine treats as its "config home": mirrors the layout
+    /// `mihomo-config` expects under `$XDG_CONFIG_HOME/mihomo`, which the FFI
+    /// layer points at `containerURL` via `meow_core_set_home_dir`.
+    public static var mihomoConfigDir: URL {
+        containerURL.appending(path: "mihomo", directoryHint: .isDirectory)
     }
 
-    public static var geoIPURL: URL {
-        assetsDir.appending(path: "geoip.metadb")
-    }
-
-    public static var geositeURL: URL {
-        assetsDir.appending(path: "geosite.dat")
-    }
-
-    public static var countryURL: URL {
-        assetsDir.appending(path: "country.mmdb")
+    /// Location `mihomo-config::default_geoip_path()` resolves to once
+    /// `XDG_CONFIG_HOME=containerURL` is exported. Capital-C filename matches
+    /// the engine's lookup.
+    public static var countryMmdbURL: URL {
+        mihomoConfigDir.appending(path: "Country.mmdb")
     }
 
     /// UserDefaults suite shared between app and extension. Force-unwrap is
