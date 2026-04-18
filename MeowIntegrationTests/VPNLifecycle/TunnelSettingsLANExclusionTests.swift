@@ -26,7 +26,6 @@ final class TunnelSettingsLANExclusionTests: XCTestCase {
             ("172.24.0.0", "255.248.0.0"),
             ("192.168.0.0", "255.255.0.0"),
             ("169.254.0.0", "255.255.0.0"),
-            ("127.0.0.0", "255.0.0.0"),
             ("224.0.0.0", "240.0.0.0"),
             ("255.255.255.255", "255.255.255.255"),
         ]
@@ -57,6 +56,35 @@ final class TunnelSettingsLANExclusionTests: XCTestCase {
         }
     }
 
+    /// Regression guard: iOS's `NEIPv4Route`/`NEIPv6Route` validator rejects
+    /// any loopback destination and discards the ENTIRE excludedRoutes payload
+    /// when it finds one. A single 127/8 or ::1 entry in #53/#54 killed every
+    /// other exclusion silently — ingress log showed zero packets. If anyone
+    /// re-introduces a loopback exclusion, this test fails before it ships.
+    func testMakeExcludesNoLoopbackDestinations() {
+        let settings = TunnelSettings.make(serverAddress: "192.0.2.1")
+
+        let ipv4Routes = settings.ipv4Settings?.excludedRoutes ?? []
+        for route in ipv4Routes {
+            XCTAssertFalse(
+                route.destinationAddress.hasPrefix("127."),
+                "IPv4 excludedRoute \(route.destinationAddress) is loopback — iOS rejects the whole payload",
+            )
+        }
+
+        let ipv6Routes = settings.ipv6Settings?.excludedRoutes ?? []
+        for route in ipv6Routes {
+            // Anchor the match so we reject "::1" exactly but not something
+            // coincidentally like "::1abc" (which is not a real route but
+            // keeps the guard robust against future additions).
+            let addr = route.destinationAddress
+            XCTAssertFalse(
+                addr == "::1" || addr == "0:0:0:0:0:0:0:1",
+                "IPv6 excludedRoute \(addr) is loopback — iOS rejects the whole payload",
+            )
+        }
+    }
+
     func testMakeLeavesDNSMatchDomainsUnset() {
         let settings = TunnelSettings.make(serverAddress: "192.0.2.1")
         XCTAssertNil(
@@ -72,7 +100,6 @@ final class TunnelSettingsLANExclusionTests: XCTestCase {
         // will land in a follow-up once the v4 narrow fix is confirmed green.
         let expected: [(String, Int)] = [
             ("fe80::", 10),
-            ("::1", 128),
             ("ff00::", 8),
         ]
 
