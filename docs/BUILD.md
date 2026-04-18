@@ -30,9 +30,19 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim
   Run Locally" identity automatically. Contributors can compile and run on
   any iOS simulator without an Apple Developer account.
 - **Device builds** — open `meow-ios.xcodeproj` in Xcode, select each target
-  under Signing & Capabilities, and pick your team. Alternatively, export
-  `DEVELOPMENT_TEAM=<your-10-char-team-id>` before invoking xcodebuild —
-  Automatic signing style will pick it up.
+  under Signing & Capabilities, and pick your team. For command-line builds,
+  put your local signing overrides in `Local.xcconfig`:
+
+```xcconfig
+// Local build settings — DO NOT COMMIT
+DEVELOPMENT_TEAM = <TEAM_ID>
+APP_STORE_CONNECT_API_KEY_P8 = /absolute/path/to/AuthKey_<ASC_KEY_ID>.p8
+```
+
+  `scripts/build-release.sh` passes `-xcconfig Local.xcconfig` to `xcodebuild`
+  and reads `DEVELOPMENT_TEAM` from there by default. It also reads
+  `APP_STORE_CONNECT_API_KEY_P8` (or `SIGN_KEY_PATH`) so local release
+  credentials live in one place.
 - **CI release** (tag push → `release.yml`) uses App Store Connect API
   secrets (`APP_STORE_CONNECT_API_KEY_P8` / `KEY_ID` / `ISSUER_ID`); no
   team is embedded in the repo.
@@ -94,6 +104,23 @@ so source compiles before the `.a` exists, but link fails without it.
 2. (Optional while UI-only) Build the native lib: `./scripts/build-rust.sh`
 3. Open `meow-ios.xcodeproj`, select the `meow-ios` scheme.
 4. Run on an iOS 26 simulator or a provisioned device.
+
+For a signed device-ready Release build from the command line, use:
+
+```sh
+./scripts/build-release.sh
+```
+
+To build and install onto a connected iPhone:
+
+```sh
+./scripts/build-release.sh --device <device-id> --install
+```
+
+The script writes Xcode outputs into `build/DerivedData`, refreshes Swift
+packages in `build/SourcePackages`, rebuilds `MihomoCore.xcframework` by
+default, and emits the final `.app` path on success. Use `--xcconfig <path>`
+or `--team <TEAM_ID>` only if you need to override `Local.xcconfig`.
 
 When the XCFramework is absent the Swift source still compiles; engine
 operations log a warning and no-op. CI marks the native build required for
