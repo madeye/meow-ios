@@ -14,11 +14,36 @@ To save GitHub Actions minutes and keep the red-main failure mode from coming ba
 - Docs / infra-only changes (no Swift / Rust / YAML touched) don't need the full suite — skip what isn't relevant.
 - Also check `gh run list --branch main --workflow=ci.yml --limit=1` before opening a PR so you know whether main's baseline is green. "Merging to red main" should be a known condition, not a discovery.
 
-### Bypass CI + rebase-merge for non-code PRs
+### Admin-bypass rebase-merge (when you can skip waiting for CI)
 
-If a PR's diff touches only non-code paths — docs (`*.md`, `docs/`), non-CI workflow files, images, or other static assets — bypass CI and **rebase-merge** directly instead of waiting for a full CI run.
+Two paths use `gh pr merge <n> --rebase --admin --delete-branch` to land a PR without waiting for the remote CI run to finish. Both require `--rebase` (keep commit history linear) and `--admin` (override required-checks). Pick the path that matches the PR's diff; when in doubt, run full CI.
 
-- "Non-code" = no changes under `App/`, `MeowCore/`, `MeowShared/`, `MeowTests/`, `MeowUITests/`, `MeowIntegrationTests/`, `core/`, `scripts/`, `.github/workflows/*.yml`, `project.yml`, `Cargo.*`, `Package.*`, `Podfile*`. Docs-only, CLAUDE.md, `.gitignore`, README, LICENSE, etc. are all safe to bypass.
-- Use `gh pr merge <n> --rebase --admin --delete-branch` — the `--admin` flag overrides required-checks so the rebase-merge lands without waiting. `--rebase` keeps the commit history linear without squashing (useful if the PR has multiple meaningful commits).
-- If a PR mixes docs + code changes, do NOT bypass — run the full CI. The bypass is only for strictly non-code diffs.
-- Don't use this to skip CI on code changes that "feel small." Even a one-line Swift or Rust edit should go through the full pipeline.
+#### Path A — Non-code PRs (docs, static assets, CLAUDE.md)
+
+If a PR's diff touches only non-code paths, bypass CI regardless of local test state.
+
+- "Non-code" = no changes under `App/`, `MeowCore/`, `MeowShared/`, `MeowTests/`, `MeowUITests/`, `MeowIntegrationTests/`, `core/`, `scripts/`, `project.yml`, `Cargo.*`, `Package.*`, `Podfile*`. Docs (`*.md`, `docs/`), CLAUDE.md, `.gitignore`, README, LICENSE, images, and other static assets are all safe to bypass.
+- **Workflow files under `.github/workflows/*.yml` are NOT non-code for this rule.** Workflow logic can only be validated when the workflow actually runs (i.e., post-merge), so there is no local-CI-green substitute. Workflow-touching PRs always require a full remote CI run before merge.
+
+#### Path B — Code PRs with local-CI-green attestation
+
+If a PR's diff touches code paths (Swift, Rust, project.yml, Podfile, etc.), bypass is permitted **only** when ALL of the following are true and the PR description explicitly attests to each:
+
+1. `swiftformat --lint .` ran locally at the repo root → 0 violations.
+2. `swiftlint` ran locally at the repo root → 0 violations.
+3. The `xcodebuild test` suites matching the diff ran locally on an iOS 26 simulator (e.g., iPhone 17) → all green. For Swift changes: at minimum `MeowTests`; add `MeowUITests` for UI diffs, `MeowIntegrationTests` for service-layer diffs. For Rust / FFI changes: add `scripts/build-rust.sh` + `cargo test` in `core/rust/mihomo-ios-ffi/`.
+4. `git diff origin/main...HEAD --stat` was verified — the file list matches what the PR intends to change and contains no accidental additions. (The PR #28 admin-with-code lesson: bypassing without checking the diff base is how unintended code ends up in a skip-CI merge.)
+5. PR description includes a checklist attesting to (1)-(4), with the concrete command lines that were run.
+
+Caveats:
+- **Workflow files (`.github/workflows/*.yml`) are still excluded from Path B** — same rationale as Path A. If the PR touches both workflow files and code, run full CI.
+- If any of (1)-(4) was skipped or couldn't run cleanly, merge through full remote CI instead. Don't attest to a check you didn't actually run.
+- Path B is a speed optimization, not a quality shortcut. If you're unsure whether a test bundle is relevant, run it — that's cheaper than discovering a regression on main.
+- If a Path B merge surfaces a post-merge CI failure on main (lint, test, or build), the merger owns the immediate fix-forward PR. Bypass speed comes with bypass accountability.
+
+#### When to use which
+
+- Docs-only, CLAUDE.md, images, README → Path A.
+- Swift / Rust / project.yml / Podfile → Path B, with attestation.
+- Mixed (docs + code in one PR) → run full CI. (Consider splitting the PR if the docs half is blocking.)
+- Workflow files (alone or mixed) → run full CI. Always.
