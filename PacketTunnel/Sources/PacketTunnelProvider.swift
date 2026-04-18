@@ -18,7 +18,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     ) {
         log.info("startTunnel")
 
-        let settings = TunnelSettings.make(serverAddress: protocolConfiguration.serverAddress ?? "meow")
+        let settings = TunnelSettings.make(serverAddress: protocolConfiguration.serverAddress ?? "192.0.2.1")
         let profileID = options?["profileID"] as? String
         Task { [weak self] in
             guard let self else {
