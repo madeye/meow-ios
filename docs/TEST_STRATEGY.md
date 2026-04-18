@@ -68,11 +68,11 @@ Full exported surface per PRD §2.4. All exports return `int` status codes and w
 
 | Subject | What to assert | Notes |
 |---------|---------------|-------|
-| `meow_engine_set_home_dir` | Accepts UTF-8 path; idempotent; handles empty string | Fuzz with non-ASCII |
+| `meow_core_set_home_dir` | Accepts UTF-8 path; idempotent; handles empty string | Fuzz with non-ASCII |
 | `meow_engine_start` | Valid config → 0; missing config → non-zero + populated `last_error` | Seed tmp config.yaml in test bundle |
 | `meow_engine_is_running` | Reflects state after start/stop | |
 | `meow_engine_stop` | Safe to call without prior start (no-op) | |
-| `meow_engine_get_traffic` | Non-negative; monotonic within session; rebases to 0 on restart | |
+| `meow_engine_traffic` | Non-negative; monotonic within session; rebases to 0 on restart | |
 | `meow_engine_validate_config` | Valid YAML → 0; malformed → non-zero with specific error; empty → error | Fixtures in `MeowTests/Fixtures/yaml/` |
 | `meow_engine_convert_subscription` | v2rayN base64 nodelist → Clash YAML; buffer-too-small returns required size | Fixture `MeowTests/Fixtures/nodelist/` |
 | `meow_engine_last_error` | Empty before any error; populated after forced failure; truncates cleanly at `cap` | |

@@ -61,7 +61,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Remove `jni` crate and all `Java_*` JNI function signatures
 - Add mihomo-rust workspace crates as Cargo dependencies: `mihomo-common`, `mihomo-proxy`, `mihomo-rules`, `mihomo-dns`, `mihomo-tunnel`, `mihomo-config`, `mihomo-api`
 - Note: `mihomo-listener` is **not** included — no loopback listener needed in the in-process path
-- Implement `engine.rs` wrapping mihomo-rust startup: `meow_engine_set_home_dir()`, `meow_engine_start()`, `meow_engine_stop()`, `meow_engine_is_running()`, `meow_engine_get_traffic()`
+- Implement `engine.rs` wrapping mihomo-rust startup: `meow_core_set_home_dir()`, `meow_engine_start()`, `meow_engine_stop()`, `meow_engine_is_running()`, `meow_engine_traffic()`
 - Implement `src/subscription.rs`: node list → Clash YAML conversion using `mihomo-config` crate (replaces Go `convert.go`)
 - Implement `src/diagnostics.rs`: direct TCP test, proxy HTTP test, DNS resolver test (replaces Go `diagnostics.go`)
 - Export full C ABI (see PRD §2.4); run `cbindgen` to generate `mihomo_core.h`
@@ -106,7 +106,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - **Depends on:** T2.1
 
 #### T2.3 — Rust Engine Lifecycle
-- On start: call `meow_engine_set_home_dir()`, `meow_engine_start(config_path, api_addr, secret)`
+- On start: call `meow_core_set_home_dir()`, `meow_engine_start(config_path, api_addr, secret)`
 - Verify engine running: `meow_engine_is_running()`
 - On stop: call `meow_engine_stop()`
 - Error propagation: `meow_engine_last_error()` → `completionHandler(error)`
@@ -149,7 +149,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Register CFNotificationCenter observers: `com.meow.vpn.command`
 - On command notification: read intent from shared UserDefaults, dispatch to engine
 - On state change: write state to shared container, post `com.meow.vpn.state`
-- Traffic update timer: every 500ms, call `meow_engine_get_traffic(&upload, &download)`, write to shared container, post `com.meow.vpn.traffic`
+- Traffic update timer: every 500ms, call `meow_engine_traffic(&upload, &download)`, write to shared container, post `com.meow.vpn.traffic`
 - **Depends on:** T0.3, T2.3
 
 #### T2.8 — Manual Device Smoke (user-owned)
