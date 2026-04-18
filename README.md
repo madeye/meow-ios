@@ -40,3 +40,7 @@ that both the app and extension link against:
 ```
 
 See [`docs/BUILD.md`](docs/BUILD.md) for toolchain requirements.
+
+## License
+
+[MIT](LICENSE) © 2026 Max Lv
