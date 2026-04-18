@@ -22,6 +22,21 @@ brew install xcodegen
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 ```
 
+## Signing
+
+`project.yml` no longer pins a `DEVELOPMENT_TEAM`. Build paths:
+
+- **Simulator builds** — no signing required; Xcode uses its ad-hoc "Sign to
+  Run Locally" identity automatically. Contributors can compile and run on
+  any iOS simulator without an Apple Developer account.
+- **Device builds** — open `meow-ios.xcodeproj` in Xcode, select each target
+  under Signing & Capabilities, and pick your team. Alternatively, export
+  `DEVELOPMENT_TEAM=<your-10-char-team-id>` before invoking xcodebuild —
+  Automatic signing style will pick it up.
+- **CI release** (tag push → `release.yml`) uses App Store Connect API
+  secrets (`APP_STORE_CONNECT_API_KEY_P8` / `KEY_ID` / `ISSUER_ID`); no
+  team is embedded in the repo.
+
 ## Regenerating the Xcode project
 
 `project.yml` is the source of truth. `meow-ios.xcodeproj` is git-ignored
