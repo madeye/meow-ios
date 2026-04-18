@@ -6,7 +6,7 @@
 **Status:** Draft
 **Applies to:** meow-ios v1.0 (MVP — see `PRD.md` §3.1)
 **Changelog:**
-- v1.3 — Automated E2E scaffolding retired in sync with PRD v1.4 / PROJECT_PLAN v1.4 T6.5 retirement (2026-04-18, user directive). §7 *Device-class E2E via vphone-cli in a Tart VM* removed entirely; replaced by PROJECT_PLAN T2.8 manual-smoke on user's iPhone. §11.1 `nightly.yml` subsection removed; §11.3 `SLACK_WEBHOOK_URL` row removed. Scattered refs across §1/§2/§6/§8/§11.5/§12/§13/§14 updated to reflect manual-smoke framing. 5-check gate content (§6.2) retained as the manual-smoke checklist — PRD v1.4 §4.4 retained the label format for on-device readability. `docs/RUNNER.md` + `docs/TEST_FIXTURES.md` deleted (superseded). Section numbering preserved (no ripple renumber).
+- v1.3 — Automated E2E + XCUITest scaffolding retired in sync with PRD v1.4 / PROJECT_PLAN v1.4 T6.5 retirement (2026-04-18, user directive "remove e2e tests"). §5 *UI Test Plan (XCUITest)* and §7 *Device-class E2E via vphone-cli in a Tart VM* both replaced with 2-line retirement stubs; coverage moves to PROJECT_PLAN T2.8 manual-smoke on user's iPhone. §11.1 `nightly.yml` subsection + `ui-test` CI job removed; §11.3 `SLACK_WEBHOOK_URL` row removed; §11.5 required-checks list drops `ui-test`. Scattered refs across §1/§2/§6/§8/§11/§12/§13/§14 updated. 5-check gate content (§6.2) retained as the manual-smoke checklist — PRD v1.4 §4.4 retained the label format for on-device readability. `docs/RUNNER.md` + `docs/TEST_FIXTURES.md` deleted (superseded). Apple Team ID / ASC key ID / Issuer ID placeholders now `<TEAM_ID>` / `<ASC_KEY_ID>` / `<ISSUER_ID>` throughout (pre-public redaction; CI still resolves via secrets). Section numbering preserved (no ripple renumber).
 - v1.2.1 — Post-rebase cleanup after Dev's Rust-unification + PRD v1.3 landing: §11.1 CI pipeline collapses `build-rust`+`build-go` → single `build-core` producing `MihomoCore.xcframework`, adds explicit `size-check` job (§8.1 8 MB gate), drops `govulncheck`. §11.1 `nightly.yml` description now matches the Tart/vphone-cli flow actually in `.github/workflows/nightly.yml`. Editorial: removed the last "Go engine" / "Rust+Go bridge" references in §1/§4.1/§6.3 to align with PRD v1.3 pure-Rust architecture. No strategy changes; only stale refs corrected.
 - v1.2 — Added §7 *Device-class E2E via vphone-cli in a SIP-disabled Tart VM* (replaces the earlier "tethered iPhone" nightly model). Tightened §8.1 memory budget: Extension resident ≤ 14 MB with a 15 MB hard ceiling (enforced as a ship-blocker test) to live inside the iOS NE memory limit. Tightened `MihomoCore.xcframework` stripped size budget to ≤ 8 MB. Renumbered §7–§13 → §8–§14.
 - v1.1 — Aligned with PRD v1.1 (pure-Rust `MihomoCore.xcframework`, no Go toolchain). Merged Rust + Go FFI test sections into one; updated CI pipeline to drop the Go build job; updated C symbol names in stubs.
@@ -227,53 +227,11 @@ These tests live in the extension target's `PacketTunnelTests` bundle (runs insi
 | SwiftData container recreated after deletion | Preserves data integrity; no orphan records |
 
 ---
-
-## 5. UI Test Plan (XCUITest)
-
-**Target:** `MeowUITests` bundle. Runs on iOS simulator.
-
-UI tests use `XCUIApplication().launchArguments += ["-UITests", "-ResetState"]` to:
-- Use an in-memory SwiftData store (no state leaks between tests)
-- Inject a fake VPN manager that simulates connect/disconnect without requiring the extension
-- Stub `MihomoAPI` responses via launch-environment URLs pointing at a local test server
-
-### 5.1 Screen Coverage
-
-| Screen | Tests |
-|--------|-------|
-| **Home** | VPN toggle (pill button) changes state text; traffic tiles update when fake counters tick; route-mode picker persists selection; proxy-group picker sheet opens, selection persists; connections/rules nav only appears when connected |
-| **Subscriptions** | `+` opens sheet; submit with empty URL shows validation error; submit valid URL adds row; swipe-to-delete removes row; pull-to-refresh triggers refresh-all; tapping row navigates to YAML editor |
-| **Traffic** | Speed chart renders with test data injection; today/month tiles match fixture sums; 7-day bar chart has correct bar count |
-| **Connections** | List populates from stubbed `/connections`; search filters rows; swipe-to-close removes row; "Close All" empties list |
-| **Rules** | List populates; pull-to-refresh triggers re-fetch |
-| **Logs** | Level picker changes filter; auto-scroll toggle pins to bottom; search filters lines; mono font applied |
-| **Settings** | All toggles persist across relaunch; DoH URL field validates URL format; version string matches `Bundle.main.infoDictionary["CFBundleShortVersionString"]`; memory usage display is non-empty |
-| **YAML Editor** | Opens with `profile.yamlContent`; typing → dirty state → Save enabled; invalid YAML → error alert with specific message; valid save dismisses back; Revert restores `yamlBackup` |
-| **Diagnostics** | Each of 3 test cards accepts input and returns result (stubbed FFI); bad inputs show errors |
-| **Providers** | Lists providers; per-proxy delay test runs and displays result |
-
-### 5.2 Navigation & Accessibility
-
-| Test | Expected |
-|------|---------|
-| Tab bar switching preserves state | Switching Home → Settings → Home keeps Home scroll position |
-| Deep link (once implemented) | `meow://connect` starts VPN from any tab |
-| VoiceOver labels | Every interactive element has a non-empty `accessibilityLabel` |
-| Dynamic Type (XL / AX5) | No clipping, no unreadable overlaps, no off-screen buttons |
-| Dark mode | All screens render with correct glass vibrancy |
-| iPad layout | Navigation adapts to sidebar/detail split on iPad Pro |
-
-### 5.3 Permission Prompts
-
-| Prompt | Handling |
-|--------|---------|
-| VPN configuration permission | First-run flow accepts; second run doesn't re-prompt |
-| Local Network (if required for mihomo controller) | Accept flow completes |
-| Notifications (Post-MVP) | — |
-
-XCUITest `addUIInterruptionMonitor` intercepts and dismisses. If a prompt breaks the flow, the test fails with a helpful message, not a generic timeout.
-
 ---
+
+## 5. UI Test Plan (XCUITest) — RETIRED (v1.3)
+
+> **Retired 2026-04-18** per user directive ("remove e2e tests"). XCUITest coverage is collapsed into the manual pre-release smoke on the developer's iPhone (PROJECT_PLAN v1.4 T2.8). The MeowUITests target and its bundle are deleted in the accompanying code PR. Screen-level interaction coverage that previously lived in §5.1 is now walked by hand against the running app; navigation/accessibility checks (§5.2) and permission-prompt handling (§5.3) move to the manual smoke checklist. The §6.2 five-check gate is the authoritative pass criterion; §9 security, §8 performance, and §10 acceptance criteria are unchanged.
 
 ## 6. Network Test Plan
 
@@ -585,17 +543,16 @@ Jobs (parallel where possible):
 1. **build-core** — checkout rust crate + `mihomo-rust` submodule, install `aarch64-apple-ios`/`aarch64-apple-ios-sim` Rust targets, run `scripts/build-rust.sh` → upload `MihomoCore.xcframework` artifact (single unified framework per PRD v1.1+)
 2. **lint** — SwiftLint, SwiftFormat --dry-run, actionlint on workflow files
 3. **size-check** — fail if `MihomoCore.xcframework` (stripped, per-slice) exceeds 8 MB (§8.1)
-4. **unit-test** — download `MihomoCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 16 Pro'` for `MeowTests`
+4. **unit-test** — download `MihomoCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` for `MeowTests`
 5. **integration-test** — simulator-based NetworkExtension lifecycle + FFI tests (subset that runs without device)
-6. **ui-test** — `xcodebuild test -scheme meow-ios -destination '...'` for `MeowUITests`
-7. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
+6. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
 
-All jobs upload artifacts. `unit-test` + `ui-test` upload `xcresult` bundles for PR comment summaries via `xcresulttool`.
+All jobs upload artifacts. `unit-test` uploads `xcresult` bundles for PR comment summaries via `xcresulttool`. The XCUITest `ui-test` lane that existed in v1.2 has been retired alongside the MeowUITests target (§5); manual pre-release smoke on a physical device (T2.8) covers screen-level interaction.
 
 #### `release.yml` (on tag `v*.*.*`)
 
 1. All `ci.yml` gates must pass
-2. `fastlane build_appstore` — archives with App Store signing using `/Users/mlv/.appstoreconnect/AuthKey_5MC8U9Z7P9.p8`
+2. `fastlane build_appstore` — archives with App Store signing using `~/.appstoreconnect/AuthKey_<ASC_KEY_ID>.p8`
 3. `fastlane upload_testflight` — pushes to TestFlight external testing group
 4. Tag notes generated from `git log --pretty=format:'- %s'` since previous tag
 5. Manual approval gate before App Store submission via `fastlane deliver`
@@ -627,15 +584,15 @@ platform :ios do
 end
 ```
 
-ASC API key `5MC8U9Z7P9` (issuer `1200242f-e066-47cc-9ac8-b3affd0eee32`) is loaded from CI secrets — never committed to the repo.
+ASC API key `<ASC_KEY_ID>` (issuer `<ISSUER_ID>`) is loaded from CI secrets — never committed to the repo.
 
 ### 11.3 Required Secrets
 
 | Secret | Purpose |
 |--------|--------|
 | `APP_STORE_CONNECT_API_KEY_P8` | fastlane upload/signing |
-| `APP_STORE_CONNECT_KEY_ID` | `5MC8U9Z7P9` |
-| `APP_STORE_CONNECT_ISSUER_ID` | `1200242f-e066-47cc-9ac8-b3affd0eee32` |
+| `APP_STORE_CONNECT_KEY_ID` | `<ASC_KEY_ID>` |
+| `APP_STORE_CONNECT_ISSUER_ID` | `<ISSUER_ID>` |
 | `MATCH_PASSWORD` | If we adopt fastlane match |
 
 ### 11.4 Test Result Reporting
@@ -648,9 +605,8 @@ ASC API key `5MC8U9Z7P9` (issuer `1200242f-e066-47cc-9ac8-b3affd0eee32`) is load
 ### 11.5 Branch Protection
 
 On `main`:
-- Required checks: `lint`, `unit-test`, `ui-test`
+- Required checks: `lint`, `unit-test`
 - Required reviews: 1 approver
-- Nightly E2E failure pings `#meow-ios-alerts` but does not auto-block `main` (flaky real-device tests shouldn't block urgent fixes)
 
 ---
 
@@ -693,7 +649,7 @@ Still open:
 
 Resolved (team-lead, 2026-04-17; v1.3 retirement 2026-04-18):
 
-- **CI runner topology** — GitHub-hosted `macos-15` for all CI lanes (lint / unit / UI / archive). No self-hosted runner; device-class coverage moved to the developer's manual pre-release smoke (T2.8).
+- **CI runner topology** — GitHub-hosted `macos-15` for all CI lanes (lint / unit / integration / archive). No self-hosted runner; device-class coverage moved to the developer's manual pre-release smoke (T2.8).
 - **Swift Testing vs XCTest** — standardize on **Swift Testing** for all new unit/integration tests. XCTest is retained only where the framework forces it (XCUITest, `measure` blocks in perf tests).
 
 ---
