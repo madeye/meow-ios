@@ -13,16 +13,15 @@ import Testing
 /// PRD v1.3 / PROJECT_PLAN.md T2.9 defers non-DNS UDP forwarding to
 /// post-M1.5. Until `mihomo_tunnel::udp::handle_udp` is wired to
 /// netstack-smoltcp's UDP socket surface, the engine cannot send or
-/// receive through these three adapters end-to-end — even though the
-/// fixture servers stand up cleanly and the Clash subscription wires
-/// the proxy entries correctly. When T2.9 lands, drop the `.disabled`
-/// attribute on each `@Test` below; no fixture changes are required
-/// (see TEST_FIXTURES.md §6 P4).
+/// receive through these three adapters end-to-end. When T2.9 lands,
+/// drop the `.disabled` attribute on each `@Test` below and stand up
+/// WireGuard/Hysteria2/TUIC fixtures locally before running.
 ///
-/// The fixture bring-up lives in `scripts/test-e2e-ios.sh`
-/// (`MEOW_FIXTURE_PROTOCOLS=wg,hy2,tuic`). The Swift harness that
-/// loads the subscription and drives the proxy selection is shared
-/// with the SS/Trojan tests — it lands with T4.2 Home Screen anchors.
+/// The automated fixture orchestration that previously lived in
+/// `scripts/test-e2e-ios.sh` was retired in v1.4 (user directive,
+/// 2026-04-18). Fixtures must be brought up manually — e.g. via
+/// `wireguard-go`, `hysteria`, and `tuic-server` installed through
+/// Homebrew — for on-demand local validation.
 ///
 /// `.serialized` is required — the engine is a process singleton.
 @Suite("UDP-backed protocol fixtures", .tags(.udpProtocols), .serialized)

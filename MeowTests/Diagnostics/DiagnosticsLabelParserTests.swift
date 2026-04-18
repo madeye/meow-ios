@@ -3,11 +3,10 @@ import Testing
 
 /// Unit tests for the PRD §4.4 Diagnostics Surface Contract parser.
 ///
-/// The parser (`DiagnosticsLabelParser` in `MeowUITests/Support/VPhone.swift`)
-/// is the only consumer of the OCR'd panel output. These tests lock in
-/// the label grammar so that a sloppy Dev change to the panel's
+/// The parser (`DiagnosticsLabelParser` in `MeowModels/DiagnosticsContract.swift`)
+/// locks in the label grammar so that a sloppy change to the panel's
 /// rendering code (e.g. inserting emoji, localising "PASS", reordering
-/// rows) fails the parser before it reaches the nightly gate.
+/// rows) fails the parser before it reaches the manual pre-release smoke.
 @Suite("PRD §4.4 diagnostics label parser")
 struct DiagnosticsLabelParserTests {
     @Test
