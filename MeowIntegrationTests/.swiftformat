@@ -1,0 +1,6 @@
+--swiftversion 6.2
+
+# See MeowTests/.swiftformat — same rationale: noForceUnwrapInTests produces
+# nested #require patterns that fail to compile under Swift 6.3+ Testing
+# macro expansion.
+--disable noForceUnwrapInTests

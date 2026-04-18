@@ -1,0 +1,9 @@
+--swiftversion 6.2
+
+# Swift Testing's #require macro can't be nested inside another #require
+# without tripping the Swift 6.3+ compiler's "recursive expansion of macro"
+# check. swiftformat's noForceUnwrapInTests would rewrite URL(string:)! into
+# #require(URL(string:)), producing that nested pattern here because the
+# result feeds another #require. Keep the explicit force-unwrap on known-good
+# test URLs instead.
+--disable noForceUnwrapInTests
