@@ -63,6 +63,7 @@ build-output/
 App/Resources/geox/*.mmdb
 
 # ---- Secrets / local ----
+Local.xcconfig
 local.properties
 *.mobileprovision
 *.certSigningRequest
