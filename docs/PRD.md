@@ -120,11 +120,11 @@ Remote proxy server
 **Complete C API surface:**
 ```c
 // Engine lifecycle
-void  meow_engine_set_home_dir(const char *dir);
+void  meow_core_set_home_dir(const char *dir);
 int   meow_engine_start(const char *config_path, const char *api_addr, const char *secret);
 void  meow_engine_stop(void);
 int   meow_engine_is_running(void);
-void  meow_engine_get_traffic(long long *upload, long long *download);
+void  meow_engine_traffic(long long *upload, long long *download);
 int   meow_engine_validate_config(const char *yaml, int len);
 int   meow_engine_convert_subscription(const char *raw, int len, char *dst, int cap);
 int   meow_engine_last_error(char *dst, int cap);
