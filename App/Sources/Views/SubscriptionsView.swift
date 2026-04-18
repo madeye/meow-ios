@@ -16,9 +16,12 @@ struct SubscriptionsView: View {
                             .foregroundStyle(profile.isSelected ? .green : .secondary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(profile.name).font(.headline)
-                            Text("Updated \(profile.lastUpdated, style: .relative) ago")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text(
+                                "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
+                                comment: "Subscription row subtitle; %@ = relative time since last update",
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button {
@@ -38,14 +41,14 @@ struct SubscriptionsView: View {
                     Button(role: .destructive) {
                         try? service.delete(profile)
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label("common.delete", systemImage: "trash")
                     }
                 }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .navigationTitle("Subscriptions")
+        .navigationTitle("subscriptions.nav.title")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -59,8 +62,8 @@ struct SubscriptionsView: View {
         .sheet(isPresented: $showingAdd) {
             AddSubscriptionSheet(error: $error)
         }
-        .alert("Error", isPresented: .constant(error != nil)) {
-            Button("OK") { error = nil }
+        .alert("common.error", isPresented: .constant(error != nil)) {
+            Button("common.ok") { error = nil }
         } message: {
             Text(error ?? "")
         }
@@ -79,20 +82,22 @@ private struct AddSubscriptionSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Name", text: $name)
-                    TextField("URL", text: $url)
+                    TextField("subscriptions.add.field.name", text: $name)
+                    TextField("subscriptions.add.field.url", text: $url)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                 }
             }
-            .navigationTitle("Add Subscription")
+            .navigationTitle("subscriptions.add.nav.title")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("common.cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(submitting ? "Adding…" : "Add") {
+                    Button(LocalizedStringKey(
+                        submitting ? "subscriptions.add.button.adding" : "subscriptions.add.button.add",
+                    )) {
                         submitting = true
                         Task {
                             do {

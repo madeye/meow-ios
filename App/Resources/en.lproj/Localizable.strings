@@ -1,0 +1,153 @@
+/* meow-ios — English base strings.
+   Key namespacing by screen (matches accessibilityIdentifier namespaces where sensible).
+
+   Strings deliberately NOT localized and therefore NOT in this file:
+   - HomeView.stageBadgeText — QA harness pins on lowercase ASCII ("disconnected", "connecting", "connected", "disconnecting").
+   - DiagnosticsViewController row content — OCR harness pins on uppercase ASCII "CHECK: PASS/FAIL" format.
+   - UserDiagnosticsView error reason codes ("tunnel_not_running", "connect_failed", "encode_failed", "unknown_error") — stable diagnostic identifiers.
+   - Chart axis raw values ("t", "up", "down", "series", "day", "tx", "rx") — internal chart bindings, not displayed text.
+   - TextField placeholders showing example values ("1.1.1.1:443", "example.com", "https://…/generate_204", "https://1.1.1.1/dns-query") — URL/address examples, not prose.
+   - Log-level tag values ("debug", "info", "warning", "error", "silent") in Picker .tag() — model values, not display text. Display labels ARE localized. */
+
+
+/* Tab bar */
+"tabs.home" = "Home";
+"tabs.subscriptions" = "Subscriptions";
+"tabs.traffic" = "Traffic";
+"tabs.logs" = "Logs";
+"tabs.settings" = "Settings";
+
+
+/* Common */
+"common.ok" = "OK";
+"common.cancel" = "Cancel";
+"common.close" = "Close";
+"common.error" = "Error";
+"common.delete" = "Delete";
+
+
+/* Home screen */
+"home.nav.title" = "meow";
+"home.profile.none" = "No Profile";
+"home.toggle.connect" = "Connect";
+"home.toggle.connecting" = "Connecting…";
+"home.toggle.disconnect" = "Disconnect";
+"home.toggle.disconnecting" = "Disconnecting…";
+"home.packet.ingress" = "Ingress";
+"home.packet.egress" = "Egress";
+"home.traffic.upload" = "Upload";
+"home.traffic.download" = "Download";
+"home.traffic.total %@" = "Total %@";
+"home.proxyGroups.header" = "Proxy Groups";
+"home.proxyGroups.placeholder.connected" = "Loading groups…";
+"home.proxyGroups.placeholder.connecting" = "Connecting — groups appear when the engine is up.";
+"home.proxyGroups.placeholder.disconnected" = "Connect to populate available groups.";
+"home.nav.connections" = "Connections";
+"home.nav.rules" = "Rules";
+"home.nav.providers" = "Providers";
+"home.nav.diagnostics" = "Diagnostics";
+"home.error.apiUnavailable" = "API unavailable";
+"home.error.selectFailed" = "select failed";
+
+
+/* Subscriptions */
+"subscriptions.nav.title" = "Subscriptions";
+"subscriptions.add.nav.title" = "Add Subscription";
+"subscriptions.add.field.name" = "Name";
+"subscriptions.add.field.url" = "URL";
+"subscriptions.add.button.add" = "Add";
+"subscriptions.add.button.adding" = "Adding…";
+"subscriptions.import.errorTitle" = "Couldn't import subscription";
+"subscriptions.row.updatedAgo %@" = "Updated %@ ago";
+
+
+/* Connections */
+"connections.empty.title" = "No connections";
+"connections.empty.description" = "Active traffic will appear here.";
+"connections.toolbar.closeAll" = "Close All";
+"connections.swipe.close" = "Close";
+"connections.nav.titleFormat %lld" = "Connections (%lld)";
+
+
+/* Rules */
+"rules.empty.title" = "No rules";
+"rules.empty.description" = "Rules appear when a profile is loaded.";
+"rules.nav.titleFormat %lld" = "Rules (%lld)";
+
+
+/* Logs */
+"logs.picker.level" = "Level";
+"logs.level.debug" = "debug";
+"logs.level.info" = "info";
+"logs.level.warning" = "warning";
+"logs.level.error" = "error";
+"logs.toggle.autoScroll" = "Auto-scroll";
+"logs.empty.title" = "No logs";
+"logs.empty.description" = "Logs appear when the tunnel is active.";
+"logs.nav.titleFormat %lld" = "Logs (%lld)";
+
+
+/* Providers */
+"providers.empty.title" = "No providers";
+"providers.empty.description" = "Providers appear when a profile is loaded.";
+"providers.nav.titleFormat %lld" = "Providers (%lld)";
+"providers.a11y.healthCheck %@" = "Health check %@";
+"providers.a11y.test %@" = "Test %@";
+
+
+/* Yaml Editor */
+"yamlEditor.nav.title" = "Edit Config";
+"yamlEditor.empty.title" = "Empty config";
+"yamlEditor.empty.description" = "Paste a Clash YAML config to start editing.";
+"yamlEditor.button.revert" = "Revert";
+"yamlEditor.button.save" = "Save";
+"yamlEditor.button.saving" = "Saving…";
+"yamlEditor.a11y.revert" = "Revert to last saved config";
+"yamlEditor.a11y.save" = "Save config";
+"yamlEditor.error.invalid" = "Invalid config";
+
+
+/* Settings */
+"settings.nav.title" = "Settings";
+"settings.section.general" = "General";
+"settings.toggle.allowLan" = "Allow LAN";
+"settings.toggle.ipv6" = "IPv6";
+"settings.picker.logLevel" = "Log Level";
+"settings.logLevel.debug" = "Debug";
+"settings.logLevel.info" = "Info";
+"settings.logLevel.warning" = "Warning";
+"settings.logLevel.error" = "Error";
+"settings.logLevel.silent" = "Silent";
+"settings.section.dns" = "DNS";
+"settings.field.dohServer" = "DoH Server";
+"settings.section.diagnostics" = "Diagnostics";
+"settings.label.diagnostics" = "Diagnostics";
+"settings.section.about" = "About";
+"settings.about.version" = "Version";
+"settings.about.memory" = "Memory";
+
+
+/* User Diagnostics */
+"userDiagnostics.nav.title" = "Diagnostics";
+"userDiagnostics.section.directTcp" = "Direct TCP";
+"userDiagnostics.section.proxyHttp" = "Proxy HTTP";
+"userDiagnostics.section.dns" = "DNS Resolver";
+"userDiagnostics.empty.title" = "VPN required";
+"userDiagnostics.empty.description" = "Connect to the proxy to run Proxy HTTP and DNS Resolver checks.";
+"userDiagnostics.button.test" = "Test";
+"userDiagnostics.button.testing" = "Testing…";
+"userDiagnostics.error.parseHostPort" = "Expected host:port (e.g. 1.1.1.1:443)";
+
+
+/* Traffic */
+"traffic.nav.title" = "Traffic";
+"traffic.empty.title" = "No traffic data yet";
+"traffic.empty.description" = "Start the VPN to begin recording usage.";
+"traffic.label.speed" = "Speed";
+"traffic.label.last7Days" = "Last 7 Days";
+"traffic.tile.today" = "Today";
+"traffic.tile.thisMonth" = "This Month";
+
+
+/* Fullscreen diagnostics overlay (ContentView) */
+"content.diagnostics.nav.title" = "Diagnostics";

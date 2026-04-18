@@ -24,7 +24,7 @@ struct HomeView: View {
             .padding(16)
         }
         .scrollContentBackground(.hidden)
-        .navigationTitle("meow")
+        .navigationTitle("home.nav.title")
         .task(id: vpnManager.stage) {
             await refreshGroupsIfConnected()
         }
@@ -53,12 +53,12 @@ struct HomeView: View {
                     PacketStat(
                         systemImage: "arrow.down.to.line.square",
                         count: ipcBridge.currentTraffic.ingressPackets,
-                        label: "Ingress",
+                        label: "home.packet.ingress",
                     )
                     PacketStat(
                         systemImage: "arrow.up.to.line.square",
                         count: ipcBridge.currentTraffic.egressPackets,
-                        label: "Egress",
+                        label: "home.packet.egress",
                     )
                     Spacer()
                 }
@@ -92,13 +92,13 @@ struct HomeView: View {
     private var trafficRow: some View {
         HStack(spacing: 12) {
             TrafficTile(
-                title: "Upload",
+                title: "home.traffic.upload",
                 bytes: ipcBridge.currentTraffic.uploadBytes,
                 rate: ipcBridge.currentTraffic.uploadRate,
                 systemImage: "arrow.up",
             )
             TrafficTile(
-                title: "Download",
+                title: "home.traffic.download",
                 bytes: ipcBridge.currentTraffic.downloadBytes,
                 rate: ipcBridge.currentTraffic.downloadRate,
                 systemImage: "arrow.down",
@@ -111,7 +111,7 @@ struct HomeView: View {
     private var proxyGroupsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Proxy Groups")
+                Text("home.proxyGroups.header")
                     .font(.caption.smallCaps())
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -129,7 +129,7 @@ struct HomeView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "network.slash")
                             .foregroundStyle(.secondary)
-                        Text(placeholderText)
+                        Text(placeholderKey)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -158,11 +158,11 @@ struct HomeView: View {
         }
     }
 
-    private var placeholderText: String {
+    private var placeholderKey: LocalizedStringKey {
         switch vpnManager.stage {
-        case .connected: "Loading groups…"
-        case .connecting: "Connecting — groups appear when the engine is up."
-        default: "Connect to populate available groups."
+        case .connected: "home.proxyGroups.placeholder.connected"
+        case .connecting: "home.proxyGroups.placeholder.connecting"
+        default: "home.proxyGroups.placeholder.disconnected"
         }
     }
 
@@ -171,31 +171,31 @@ struct HomeView: View {
     private var auxiliaryNavSection: some View {
         VStack(spacing: 10) {
             NavRow(
-                title: "Connections",
+                title: "home.nav.connections",
                 systemImage: "chevron.right.square",
                 identifier: "home.nav.connections",
             ) { ConnectionsView() }
 
             NavRow(
-                title: "Rules",
+                title: "home.nav.rules",
                 systemImage: "arrow.triangle.branch",
                 identifier: "home.nav.rules",
             ) { RulesView() }
 
             NavRow(
-                title: "Providers",
+                title: "home.nav.providers",
                 systemImage: "tray.full",
                 identifier: "home.nav.providers",
             ) { ProvidersView() }
 
             NavRow(
-                title: "Diagnostics",
+                title: "home.nav.diagnostics",
                 systemImage: "stethoscope",
                 identifier: "home.nav.diagnostics",
             ) {
                 DiagnosticsPanelView()
                     .ignoresSafeArea(edges: .bottom)
-                    .navigationTitle("Diagnostics")
+                    .navigationTitle("home.nav.diagnostics")
                     .navigationBarTitleDisplayMode(.inline)
             }
         }
@@ -204,7 +204,10 @@ struct HomeView: View {
     // MARK: - Derived state
 
     private var profileName: String {
-        selected.first?.name ?? "No Profile"
+        selected.first?.name ?? String(
+            localized: "home.profile.none",
+            comment: "Placeholder shown in profile-name slot on Home when no subscription profile is selected",
+        )
     }
 
     private var isConnected: Bool {
@@ -227,12 +230,12 @@ struct HomeView: View {
         }
     }
 
-    private var toggleTitle: String {
+    private var toggleTitle: LocalizedStringKey {
         switch vpnManager.stage {
-        case .connected: "Disconnect"
-        case .connecting: "Connecting…"
-        case .stopping: "Disconnecting…"
-        default: "Connect"
+        case .connected: "home.toggle.disconnect"
+        case .connecting: "home.toggle.connecting"
+        case .stopping: "home.toggle.disconnecting"
+        default: "home.toggle.connect"
         }
     }
 
@@ -274,7 +277,10 @@ struct HomeView: View {
             groups = ProxyGroupModel.build(from: resp.proxies)
             groupsLoadError = nil
         } catch {
-            groupsLoadError = "API unavailable"
+            groupsLoadError = String(
+                localized: "home.error.apiUnavailable",
+                comment: "Inline error shown in Proxy Groups header when mihomo API is not reachable",
+            )
         }
     }
 
@@ -283,7 +289,10 @@ struct HomeView: View {
             try await mihomoAPI.selectProxy(group: group, name: proxy)
             await refreshGroupsIfConnected()
         } catch {
-            groupsLoadError = "select failed"
+            groupsLoadError = String(
+                localized: "home.error.selectFailed",
+                comment: "Inline error shown in Proxy Groups header when selecting a proxy fails",
+            )
         }
     }
 
@@ -462,7 +471,7 @@ private struct DelayBadge: View {
 private struct PacketStat: View {
     let systemImage: String
     let count: Int64
-    let label: String
+    let label: LocalizedStringKey
 
     var body: some View {
         HStack(spacing: 6) {
@@ -500,7 +509,7 @@ private struct StageDot: View {
 }
 
 private struct TrafficTile: View {
-    let title: String
+    let title: LocalizedStringKey
     let bytes: Int64
     let rate: Int64
     let systemImage: String
@@ -514,9 +523,12 @@ private struct TrafficTile: View {
                 Text(ByteCountFormatter.string(fromByteCount: rate, countStyle: .binary) + "/s")
                     .font(.title3.bold())
                     .monospacedDigit()
-                Text("Total " + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .binary))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "home.traffic.total \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .binary))",
+                    comment: "Total bytes label under the rate display; %@ = formatted byte count",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -524,7 +536,7 @@ private struct TrafficTile: View {
 }
 
 private struct NavRow<Destination: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let identifier: String
     @ViewBuilder let destination: () -> Destination

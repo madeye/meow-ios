@@ -11,15 +11,15 @@ struct LogsView: View {
     var body: some View {
         VStack {
             HStack {
-                Picker("Level", selection: $level) {
-                    Text("debug").tag("debug")
-                    Text("info").tag("info")
-                    Text("warning").tag("warning")
-                    Text("error").tag("error")
+                Picker("logs.picker.level", selection: $level) {
+                    Text("logs.level.debug").tag("debug")
+                    Text("logs.level.info").tag("info")
+                    Text("logs.level.warning").tag("warning")
+                    Text("logs.level.error").tag("error")
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("logs.levelPicker")
-                Toggle("Auto-scroll", isOn: $autoScroll)
+                Toggle("logs.toggle.autoScroll", isOn: $autoScroll)
                     .labelsHidden()
                     .toggleStyle(.button)
                     .accessibilityIdentifier("logs.autoScrollToggle")
@@ -35,9 +35,9 @@ struct LogsView: View {
                 .overlay {
                     if entries.isEmpty {
                         ContentUnavailableView(
-                            "No logs",
+                            "logs.empty.title",
                             systemImage: "text.alignleft",
-                            description: Text("Logs appear when the tunnel is active."),
+                            description: Text("logs.empty.description"),
                         )
                         .accessibilityIdentifier("logs.emptyState")
                     }
@@ -55,7 +55,10 @@ struct LogsView: View {
                 errorBanner(errorMessage)
             }
         }
-        .navigationTitle("Logs (\(entries.count))")
+        .navigationTitle(Text(
+            "logs.nav.titleFormat \(entries.count)",
+            comment: "Logs screen navigation title; %lld = entry count",
+        ))
         .task(id: level) { await subscribe() }
     }
 

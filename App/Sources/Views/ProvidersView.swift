@@ -22,9 +22,9 @@ struct ProvidersView: View {
         .overlay {
             if providers.isEmpty {
                 ContentUnavailableView(
-                    "No providers",
+                    "providers.empty.title",
                     systemImage: "tray",
-                    description: Text("Providers appear when a profile is loaded."),
+                    description: Text("providers.empty.description"),
                 )
                 .accessibilityIdentifier("providers.emptyState")
             }
@@ -34,7 +34,10 @@ struct ProvidersView: View {
                 errorBanner(errorMessage)
             }
         }
-        .navigationTitle("Providers (\(providers.count))")
+        .navigationTitle(Text(
+            "providers.nav.titleFormat \(providers.count)",
+            comment: "Providers screen navigation title; %lld = provider count",
+        ))
         .task { await load() }
         .refreshable { await load() }
     }
@@ -59,7 +62,10 @@ struct ProvidersView: View {
                     .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Health check \(provider.name)")
+            .accessibilityLabel(Text(
+                "providers.a11y.healthCheck \(provider.name)",
+                comment: "Providers section health-check button a11y label; %@ = provider name",
+            ))
             .accessibilityIdentifier("providers.section.\(slug).healthCheck")
         }
     }
@@ -95,7 +101,10 @@ struct ProvidersView: View {
                         .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("Test \(proxy.name)")
+                .accessibilityLabel(Text(
+                    "providers.a11y.test \(proxy.name)",
+                    comment: "Providers row test-delay button a11y label; %@ = proxy name",
+                ))
                 .accessibilityIdentifier("providers.row.\(providerSlug).\(proxySlug).testButton")
             }
         }
