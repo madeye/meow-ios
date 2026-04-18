@@ -62,6 +62,15 @@ final class MihomoAPI: @unchecked Sendable {
         try await get("/providers/proxies")
     }
 
+    /// Triggers mihomo's bulk health-check for every proxy in a provider
+    /// (`GET /providers/proxies/{name}/healthcheck`). The endpoint returns
+    /// 204 on success; fresh delays are surfaced on the next `getProviders()`.
+    func healthCheckProvider(name: String) async throws {
+        let url = baseURL.appending(path: "/providers/proxies/\(name.urlEscaped)/healthcheck")
+        let (_, resp) = try await session.data(for: request(for: url))
+        try throwIfHTTPError(resp)
+    }
+
     func getMemory() async throws -> MemoryResponse {
         try await get("/memory")
     }
