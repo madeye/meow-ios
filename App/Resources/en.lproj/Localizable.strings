@@ -48,6 +48,8 @@
 "home.nav.diagnostics" = "Diagnostics";
 "home.error.apiUnavailable" = "API unavailable";
 "home.error.selectFailed" = "select failed";
+"home.error.tunnelFailed.title" = "Couldn't start tunnel";
+"home.error.dismiss" = "Dismiss";
 
 
 /* Subscriptions */

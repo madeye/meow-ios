@@ -40,7 +40,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 writeState(.connected, profileID: profileID)
                 completionHandler(nil)
             } catch {
-                log.error("engine start failed: \(error.localizedDescription)")
+                log.error("engine start failed: \(error.localizedDescription, privacy: .public)")
                 writeState(.error, errorMessage: error.localizedDescription)
                 completionHandler(error)
             }
@@ -133,7 +133,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             do {
                 try await engine?.reloadConfig()
             } catch {
-                log.error("reload failed: \(error.localizedDescription)")
+                log.error("reload failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -152,7 +152,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             try SharedStore.writeState(state)
             DarwinBridge.post(.state)
         } catch {
-            log.error("failed to write state: \(error.localizedDescription)")
+            log.error("failed to write state: \(error.localizedDescription, privacy: .public)")
         }
     }
 }
