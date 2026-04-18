@@ -57,6 +57,12 @@ mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", branch = "main" 
 [build-dependencies]
 cbindgen = "0.28"
 
+[dev-dependencies]
+# xdg_home_dir_tests probes the env-var wire-up via the GeoIP load path;
+# maxminddb version matches the workspace pin mihomo-config resolves.
+tempfile = "3"
+maxminddb = "0.27"
+
 [profile.release]
 # Shrink binary for the 50MB extension budget. mihomo-rust adds significant
 # weight; LTO + size-optimized codegen keeps us within the NE resident-memory

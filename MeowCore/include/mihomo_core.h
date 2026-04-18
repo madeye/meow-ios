@@ -28,6 +28,12 @@ void meow_core_init(void);
  * Set the app-group container path where config.yaml and cache files live.
  * `dir` may be NULL or empty.
  *
+ * Also exports `$XDG_CONFIG_HOME=<dir>` into the process env so `mihomo-config`
+ * finds its GeoIP database at `<dir>/mihomo/Country.mmdb` (upstream mihomo's
+ * resolution order is `$XDG_CONFIG_HOME/mihomo/` → `$HOME/.config/mihomo/`).
+ * iOS sandbox HOME has no `.config`, so the env var is how the bundled Country.mmdb
+ * lands on the engine's load path.
+ *
  * # Safety
  * `dir` must point to a NUL-terminated UTF-8 string or be NULL.
  */

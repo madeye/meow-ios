@@ -20,6 +20,9 @@ mod logging;
 mod subscription;
 mod tun2socks;
 
+#[cfg(test)]
+mod xdg_home_dir_tests;
+
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
@@ -90,12 +93,26 @@ pub extern "C" fn meow_core_init() {
 /// Set the app-group container path where config.yaml and cache files live.
 /// `dir` may be NULL or empty.
 ///
+/// Also exports `$XDG_CONFIG_HOME=<dir>` into the process env so `mihomo-config`
+/// finds its GeoIP database at `<dir>/mihomo/Country.mmdb` (upstream mihomo's
+/// resolution order is `$XDG_CONFIG_HOME/mihomo/` → `$HOME/.config/mihomo/`).
+/// iOS sandbox HOME has no `.config`, so the env var is how the bundled Country.mmdb
+/// lands on the engine's load path.
+///
 /// # Safety
 /// `dir` must point to a NUL-terminated UTF-8 string or be NULL.
 #[no_mangle]
 pub unsafe extern "C" fn meow_core_set_home_dir(dir: *const c_char) {
     let parsed = cstr_to_str(dir).map(str::to_owned).filter(|s| !s.is_empty());
     logging::bridge_log(&format!("meow_core_set_home_dir: {:?}", parsed));
+    if let Some(ref d) = parsed {
+        // SAFETY: `std::env::set_var` is safe in edition 2021 (the unsafe-by-default
+        // shift is edition 2024 only, see rust-lang/rust#124636). Callers invoke
+        // this at process startup (AppModel.init / TunnelEngine.start) *before*
+        // the tokio runtime or any engine thread spawns, so no concurrent env
+        // reader races with this write.
+        std::env::set_var("XDG_CONFIG_HOME", d);
+    }
     *HOME_DIR.lock() = parsed;
 }
 
