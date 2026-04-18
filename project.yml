@@ -142,13 +142,6 @@ targets:
       - path: MeowUITests
         excludes:
           - "README.md"
-          # Retired E2E fixtures — v1.4 scope collapse (see PROJECT_PLAN §T6.5).
-          # Files stay in tree per user directive; excluded from compile to
-          # prevent silent build/discovery of retired scenarios.
-          - "Flows/LocalE2ETests.swift"
-          - "Flows/E2E5CheckGateTests.swift"
-          - "Support/VPhone.swift"
-          - "Support/FiveCheckGateDriver.swift"
     dependencies:
       - target: meow-ios
       - package: MeowShared

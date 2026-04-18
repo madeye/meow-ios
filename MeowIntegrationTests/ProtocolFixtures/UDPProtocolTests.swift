@@ -19,10 +19,10 @@ import Testing
 /// attribute on each `@Test` below; no fixture changes are required
 /// (see TEST_FIXTURES.md §6 P4).
 ///
-/// The fixture bring-up lives in `scripts/test-e2e-ios.sh`
-/// (`MEOW_FIXTURE_PROTOCOLS=wg,hy2,tuic`). The Swift harness that
-/// loads the subscription and drives the proxy selection is shared
-/// with the SS/Trojan tests — it lands with T4.2 Home Screen anchors.
+/// The Swift harness that loads the subscription and drives the proxy
+/// selection is shared with the SS/Trojan tests — it lands with T4.2
+/// Home Screen anchors. Fixture bring-up is run manually on-device per
+/// PROJECT_PLAN v1.4 (automated e2e harness retired).
 ///
 /// `.serialized` is required — the engine is a process singleton.
 @Suite("UDP-backed protocol fixtures", .tags(.udpProtocols), .serialized)
