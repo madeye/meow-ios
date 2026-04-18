@@ -8,6 +8,7 @@
 - v1.2 — T2.6 (Debug Diagnostics Panel) inserted as nightly E2E gate. Memory budget aligned to TEST_STRATEGY v1.2.
 - v1.3 — Removed `mihomo-listener` from Rust dep list (confirmed not needed in in-process path, commit `dd3d44a`). Added T2.9 (non-DNS UDP path) as post-M1.5 backlog task with upstream dependency gate. Noted `src/subscription.rs` and `src/diagnostics.rs` as Rust-native replacements for old Go paths; T3.5 and T4.10 depend on T1.4 directly.
 - v1.4 — Automated E2E scope retired per user directive 2026-04-18. T6.5 (Nightly E2E Gate, vphone-cli harness) deleted. T2.6 no longer flagged as nightly gate blocker — now feeds a manual on-device smoke owned by the user. T2.8 reframed from automated E2E smoke to manual device smoke. T6.3 UI Tests scope clarified: unit-level UI only, not full-tunnel. M1.5 milestone row rewritten to "Manual Smoke Passes". Critical path updated — nightly gate removed. Self-hosted runner docs, `nightly.yml`, tart/vphone scripts, LocalE2ETests target all queued for deletion in a separate QA-led audit PR.
+- v1.5 — T4.10 (User-Facing Diagnostics Screen) deferred from M4 to M5 per team-lead directive 2026-04-18. Architectural addendum added to §T4.10 documenting the process-affinity constraint on 2/3 FFIs (`meow_engine_test_proxy_http`, `meow_engine_test_dns` gate on `engine::tunnel()` which is `Some` only inside the PacketTunnel extension process). M4 close-out diff: T4.7, T4.8, T4.9, T4.11, T4.12 shipped; T4.10 moved to M5 alongside Traffic + UDP work that already requires extension-side surface area.
 
 ---
 
@@ -288,13 +289,15 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Revert button: restore `yamlBackup`
 - **Depends on:** T3.1, T1.4, T4.3
 
-#### T4.10 — User-Facing Diagnostics Screen
+#### T4.10 — User-Facing Diagnostics Screen *(deferred to M5, 2026-04-18)*
 - Pushed from Settings
 - Three test cards: Direct TCP, Proxy HTTP, DNS Resolver (user-supplied inputs)
 - Each with host/URL input field and "Test" button; results show latency or error
 - Calls `meow_engine_test_direct_tcp()`, `meow_engine_test_proxy_http()`, `meow_engine_test_dns()` C FFI (backed by `src/diagnostics.rs` in Rust)
 - Distinct from T2.6 (debug-build diagnostics for manual smoke): T4.10 is the shipping user-facing diagnostics view, always available
 - **Depends on:** T1.4, T4.8
+
+> **Architectural addendum (2026-04-18, M4 close-out):** Two of the three FFIs (`meow_engine_test_proxy_http`, `meow_engine_test_dns`) gate on `engine::tunnel()`, which returns `Some` only inside the PacketTunnel extension process — calling them from the host app returns `-1` "engine not running" even when the VPN is up. Only `meow_engine_test_direct_tcp` is safely callable from the app process. Shipping T4.10 therefore requires routing the two engine-bound checks over IPC (extending the existing `DiagnosticsIPC` channel built for T2.6: `NETunnelProviderSession.sendProviderMessage` → `PacketTunnelProvider.handleAppMessage` → diagnostics dispatcher → reply payload). Screen UX must surface a uniform **"VPN required"** empty state when the tunnel isn't running, since 2/3 cards become unusable in that state — not a per-card disabled flag. Direct TCP can remain in-app to give the user *something* actionable while disconnected. T4.10 is reassigned to M5 because the IPC routing is materially adjacent to other M5 extension-side work (T2.9 non-DNS UDP, traffic charting). See `feedback_verify_ffi_process_affinity.md` for the brief-side gap that surfaced this.
 
 #### T4.11 — Providers Screen
 - Pushed from Home (post-connection)
@@ -405,8 +408,8 @@ T6.* after T5.*
 | M1.5: Manual Smoke Passes | end of week 3 | T2.6 (Debug Diagnostics Panel) complete on device; user confirms all 5 checks `PASS` on their iPhone via T2.8 manual smoke |
 | M2: Basic UI | 4–5 | Connect/disconnect, subscriptions, settings |
 | M3: Proxy & Realtime | 6–7 | Proxy selection, connections, rules, logs |
-| M4: Config & Diag | 8 | YAML editor, validation, user diagnostics, providers |
-| M5: Traffic, UDP Patch & Polish | 9–10 | Charts, daily history, T2.9 (non-DNS UDP), iOS 26 UI pass |
+| M4: Config & Providers | 8 | YAML editor + validation (T4.9), providers (T4.11), settings/logs/connections (T4.7/T4.8/T4.12) |
+| M5: Diagnostics, Traffic, UDP Patch & Polish | 9–10 | T4.10 user-facing diagnostics (over IPC), charts, daily history, T2.9 (non-DNS UDP), iOS 26 UI pass |
 | M6: QA & Ship | 11–12 | TestFlight beta, App Store submission |
 
 ---
