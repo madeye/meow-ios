@@ -72,6 +72,52 @@ enum DiagnosticsRunner {
         return .fail("mem=\(mb)mb>=\(memoryFailLimitMB)mb")
     }
 
+    // MARK: - User-initiated diagnostics (T4.10)
+
+    /// Dispatcher for user-initiated diagnostics. Only `proxyHttp` and `dns`
+    /// route through here — `directTcp` runs in-process on the app side and
+    /// never reaches the extension.
+    static func runUser(request: UserDiagnosticsRequest) -> UserDiagnosticsResponse {
+        switch request {
+        case let .proxyHttp(url, timeoutMs):
+            userProxyHttp(url: url, timeoutMs: timeoutMs)
+        case let .dns(host, timeoutMs):
+            userDns(host: host, timeoutMs: timeoutMs)
+        }
+    }
+
+    static func userProxyHttp(url: String, timeoutMs: UInt32) -> UserDiagnosticsResponse {
+        var status: Int32 = 0
+        var ms: Int64 = 0
+        let rc = url.withCString { ptr in
+            meow_engine_test_proxy_http(ptr, Int32(clamping: timeoutMs), &status, &ms)
+        }
+        if rc < 0 {
+            return .failure(reason: lastRustError(fallback: "request_failed"))
+        }
+        return .success(latencyMs: ms, httpStatus: status)
+    }
+
+    static func userDns(host: String, timeoutMs: UInt32) -> UserDiagnosticsResponse {
+        var buf = [CChar](repeating: 0, count: 512)
+        var ms: Int64 = 0
+        let before = Date()
+        let rc = buf.withUnsafeMutableBufferPointer { buf -> Int32 in
+            host.withCString { ptr in
+                meow_engine_test_dns(ptr, Int32(clamping: timeoutMs), buf.baseAddress, Int32(buf.count))
+            }
+        }
+        ms = Int64(Date().timeIntervalSince(before) * 1000)
+        if rc < 0 {
+            return .failure(reason: lastRustError(fallback: "resolve_failed"))
+        }
+        let answer = String(cString: buf)
+        if answer.isEmpty {
+            return .failure(reason: "empty_answer")
+        }
+        return .success(latencyMs: ms)
+    }
+
     // MARK: - Helpers
 
     /// Returns resident memory in MB for the current mach task, or -1 on
