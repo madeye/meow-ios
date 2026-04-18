@@ -27,7 +27,14 @@ log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
 # HTTP / YAML / serialization
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` over a
+# `tokio::io::duplex` pair (no loopback listener), so we need hyper + tokio-rustls
+# directly rather than reqwest's pooled client + Proxy machinery.
+hyper = { version = "1", default-features = false, features = ["client", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

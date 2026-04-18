@@ -73,13 +73,10 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
     let emitter = EgressEmitter { ctx: EmitCtx(ctx), cb };
 
     info!("tun2socks starting (direct-callback ingest)");
-    // Must match `EffectiveConfigWriter.defaultMixedPort` on the Swift side;
-    // that's the port mihomo's in-process mixed (SOCKS+HTTP) listener binds
-    // to. DoH routes through it so queries ride the user's proxy chain
-    // instead of leaking directly. TODO(v1.1): expose the loaded mixed-port
-    // via an FFI getter so this doesn't silently drift if the Swift default
-    // changes.
-    doh_client::init_doh_client(7890);
+    // DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` —
+    // same in-process Rust-to-Rust path as netstack TCP flows below — so no
+    // loopback port is involved.
+    doh_client::init_doh_client();
 
     let (ingress_tx, ingress_rx) = mpsc::channel::<Vec<u8>>(256);
     *ingress_slot().lock() = Some(ingress_tx);
