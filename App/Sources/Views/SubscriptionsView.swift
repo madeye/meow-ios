@@ -25,7 +25,9 @@ struct SubscriptionsView: View {
                             Task { try? await service.refresh(profile) }
                         } label: {
                             Image(systemName: "arrow.clockwise")
+                                .frame(minWidth: 44, minHeight: 44)
                         }
+                        .accessibilityLabel("Refresh \(profile.name)")
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -51,6 +53,7 @@ struct SubscriptionsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("Add subscription")
             }
         }
         .sheet(isPresented: $showingAdd) {

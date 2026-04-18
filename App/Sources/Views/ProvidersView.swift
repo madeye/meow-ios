@@ -56,6 +56,7 @@ struct ProvidersView: View {
                 }
             } label: {
                 Image(systemName: "bolt.fill")
+                    .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Health check \(provider.name)")
@@ -91,6 +92,7 @@ struct ProvidersView: View {
                     }
                 } label: {
                     Image(systemName: "bolt")
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Test \(proxy.name)")

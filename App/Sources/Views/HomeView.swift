@@ -410,6 +410,7 @@ private struct ProxyGroupCard: View {
             DelayBadge(delay: child.delay, isLoading: inflight.contains(child.name))
                 .onTapGesture { onPing(child.name) }
         }
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
         .onTapGesture { onSelect(child.name) }
         .accessibilityIdentifier("home.proxy.\(group.id.identifierSlug).\(child.name.identifierSlug)")
