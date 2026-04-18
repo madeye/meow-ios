@@ -50,15 +50,21 @@ struct ConnectionsView: View {
 
     private func row(for conn: Connection) -> some View {
         let slug = conn.id.identifierSlug
+        // mihomo-rust's `/connections` doesn't ship per-connection metadata
+        // yet (mihomo-api routes.rs:281-289), so fall back to the rule label
+        // when host/port/network aren't available.
+        let host = conn.metadata?.host ?? conn.rule
+        let port = conn.metadata?.destinationPort ?? ""
+        let network = conn.metadata?.network.uppercased() ?? "TCP"
         return GlassCard {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("\(conn.metadata.host):\(conn.metadata.destinationPort)")
+                    Text(port.isEmpty ? host : "\(host):\(port)")
                         .font(.headline)
                         .lineLimit(1)
                         .accessibilityIdentifier("connections.row.\(slug).host")
                     Spacer()
-                    Text(conn.metadata.network.uppercased())
+                    Text(network)
                         .font(.caption.monospaced())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -113,7 +119,9 @@ struct ConnectionsView: View {
 
     private var filtered: [Connection] {
         guard !query.isEmpty else { return connections }
-        return connections.filter { $0.metadata.host.localizedCaseInsensitiveContains(query) }
+        return connections.filter { conn in
+            (conn.metadata?.host ?? conn.rule).localizedCaseInsensitiveContains(query)
+        }
     }
 
     private func poll() async {
