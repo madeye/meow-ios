@@ -16,6 +16,7 @@ final class AppModel {
     let mihomoAPI: MihomoAPI
     let subscriptionService: SubscriptionService
     let ipcBridge: AppIPCBridge
+    let dailyTrafficAccumulator: DailyTrafficAccumulator
 
     /// Monotonically bumped each time `replaySelectedProxies()` finishes a pass
     /// (successful replay, probe-timeout giveup, or no-active-profile no-op).
@@ -43,6 +44,9 @@ final class AppModel {
             modelContext: AppModelContainer.shared.container.mainContext,
         )
         ipcBridge = AppIPCBridge()
+        dailyTrafficAccumulator = DailyTrafficAccumulator(
+            modelContext: AppModelContainer.shared.container.mainContext,
+        )
         _ = prefs
     }
 
@@ -58,6 +62,7 @@ final class AppModel {
         await AssetSeeder.seedIfNeeded()
         await vpnManager.refresh()
         ipcBridge.start()
+        dailyTrafficAccumulator.start()
     }
 
     /// Re-issues the active profile's persisted `selectedProxies` each time
