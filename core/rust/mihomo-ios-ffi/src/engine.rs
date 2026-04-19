@@ -64,8 +64,14 @@ fn install_tls_provider() {
 fn strip_listener_fields(yaml: &str) -> Result<String> {
     let mut doc: serde_yaml::Value = serde_yaml::from_str(yaml).context("parsing config YAML")?;
     if let serde_yaml::Value::Mapping(m) = &mut doc {
-        for key in ["port", "socks-port", "mixed-port", "tproxy-port", "listeners"] {
-            m.remove(&serde_yaml::Value::String(key.to_string()));
+        for key in [
+            "port",
+            "socks-port",
+            "mixed-port",
+            "tproxy-port",
+            "listeners",
+        ] {
+            m.remove(serde_yaml::Value::String(key.to_string()));
         }
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
@@ -98,8 +104,8 @@ fn load_stripped_config(config_path: &str) -> Result<Config> {
     std::fs::write(&stripped_path, stripped)
         .with_context(|| format!("writing stripped config to {}", stripped_path.display()))?;
     let _guard = TempFileGuard(stripped_path.clone());
-    let cfg = crate::get_runtime()
-        .block_on(load_config(stripped_path.to_str().expect("utf-8 path")))?;
+    let cfg =
+        crate::get_runtime().block_on(load_config(stripped_path.to_str().expect("utf-8 path")))?;
     Ok(cfg)
 }
 
@@ -130,8 +136,10 @@ fn log_broadcast_tx() -> &'static broadcast::Sender<LogMessage> {
 fn install_tracing_subscriber() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
-        let log_layer = LogBroadcastLayer { tx: log_broadcast_tx().clone() }
-            .with_filter(LevelFilter::TRACE);
+        let log_layer = LogBroadcastLayer {
+            tx: log_broadcast_tx().clone(),
+        }
+        .with_filter(LevelFilter::TRACE);
         // `try_init` returns Err if another subscriber beat us to the global
         // slot (unlikely in the FFI, but be defensive — panicking here would
         // abort the extension).
@@ -207,7 +215,12 @@ pub fn start(config_path: &str) -> Result<()> {
 
     info!("mihomo-rust engine running (in-process dispatch)");
 
-    *slot().lock() = Some(EngineState { stats, tunnel, api_task, dns_task });
+    *slot().lock() = Some(EngineState {
+        stats,
+        tunnel,
+        api_task,
+        dns_task,
+    });
     Ok(())
 }
 
@@ -279,7 +292,13 @@ log-level: info
         let out = strip_listener_fields(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let m = doc.as_mapping().unwrap();
-        for k in ["port", "socks-port", "mixed-port", "tproxy-port", "listeners"] {
+        for k in [
+            "port",
+            "socks-port",
+            "mixed-port",
+            "tproxy-port",
+            "listeners",
+        ] {
             assert!(
                 !m.contains_key(serde_yaml::Value::String(k.into())),
                 "{k} should have been stripped",
