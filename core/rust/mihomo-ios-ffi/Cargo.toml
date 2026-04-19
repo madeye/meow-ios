@@ -59,7 +59,7 @@ netstack-smoltcp = "0.2"
 # Embedded mihomo-rust engine. Pinned to main; revisit once the project tags
 # releases. Each crate is a workspace member of madeye/mihomo-rust.
 mihomo-common = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
-mihomo-config = { git = "https://github.com/madeye/mihomo-rust", branch = "main", default-features = false, features = ["vless", "vless-vision"] }
+mihomo-config = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
 mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
 mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
 mihomo-api = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
