@@ -251,3 +251,48 @@ pub fn validate(yaml: &str) -> Result<()> {
     let _ = load_stripped_config_from_str(yaml)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod config_parse_tests {
+    //! Regression test for the feature-flag fix that re-enabled `ss` / `trojan`
+    //! on mihomo-config. If `mihomo-config` is ever pulled with
+    //! `default-features = false` and those feature strings missing again,
+    //! every `type: ss` proxy falls through `parse_proxy`'s catch-all
+    //! `_ => Err("unsupported proxy type: ss")` → warn-skip → groups that
+    //! reference those proxies lose all valid members → dropped in lenient
+    //! fallback. This test catches that regression at compile-time for the
+    //! feature flip and at runtime for parser drift.
+    const FIXTURE: &str = include_str!("../tests/fixtures/subscription_ss_like.yaml");
+
+    #[test]
+    fn fixture_parses_with_all_proxies_and_groups() {
+        let mut raw: mihomo_config::raw::RawConfig =
+            serde_yaml::from_str(FIXTURE).expect("fixture YAML parses into RawConfig");
+        raw.port = None;
+        raw.socks_port = None;
+        raw.mixed_port = None;
+        raw.tproxy_port = None;
+        raw.listeners = None;
+        let stripped = serde_yaml::to_string(&raw).expect("re-serialize stripped");
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio rt");
+        let cfg = rt
+            .block_on(mihomo_config::load_config_from_str(&stripped))
+            .expect("load_config_from_str on the fixture should succeed");
+
+        let (groups, leaves): (Vec<_>, Vec<_>) =
+            cfg.proxies.values().partition(|p| p.members().is_some());
+
+        // Fixture has 141 ss proxies + 22 groups. Expected runtime totals:
+        //   leaves = 141 ss + 3 built-ins (DIRECT, REJECT, REJECT-DROP) = 144
+        //   groups = 22 user-defined (Proxies, 20 categories, Direct, Final)
+        assert_eq!(
+            leaves.len(),
+            144,
+            "expected 141 ss proxies + 3 built-ins; if this drops to 3, \
+             mihomo-config was built without the `ss` feature — see commit \
+             enabling default features on the mihomo-config dep",
+        );
+        assert_eq!(groups.len(), 22, "all 22 user-defined groups must resolve");
+    }
+}
