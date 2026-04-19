@@ -90,7 +90,13 @@ final class VpnManager {
 
     private func attach(_ mgr: NETunnelProviderManager) {
         manager = mgr
-        stage = map(mgr.connection.status)
+        // Reading the initial connection.status is NOT an observed
+        // .NEVPNStatusDidChange edge, so on app relaunch into an
+        // already-connected tunnel (force-quit while VPN up), the observer
+        // alone never fires and the replay-on-connect callback never runs.
+        // #60 fixed the cold-connect readiness race; this fires the
+        // callback for the relaunch-into-connected edge too.
+        applyConnectionStatus(mgr.connection.status)
         if let statusObserver { NotificationCenter.default.removeObserver(statusObserver) }
         statusObserver = NotificationCenter.default.addObserver(
             forName: .NEVPNStatusDidChange,
@@ -100,9 +106,6 @@ final class VpnManager {
             guard let self else { return }
             let status = mgr.connection.status
             Task { @MainActor in
-                let previous = self.stage
-                let next = self.map(status)
-                self.stage = next
                 // When the extension aborts startup (engine.start throws) the
                 // connection transitions straight to .disconnected with no
                 // thrown NEVPNManagerError. The provider writes the Rust error
@@ -111,13 +114,20 @@ final class VpnManager {
                 if status == .disconnected, let msg = SharedStore.readState()?.errorMessage, !msg.isEmpty {
                     self.lastError = msg
                 }
-                // Fire onConnected exactly once per connect transition. The
-                // observer can run repeatedly (e.g. .reasserting → .connected
-                // round trips), so guard on the actual stage edge.
-                if next == .connected, previous != .connected {
-                    self.onConnected?()
-                }
+                self.applyConnectionStatus(status)
             }
+        }
+    }
+
+    /// Update `stage` and fire `onConnected` on the non-connected → connected
+    /// edge. Exposed at `internal` so `@testable` consumers can exercise the
+    /// edge semantics directly without a real `NETunnelProviderManager`.
+    func applyConnectionStatus(_ status: NEVPNStatus) {
+        let previous = stage
+        let next = map(status)
+        stage = next
+        if next == .connected, previous != .connected {
+            onConnected?()
         }
     }
 
