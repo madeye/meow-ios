@@ -12,10 +12,11 @@ final class VpnManager {
     private(set) var stage: VpnStage = .idle
     private(set) var lastError: String?
 
-    /// Fires once each time `stage` transitions into `.connected`. Wired by
-    /// `AppModel` to replay persisted proxy-group selections via
-    /// `SelectedProxyRestorer` — mihomo-rust resets group state on every
-    /// engine start, so the app owns persistence.
+    /// Fires each time `stage` transitions into `.connected`, including the
+    /// synthetic attach-time edge when the tunnel is already connected on
+    /// app relaunch. Wired by `AppModel` to replay persisted proxy-group
+    /// selections — mihomo-rust resets group state on every engine start,
+    /// so the app owns persistence.
     var onConnected: (@MainActor () -> Void)?
 
     /// Clear the user-visible error banner. Called when the user dismisses it
