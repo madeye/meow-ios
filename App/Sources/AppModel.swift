@@ -17,6 +17,14 @@ final class AppModel {
     let subscriptionService: SubscriptionService
     let ipcBridge: AppIPCBridge
 
+    /// Monotonically bumped each time `replaySelectedProxies()` finishes a pass
+    /// (successful replay, probe-timeout giveup, or no-active-profile no-op).
+    /// HomeView keys a `.task(id:)` on this so the proxy-groups UI re-fetches
+    /// `/proxies` AFTER replay has had its chance to mutate engine state —
+    /// otherwise the view-mount fetch on the `.connected` edge races the
+    /// replay PUTs and caches pre-replay defaults.
+    private(set) var replayGeneration: Int = 0
+
     private var didBootstrap = false
 
     init() {
@@ -65,6 +73,7 @@ final class AppModel {
     /// #59 silently erased the user's picks on a single unlucky reconnect.
     /// User can re-pick if they want; stale entries are otherwise harmless.
     private func replaySelectedProxies() async {
+        defer { replayGeneration &+= 1 }
         let api = mihomoAPI
         // Cold-connect readiness probe. `meow_engine_start` returns before
         // the spawned api_server task binds :9090, so a replay fired on the
