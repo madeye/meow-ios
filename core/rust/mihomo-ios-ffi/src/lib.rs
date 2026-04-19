@@ -40,8 +40,16 @@ static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 pub(crate) fn get_runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
+        // 4 workers, not 2. Observed under load: during a burst of concurrent
+        // TLS dials + DoH resolutions + /configs or /providers handler work,
+        // the previous 2-worker runtime could starve — both workers busy on
+        // serde/TLS CPU work while new TCP flows queued up, eventually the
+        // tunnel stopped making progress (same PID, no death, just frozen).
+        // 4 gives the scheduler enough headroom on iPhone 17 Pro without
+        // meaningfully increasing resident memory (per-worker stack is ~2 MB
+        // of virtual address space, not committed).
         tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
+            .worker_threads(4)
             .enable_all()
             .build()
             .expect("failed to create tokio runtime")
