@@ -108,7 +108,11 @@ final class AppModel {
                 try await api.selectProxy(group: group, name: proxy)
             } catch {
                 replayLog.error(
-                    "selectProxy failed group=\(group, privacy: .public) proxy=\(proxy, privacy: .public) err=\(String(describing: error), privacy: .public)",
+                    """
+                    selectProxy failed group=\(group, privacy: .public) \
+                    proxy=\(proxy, privacy: .public) \
+                    err=\(String(describing: error), privacy: .public)
+                    """,
                 )
             }
         }
