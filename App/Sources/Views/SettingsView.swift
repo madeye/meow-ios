@@ -63,7 +63,7 @@ struct SettingsView: View {
                     LabeledContent("Egress pkts", value: "\(ipcBridge.currentTraffic.egressPackets)")
                     Button("Install NE profile") { Task { await vpnManager.refresh() } }
                     Button("Connect (no profile required)") { Task { await vpnManager.connect() } }
-                    Button("Disconnect", role: .destructive) { vpnManager.disconnect() }
+                    Button("Disconnect", role: .destructive) { Task { await vpnManager.disconnect() } }
                     NavigationLink("Open Diagnostics") {
                         DiagnosticsPanelView()
                             .ignoresSafeArea(edges: .bottom)
