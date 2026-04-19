@@ -136,10 +136,17 @@ fn log_broadcast_tx() -> &'static broadcast::Sender<LogMessage> {
 fn install_tracing_subscriber() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
+        // INFO, not TRACE. serde emits per-`deserialize_any` / `deserialize_option`
+        // spans at TRACE; under burst load (video streaming + simultaneous
+        // `/configs` or `/providers` hits from the main app) this flooded the
+        // broadcast channel with thousands of events per second. Each event is
+        // processed synchronously on the emitting tokio worker via `on_event`,
+        // starving the 2-worker runtime until TCP flow handling stalled. The
+        // /logs WebSocket consumers never wanted serde trace spans anyway.
         let log_layer = LogBroadcastLayer {
             tx: log_broadcast_tx().clone(),
         }
-        .with_filter(LevelFilter::TRACE);
+        .with_filter(LevelFilter::INFO);
         // `try_init` returns Err if another subscriber beat us to the global
         // slot (unlikely in the FFI, but be defensive — panicking here would
         // abort the extension).
