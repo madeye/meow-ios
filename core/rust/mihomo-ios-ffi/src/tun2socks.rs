@@ -146,7 +146,11 @@ async fn run_tun2socks(
     let (mut udp_read, udp_write) = udp_socket.split();
 
     let (udp_reply_tx, mut udp_reply_rx) = mpsc::unbounded_channel::<UdpMsg>();
-    let reply_readers: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
+    // NAT key mirrors mihomo-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
+    // post-ADR-0008 Direction-A refactor. We must key reader spawns on the
+    // same tuple mihomo-tunnel uses, or dedupe breaks and we leak readers.
+    let reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>> =
+        Arc::new(Mutex::new(HashSet::new()));
 
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -352,7 +356,7 @@ async fn dispatch_udp(
     src: SocketAddr,
     dst: SocketAddr,
     reply_tx: mpsc::UnboundedSender<UdpMsg>,
-    reply_readers: Arc<Mutex<HashSet<String>>>,
+    reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
 ) {
     let Some(tunnel) = crate::engine::tunnel() else {
         logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
@@ -364,7 +368,7 @@ async fn dispatch_udp(
         None => (String::new(), Some(dst.ip())),
     };
 
-    let metadata = Metadata {
+    let mut metadata = Metadata {
         network: Network::Udp,
         conn_type: ConnType::Inner,
         src_ip: Some(src.ip()),
@@ -375,14 +379,22 @@ async fn dispatch_udp(
         ..Default::default()
     };
 
-    // Matches mihomo_tunnel::udp::handle_udp's NAT key shape. `remote_address`
-    // prefers host over dst_ip, which is stable across the internal
-    // pre_resolve call.
-    let key = format!("{}:{}", src, metadata.remote_address());
+    // ADR-0008 post-Direction-A NAT key: (src SocketAddr, resolved dst
+    // SocketAddr). mihomo-tunnel calls `pre_resolve` internally before
+    // inserting into `nat_table`; we must match its output exactly or the
+    // subsequent `nat_table.get(&key)` misses. Calling `pre_resolve` here
+    // (same method handle_udp would call) guarantees parity for fake-ip /
+    // host-mode flows — it's idempotent once `dst_ip` is populated.
+    tunnel.inner().pre_resolve(&mut metadata).await;
+    let Some(resolved_ip) = metadata.dst_ip else {
+        // Resolution failed — handle_udp will also bail, nothing to dispatch.
+        return;
+    };
+    let key = (src, SocketAddr::new(resolved_ip, metadata.dst_port));
 
     mihomo_tunnel::udp::handle_udp(tunnel.inner(), &payload, src, metadata).await;
 
-    if !reply_readers.lock().insert(key.clone()) {
+    if !reply_readers.lock().insert(key) {
         return;
     }
 
@@ -397,12 +409,12 @@ async fn dispatch_udp(
 }
 
 fn spawn_udp_reply_reader(
-    key: String,
+    key: (SocketAddr, SocketAddr),
     session: Arc<UdpSession>,
     app_src: SocketAddr,
     app_dst: SocketAddr,
     reply_tx: mpsc::UnboundedSender<UdpMsg>,
-    reply_readers: Arc<Mutex<HashSet<String>>>,
+    reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
     tunnel_inner: Arc<TunnelInner>,
 ) {
     tokio::spawn(async move {
@@ -420,7 +432,7 @@ fn spawn_udp_reply_reader(
                     }
                 }
                 Err(e) => {
-                    info!("UDP reply reader closing for {}: {}", key, e);
+                    info!("UDP reply reader closing for {:?}: {}", key, e);
                     break;
                 }
             }

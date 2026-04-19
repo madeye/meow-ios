@@ -10,14 +10,22 @@
 //! releases the ports synchronously, so a fast `start → stop → start` cycle
 //! doesn't race the previous bind (`EADDRINUSE`).
 use anyhow::Result;
+use dashmap::DashMap;
+use mihomo_api::log_stream::{LogBroadcastLayer, LogMessage};
 use mihomo_api::ApiServer;
 use mihomo_config::{load_config, load_config_from_str};
 use mihomo_dns::DnsServer;
 use mihomo_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
-use std::sync::{Arc, OnceLock};
+use std::collections::HashMap;
+use std::sync::{Arc, Once, OnceLock};
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::prelude::*;
+
+use crate::logging::LogForwardLayer;
 
 struct EngineState {
     stats: Arc<Statistics>,
@@ -35,14 +43,48 @@ fn install_tls_provider() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
+/// Process-wide log broadcast channel. Registered into the tracing subscriber
+/// on first `start()` and handed to every subsequent `ApiServer::new` —
+/// tracing's global default can only be set once, so the channel (and the
+/// registry that feeds it) outlive individual engine lifetimes.
+fn log_broadcast_tx() -> &'static broadcast::Sender<LogMessage> {
+    static TX: OnceLock<broadcast::Sender<LogMessage>> = OnceLock::new();
+    TX.get_or_init(|| {
+        let (tx, _rx) = broadcast::channel(128);
+        tx
+    })
+}
+
+/// Install the tracing subscriber once per process. Subsequent calls are
+/// no-ops — re-invoking `set_global_default` after start/stop/start would
+/// panic with `SetGlobalDefaultError`.
+fn install_tracing_subscriber() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let log_layer = LogBroadcastLayer { tx: log_broadcast_tx().clone() }
+            .with_filter(LevelFilter::TRACE);
+        // `try_init` returns Err if another subscriber beat us to the global
+        // slot (unlikely in the FFI, but be defensive — panicking here would
+        // abort the extension).
+        let _ = tracing_subscriber::registry()
+            .with(LogForwardLayer)
+            .with(log_layer)
+            .try_init();
+    });
+}
+
 pub fn start(config_path: &str) -> Result<()> {
     if slot().lock().is_some() {
         return Ok(());
     }
 
     install_tls_provider();
+    install_tracing_subscriber();
 
-    let cfg = load_config(config_path)?;
+    // `load_config` is async as of the 2026-04-19 mihomo-rust bump
+    // (rule-provider cache is fetched eagerly during config build). Bridge to
+    // our shared runtime rather than spawning a single-use one.
+    let cfg = crate::get_runtime().block_on(load_config(config_path))?;
     let raw_config = Arc::new(RwLock::new(cfg.raw.clone()));
 
     let tunnel = Tunnel::new(cfg.dns.resolver.clone());
@@ -50,6 +92,19 @@ pub fn start(config_path: &str) -> Result<()> {
     tunnel.update_rules(cfg.rules);
     tunnel.update_proxies(cfg.proxies);
     let stats = tunnel.statistics().clone();
+
+    // `ApiServer::new` grew from 5 to 9 parameters to serve the new
+    // `/providers/*`, `/rules`, `/listeners`, and `/logs` routes. Build the
+    // required shapes from the loaded Config.
+    let proxy_providers = {
+        let map: DashMap<_, _> = cfg.proxy_providers.into_iter().collect();
+        Arc::new(map)
+    };
+    let rule_providers = Arc::new(RwLock::new(
+        cfg.rule_providers.into_iter().collect::<HashMap<_, _>>(),
+    ));
+    let listeners = cfg.listeners.named.clone();
+    let log_tx = log_broadcast_tx().clone();
 
     let dns_task = cfg.dns.listen_addr.map(|addr| {
         let resolver = cfg.dns.resolver.clone();
@@ -68,6 +123,10 @@ pub fn start(config_path: &str) -> Result<()> {
             cfg.api.secret.clone(),
             config_path.to_string(),
             raw_config,
+            log_tx,
+            proxy_providers,
+            rule_providers,
+            listeners,
         );
         crate::get_runtime().spawn(async move {
             if let Err(e) = api_server.run().await {
@@ -123,6 +182,6 @@ pub fn tunnel() -> Option<Tunnel> {
 
 pub fn validate(yaml: &str) -> Result<()> {
     install_tls_provider();
-    let _ = load_config_from_str(yaml)?;
+    let _ = crate::get_runtime().block_on(load_config_from_str(yaml))?;
     Ok(())
 }
