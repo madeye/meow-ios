@@ -9,15 +9,16 @@
 //! returning — dropping the futures drops the `TcpListener`/`UdpSocket` and
 //! releases the ports synchronously, so a fast `start → stop → start` cycle
 //! doesn't race the previous bind (`EADDRINUSE`).
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dashmap::DashMap;
 use mihomo_api::log_stream::{LogBroadcastLayer, LogMessage};
 use mihomo_api::ApiServer;
-use mihomo_config::{load_config, load_config_from_str};
+use mihomo_config::{load_config, load_config_from_str, raw::RawConfig, Config};
 use mihomo_dns::DnsServer;
 use mihomo_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
@@ -41,6 +42,68 @@ fn slot() -> &'static Mutex<Option<EngineState>> {
 
 fn install_tls_provider() {
     let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
+/// Strip the shorthand listener ports and explicit `listeners:` array from a
+/// raw config. iOS v1.0 dispatches TCP flows + DoH in-process through
+/// `mihomo_tunnel::tcp::handle_tcp` + `tokio::io::duplex`; there is no
+/// loopback listener and no bound port. Upstream's `build_named_listeners`
+/// (mihomo-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
+/// Class A) — e.g. "port 7890 already used by listener 'mixed'" — so a
+/// user YAML combining `mixed-port: 7890` with a listeners entry on the
+/// same port would fail parse-time validation even though iOS never
+/// actually binds either. This strip enforces the no-listener constraint
+/// architecturally at the FFI boundary, regardless of YAML content.
+fn strip_listener_fields(raw: &mut RawConfig) {
+    raw.port = None;
+    raw.socks_port = None;
+    raw.mixed_port = None;
+    raw.tproxy_port = None;
+    raw.listeners = None;
+}
+
+/// RAII handle that removes a file on drop. Used so the sibling
+/// `effective-config.ios-stripped.yaml` we hand to `load_config` never
+/// survives past the load call — including on `?` early-returns, panics,
+/// and profile-swap failures.
+struct TempFileGuard(PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// Read `config_path`, strip listener fields, and hand a sibling
+/// `effective-config.ios-stripped.yaml` to `load_config`. The sibling
+/// placement is deliberate: `load_config` uses `path.parent()` as the
+/// rule-/proxy-provider `cache_dir`, so colocating with the original
+/// keeps rule-provider cache files in the AppGroup container. Using
+/// `load_config_from_str` or `std::env::temp_dir()` would silently
+/// disable that caching.
+fn load_stripped_config(config_path: &str) -> Result<Config> {
+    let original = std::fs::read_to_string(config_path)
+        .with_context(|| format!("reading config from {config_path}"))?;
+    let mut raw: RawConfig = serde_yaml::from_str(&original).context("parsing config YAML")?;
+    strip_listener_fields(&mut raw);
+    let stripped_path = PathBuf::from(format!("{config_path}.ios-stripped.yaml"));
+    std::fs::write(&stripped_path, serde_yaml::to_string(&raw)?)
+        .with_context(|| format!("writing stripped config to {}", stripped_path.display()))?;
+    let _guard = TempFileGuard(stripped_path.clone());
+    let cfg = crate::get_runtime()
+        .block_on(load_config(stripped_path.to_str().expect("utf-8 path")))?;
+    Ok(cfg)
+}
+
+/// Same strip as `load_stripped_config` but for in-memory YAML (editor
+/// validation). No cache_dir involved, so we skip the temp-file dance
+/// and feed the stripped string straight to `load_config_from_str`.
+fn load_stripped_config_from_str(yaml: &str) -> Result<Config> {
+    let mut raw: RawConfig = serde_yaml::from_str(yaml).context("parsing config YAML")?;
+    strip_listener_fields(&mut raw);
+    let stripped = serde_yaml::to_string(&raw)?;
+    let cfg = crate::get_runtime().block_on(load_config_from_str(&stripped))?;
+    Ok(cfg)
 }
 
 /// Process-wide log broadcast channel. Registered into the tracing subscriber
@@ -81,10 +144,11 @@ pub fn start(config_path: &str) -> Result<()> {
     install_tls_provider();
     install_tracing_subscriber();
 
-    // `load_config` is async as of the 2026-04-19 mihomo-rust bump
-    // (rule-provider cache is fetched eagerly during config build). Bridge to
-    // our shared runtime rather than spawning a single-use one.
-    let cfg = crate::get_runtime().block_on(load_config(config_path))?;
+    // Strip listener shorthand + `listeners:` from the raw YAML before
+    // load_config parses it — upstream's `build_named_listeners` rejects
+    // duplicate ports (ADR-0002 Class A) even though iOS never binds any
+    // of them. See `load_stripped_config` doc for the constraint rationale.
+    let cfg = load_stripped_config(config_path)?;
     let raw_config = Arc::new(RwLock::new(cfg.raw.clone()));
 
     let tunnel = Tunnel::new(cfg.dns.resolver.clone());
@@ -182,6 +246,8 @@ pub fn tunnel() -> Option<Tunnel> {
 
 pub fn validate(yaml: &str) -> Result<()> {
     install_tls_provider();
-    let _ = crate::get_runtime().block_on(load_config_from_str(yaml))?;
+    // Match start()'s strip behaviour so the editor doesn't surface
+    // port-collision errors for fields iOS ignores anyway.
+    let _ = load_stripped_config_from_str(yaml)?;
     Ok(())
 }
