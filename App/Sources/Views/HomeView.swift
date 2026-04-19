@@ -295,10 +295,16 @@ struct HomeView: View {
         if isConnected { return false }
         return selected.first == nil
     }
+}
 
-    // MARK: - Actions
+// MARK: - Actions
 
-    private func toggle() {
+// Methods split into an extension so swiftlint's `type_body_length` counts
+// only the declarative surface (stored state + subviews) — the action layer
+// is wiring between the view and the engine and reads as a separate concern.
+
+private extension HomeView {
+    func toggle() {
         if isConnected {
             ipcBridge.send(.stop)
             vpnManager.disconnect()
@@ -308,7 +314,7 @@ struct HomeView: View {
         }
     }
 
-    private func refreshGroupsIfConnected() async {
+    func refreshGroupsIfConnected() async {
         guard vpnManager.stage == .connected else {
             groups = []
             groupsLoadError = nil
@@ -326,7 +332,7 @@ struct HomeView: View {
         }
     }
 
-    private func select(group: String, proxy: String) async {
+    func select(group: String, proxy: String) async {
         do {
             try await mihomoAPI.selectProxy(group: group, name: proxy)
             if let profile = selected.first {
@@ -342,7 +348,7 @@ struct HomeView: View {
         }
     }
 
-    private func ping(proxy: String) async {
+    func ping(proxy: String) async {
         inflightDelay.insert(proxy)
         _ = try? await mihomoAPI.testDelay(
             proxy: proxy,
@@ -350,52 +356,6 @@ struct HomeView: View {
         )
         await refreshGroupsIfConnected()
         inflightDelay.remove(proxy)
-    }
-}
-
-// MARK: - Proxy group model
-
-struct ProxyGroupModel: Identifiable, Equatable {
-    let id: String
-    let name: String
-    let type: String
-    let now: String?
-    let children: [Child]
-
-    struct Child: Identifiable, Equatable {
-        let id: String
-        let name: String
-        let type: String
-        let delay: Int?
-    }
-
-    /// Flatten the mihomo `/proxies` response into the subset of proxy groups
-    /// the user can interact with. `GLOBAL` is hidden because it's the
-    /// top-level aggregator, not a user-facing selector; direct/reject are
-    /// leaf proxies, not groups.
-    static func build(from dict: [String: Proxy]) -> [ProxyGroupModel] {
-        let selectable: Set = ["Selector", "URLTest", "Fallback", "LoadBalance", "Relay"]
-        return dict.values
-            .filter { selectable.contains($0.type) && $0.all != nil && $0.name != "GLOBAL" }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-            .map { group in
-                let children = (group.all ?? []).compactMap { childName -> Child? in
-                    guard let p = dict[childName] else { return nil }
-                    return Child(
-                        id: childName,
-                        name: p.name,
-                        type: p.type,
-                        delay: p.history?.last?.delay,
-                    )
-                }
-                return ProxyGroupModel(
-                    id: group.name,
-                    name: group.name,
-                    type: group.type,
-                    now: group.now,
-                    children: children,
-                )
-            }
     }
 }
 
