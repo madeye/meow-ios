@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use dashmap::DashMap;
 use mihomo_api::log_stream::{LogBroadcastLayer, LogMessage};
 use mihomo_api::ApiServer;
-use mihomo_config::{load_config, load_config_from_str, raw::RawConfig, Config};
+use mihomo_config::{load_config, load_config_from_str, Config};
 use mihomo_dns::DnsServer;
 use mihomo_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
@@ -45,7 +45,7 @@ fn install_tls_provider() {
 }
 
 /// Strip the shorthand listener ports and explicit `listeners:` array from a
-/// raw config. iOS v1.0 dispatches TCP flows + DoH in-process through
+/// raw config YAML. iOS v1.0 dispatches TCP flows + DoH in-process through
 /// `mihomo_tunnel::tcp::handle_tcp` + `tokio::io::duplex`; there is no
 /// loopback listener and no bound port. Upstream's `build_named_listeners`
 /// (mihomo-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
@@ -54,12 +54,21 @@ fn install_tls_provider() {
 /// same port would fail parse-time validation even though iOS never
 /// actually binds either. This strip enforces the no-listener constraint
 /// architecturally at the FFI boundary, regardless of YAML content.
-fn strip_listener_fields(raw: &mut RawConfig) {
-    raw.port = None;
-    raw.socks_port = None;
-    raw.mixed_port = None;
-    raw.tproxy_port = None;
-    raw.listeners = None;
+///
+/// Operates on a generic `serde_yaml::Value` rather than projecting through
+/// `RawConfig`: the latter has no `#[serde(flatten)]` catch-all and no
+/// `skip_serializing_if` on its Options, so a struct round-trip would
+/// silently drop any top-level key it doesn't model (`tun:`, `profile:`,
+/// `experimental:`, `global-client-fingerprint`, `unified-delay`, etc.)
+/// and pollute the output with `key: null` for every unset Option.
+fn strip_listener_fields(yaml: &str) -> Result<String> {
+    let mut doc: serde_yaml::Value = serde_yaml::from_str(yaml).context("parsing config YAML")?;
+    if let serde_yaml::Value::Mapping(m) = &mut doc {
+        for key in ["port", "socks-port", "mixed-port", "tproxy-port", "listeners"] {
+            m.remove(&serde_yaml::Value::String(key.to_string()));
+        }
+    }
+    serde_yaml::to_string(&doc).context("serializing stripped config YAML")
 }
 
 /// RAII handle that removes a file on drop. Used so the sibling
@@ -84,10 +93,9 @@ impl Drop for TempFileGuard {
 fn load_stripped_config(config_path: &str) -> Result<Config> {
     let original = std::fs::read_to_string(config_path)
         .with_context(|| format!("reading config from {config_path}"))?;
-    let mut raw: RawConfig = serde_yaml::from_str(&original).context("parsing config YAML")?;
-    strip_listener_fields(&mut raw);
+    let stripped = strip_listener_fields(&original)?;
     let stripped_path = PathBuf::from(format!("{config_path}.ios-stripped.yaml"));
-    std::fs::write(&stripped_path, serde_yaml::to_string(&raw)?)
+    std::fs::write(&stripped_path, stripped)
         .with_context(|| format!("writing stripped config to {}", stripped_path.display()))?;
     let _guard = TempFileGuard(stripped_path.clone());
     let cfg = crate::get_runtime()
@@ -99,9 +107,7 @@ fn load_stripped_config(config_path: &str) -> Result<Config> {
 /// validation). No cache_dir involved, so we skip the temp-file dance
 /// and feed the stripped string straight to `load_config_from_str`.
 fn load_stripped_config_from_str(yaml: &str) -> Result<Config> {
-    let mut raw: RawConfig = serde_yaml::from_str(yaml).context("parsing config YAML")?;
-    strip_listener_fields(&mut raw);
-    let stripped = serde_yaml::to_string(&raw)?;
+    let stripped = strip_listener_fields(yaml)?;
     let cfg = crate::get_runtime().block_on(load_config_from_str(&stripped))?;
     Ok(cfg)
 }
@@ -253,6 +259,97 @@ pub fn validate(yaml: &str) -> Result<()> {
 }
 
 #[cfg(test)]
+mod tests {
+    use super::strip_listener_fields;
+
+    #[test]
+    fn strip_removes_listener_keys_only() {
+        let yaml = r#"
+port: 7890
+socks-port: 7891
+mixed-port: 7892
+tproxy-port: 7895
+listeners:
+  - name: mixed
+    type: mixed
+    port: 7890
+mode: rule
+log-level: info
+"#;
+        let out = strip_listener_fields(yaml).expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        let m = doc.as_mapping().unwrap();
+        for k in ["port", "socks-port", "mixed-port", "tproxy-port", "listeners"] {
+            assert!(
+                !m.contains_key(serde_yaml::Value::String(k.into())),
+                "{k} should have been stripped",
+            );
+        }
+        assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
+        assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
+    }
+
+    #[test]
+    fn strip_preserves_unmodeled_top_level_keys() {
+        // Fields RawConfig does not model. A RawConfig round-trip would
+        // silently drop these; the Value-based strip must keep them.
+        let yaml = r#"
+mixed-port: 7890
+tun:
+  enable: true
+  stack: gvisor
+profile:
+  store-selected: true
+experimental:
+  sniff-tls-sni: true
+global-client-fingerprint: chrome
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+proxies:
+  - name: p1
+    type: direct
+"#;
+        let out = strip_listener_fields(yaml).expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        let m = doc.as_mapping().unwrap();
+        assert!(!m.contains_key(serde_yaml::Value::String("mixed-port".into())));
+        for k in [
+            "tun",
+            "profile",
+            "experimental",
+            "global-client-fingerprint",
+            "unified-delay",
+            "tcp-concurrent",
+            "find-process-mode",
+            "proxies",
+        ] {
+            assert!(
+                m.contains_key(serde_yaml::Value::String(k.into())),
+                "{k} must survive the strip",
+            );
+        }
+        let tun = m
+            .get(serde_yaml::Value::String("tun".into()))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        assert_eq!(
+            tun.get(serde_yaml::Value::String("stack".into()))
+                .and_then(|v| v.as_str()),
+            Some("gvisor"),
+        );
+    }
+
+    #[test]
+    fn strip_is_idempotent_on_clean_config() {
+        let yaml = "mode: rule\nlog-level: info\n";
+        let once = strip_listener_fields(yaml).expect("strip ok");
+        let twice = strip_listener_fields(&once).expect("strip ok");
+        assert_eq!(once, twice);
+    }
+}
+
+#[cfg(test)]
 mod config_parse_tests {
     //! Regression test for the feature-flag fix that re-enabled `ss` / `trojan`
     //! on mihomo-config. If `mihomo-config` is ever pulled with
@@ -266,15 +363,9 @@ mod config_parse_tests {
 
     #[test]
     fn fixture_parses_with_all_proxies_and_groups() {
-        let mut raw: mihomo_config::raw::RawConfig =
-            serde_yaml::from_str(FIXTURE).expect("fixture YAML parses into RawConfig");
-        raw.port = None;
-        raw.socks_port = None;
-        raw.mixed_port = None;
-        raw.tproxy_port = None;
-        raw.listeners = None;
-        let stripped = serde_yaml::to_string(&raw).expect("re-serialize stripped");
-
+        // Strip listener keys via the production helper (value-based) so the
+        // regression test also exercises the strip path.
+        let stripped = super::strip_listener_fields(FIXTURE).expect("strip ok");
         let rt = tokio::runtime::Runtime::new().expect("tokio rt");
         let cfg = rt
             .block_on(mihomo_config::load_config_from_str(&stripped))
