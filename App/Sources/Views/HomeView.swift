@@ -307,7 +307,7 @@ private extension HomeView {
     func toggle() {
         if isConnected {
             ipcBridge.send(.stop)
-            vpnManager.disconnect()
+            Task { await vpnManager.disconnect() }
         } else {
             ipcBridge.send(.start, profileID: selected.first?.id)
             Task { await vpnManager.connect() }

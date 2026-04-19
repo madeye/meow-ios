@@ -54,12 +54,18 @@ final class VpnManager {
     }
 
     /// Kick off a connect. Caller should have already written the selected
-    /// profile YAML into the App Group container.
+    /// profile YAML into the App Group container. Re-enables on-demand if
+    /// `disconnect` previously turned it off.
     func connect() async {
         lastError = nil
         do {
             if manager == nil { await refresh() }
             guard let manager else { return }
+            if !manager.isOnDemandEnabled {
+                manager.isOnDemandEnabled = true
+                try await manager.saveToPreferences()
+                try await manager.loadFromPreferences()
+            }
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription
@@ -67,8 +73,18 @@ final class VpnManager {
         }
     }
 
-    func disconnect() {
-        manager?.connection.stopVPNTunnel()
+    /// Disable on-demand first, then tear down the tunnel. iOS reclaims the NE
+    /// under media/CPU/network pressure and normally auto-reconnects via the
+    /// on-demand rule — so we have to actively disable it when the user
+    /// intentionally wants the VPN off.
+    func disconnect() async {
+        guard let manager else { return }
+        if manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            try? await manager.saveToPreferences()
+            try? await manager.loadFromPreferences()
+        }
+        manager.connection.stopVPNTunnel()
     }
 
     // MARK: - Private
@@ -84,9 +100,30 @@ final class VpnManager {
         proto.providerConfiguration = [
             "appGroup": AppGroup.identifier,
         ]
+        // Keep the tunnel alive across screen lock — iOS defaults to false
+        // on packet-tunnel providers but we set it explicitly because any
+        // future protocol tweak that re-uses the default would regress this.
+        proto.disconnectOnSleep = false
+        // NOTE: `includeAllNetworks = true` was trialed as an iOS reclaim
+        // mitigation. Observed on-device: kill frequency went UP (two
+        // reclaims within 40s of each other, same (1,7,9) tuple as before)
+        // AND first-reconnect latency regressed from 5.4s to 8.1s. So we
+        // explicitly do NOT set it; the on-demand rule below handles the
+        // reclaim case invisibly regardless.
         mgr.protocolConfiguration = proto
         mgr.localizedDescription = "meow"
         mgr.isEnabled = true
+        // iOS reclaims NE extensions under resource pressure (media playback
+        // resource arbiter, network-stack APN refresh, containing app entering
+        // after-life). Without on-demand, the user sees "VPN died" and has to
+        // toggle manually. With on-demand + an always-connect rule, iOS
+        // auto-reestablishes the tunnel the moment the kernel sees an outbound
+        // flow on any interface. `disconnect()` disables on-demand before
+        // stopping so the user can still turn the VPN off.
+        let rule = NEOnDemandRuleConnect()
+        rule.interfaceTypeMatch = .any
+        mgr.onDemandRules = [rule]
+        mgr.isOnDemandEnabled = true
     }
 
     private func attach(_ mgr: NETunnelProviderManager) {
