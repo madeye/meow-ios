@@ -332,6 +332,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43c5703da9466b66a946814e1adf53ea2c90f10063b86290cc9eb67ce3478a20"
 dependencies = [
  "find-msvc-tools",
+ "jobserver",
+ "libc",
  "shlex",
 ]
 
@@ -448,6 +450,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
+name = "core-foundation-sys"
+version = "0.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -477,6 +485,16 @@ version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
 dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-deque"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51"
+dependencies = [
+ "crossbeam-epoch",
  "crossbeam-utils",
 ]
 
@@ -629,6 +647,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "dtoa"
+version = "1.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590"
 
 [[package]]
 name = "dynosaur"
@@ -1000,21 +1024,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
 dependencies = [
  "async-trait",
+ "bytes",
  "cfg-if",
  "data-encoding",
  "enum-as-inner",
  "futures-channel",
  "futures-io",
  "futures-util",
+ "h2",
+ "http",
  "idna",
  "ipnet",
  "once_cell",
  "rand 0.9.4",
  "ring",
+ "rustls",
  "serde",
  "thiserror 2.0.18",
  "tinyvec",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
 ]
@@ -1034,9 +1063,11 @@ dependencies = [
  "parking_lot",
  "rand 0.9.4",
  "resolv-conf",
+ "rustls",
  "smallvec",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-rustls",
  "tracing",
 ]
 
@@ -1345,7 +1376,7 @@ dependencies = [
  "socket2 0.6.3",
  "widestring",
  "windows-registry",
- "windows-result",
+ "windows-result 0.4.1",
  "windows-sys 0.61.2",
 ]
 
@@ -1394,6 +1425,16 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "jobserver"
+version = "0.1.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9afb3de4395d6b3e67a780b6de64b51c978ecf11cb9a462c66be7d4ca9039d33"
+dependencies = [
+ "getrandom 0.3.4",
+ "libc",
+]
 
 [[package]]
 name = "js-sys"
@@ -1567,39 +1608,51 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 [[package]]
 name = "mihomo-api"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
+ "arc-swap",
  "axum",
+ "base64",
  "dashmap 6.1.0",
  "futures",
+ "libc",
  "mihomo-common",
  "mihomo-config",
  "mihomo-dns",
  "mihomo-proxy",
+ "mihomo-rules",
  "mihomo-tunnel",
  "parking_lot",
+ "prometheus-client",
  "serde",
  "serde_json",
  "serde_yaml",
  "subtle",
+ "sysinfo",
  "thiserror 2.0.18",
+ "time",
  "tokio",
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
 name = "mihomo-common"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "async-trait",
  "bytes",
+ "httparse",
+ "ipnet",
  "libc",
  "libproc",
+ "parking_lot",
  "serde",
  "serde_json",
+ "subtle",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -1609,11 +1662,12 @@ dependencies = [
 [[package]]
 name = "mihomo-config"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64",
+ "ipnet",
  "maxminddb",
  "mihomo-common",
  "mihomo-dns",
@@ -1621,10 +1675,13 @@ dependencies = [
  "mihomo-rules",
  "mihomo-transport",
  "mihomo-trie",
+ "parking_lot",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",
+ "subtle",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -1633,16 +1690,18 @@ dependencies = [
 [[package]]
 name = "mihomo-dns"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "anyhow",
  "async-trait",
  "dashmap 6.1.0",
+ "futures",
  "hickory-proto",
  "hickory-resolver",
  "hickory-server",
  "ipnet",
  "lru",
+ "maxminddb",
  "mihomo-common",
  "mihomo-trie",
  "parking_lot",
@@ -1660,6 +1719,7 @@ dependencies = [
  "base64",
  "bytes",
  "cbindgen",
+ "dashmap 6.1.0",
  "futures",
  "http-body-util",
  "hyper",
@@ -1692,7 +1752,7 @@ dependencies = [
 [[package]]
 name = "mihomo-proxy"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1709,6 +1769,7 @@ dependencies = [
  "mihomo-transport",
  "parking_lot",
  "rand 0.9.4",
+ "regex",
  "reqwest",
  "rustls",
  "serde",
@@ -1727,7 +1788,7 @@ dependencies = [
 [[package]]
 name = "mihomo-rules"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "ipnet",
  "maxminddb",
@@ -1737,12 +1798,13 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "tracing",
+ "zstd",
 ]
 
 [[package]]
 name = "mihomo-transport"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "async-trait",
  "base64",
@@ -1766,12 +1828,12 @@ dependencies = [
 [[package]]
 name = "mihomo-trie"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 
 [[package]]
 name = "mihomo-tunnel"
 version = "0.4.0"
-source = "git+https://github.com/madeye/mihomo-rust?branch=main#6b9af50b695d05451a03dcef854823b0bb8ff2bf"
+source = "git+https://github.com/madeye/mihomo-rust?branch=main#7a5a4634b62a3ffb79a8bed4b5f0a42a0cd278a1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1780,6 +1842,7 @@ dependencies = [
  "mihomo-dns",
  "mihomo-proxy",
  "mihomo-rules",
+ "mihomo-trie",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1881,6 +1944,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
 dependencies = [
  "bitflags 2.11.1",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -2006,6 +2078,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pkg-config"
+version = "0.3.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
+
+[[package]]
 name = "poly1305"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2107,6 +2185,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "prometheus-client"
+version = "0.22.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "504ee9ff529add891127c4827eb481bd69dc0ebc72e9a682e187db4caa60c3ca"
+dependencies = [
+ "dtoa",
+ "itoa",
+ "parking_lot",
+ "prometheus-client-derive-encode",
+]
+
+[[package]]
+name = "prometheus-client-derive-encode"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "440f724eba9f6996b75d63681b0a92b06947f1457076d503a4d2e2c8f56442b8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2242,6 +2343,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
+]
+
+[[package]]
+name = "rayon"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -2798,6 +2919,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysinfo"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c33cd241af0f2e9e3b5c32163b873b29956890b5342e6745b917ce9d490f4af"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+ "memchr",
+ "ntapi",
+ "rayon",
+ "windows",
+]
+
+[[package]]
 name = "tagptr"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2872,10 +3007,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
+ "itoa",
  "num-conv",
  "powerfmt",
  "serde_core",
  "time-core",
+ "time-macros",
 ]
 
 [[package]]
@@ -2883,6 +3020,16 @@ name = "time-core"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
+
+[[package]]
+name = "time-macros"
+version = "0.2.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
+dependencies = [
+ "num-conv",
+ "time-core",
+]
 
 [[package]]
 name = "tinystr"
@@ -3133,6 +3280,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3142,12 +3299,15 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -3478,12 +3638,78 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
+name = "winapi"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
+dependencies = [
+ "winapi-i686-pc-windows-gnu",
+ "winapi-x86_64-pc-windows-gnu",
+]
+
+[[package]]
+name = "winapi-i686-pc-windows-gnu"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
+
+[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "winapi-x86_64-pc-windows-gnu"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "windows"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12342cb4d8e3b046f3d80effd474a7a02447231330ef77d71daa6fbc40681143"
+dependencies = [
+ "windows-core",
+ "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-core"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2ed2439a290666cd67ecce2b0ffaad89c2a56b976b736e6ece670297897832d"
+dependencies = [
+ "windows-implement",
+ "windows-interface",
+ "windows-result 0.1.2",
+ "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-implement"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9107ddc059d5b6fbfbffdfa7a7fe3e22a226def0b2608f72e9d552763d3e1ad7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "windows-interface"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29bee4b38ea3cde66011baa44dba677c432a78593e202392d1e9070cf2a7fca7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3499,8 +3725,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
 dependencies = [
  "windows-link",
- "windows-result",
+ "windows-result 0.4.1",
  "windows-strings",
+]
+
+[[package]]
+name = "windows-result"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e383302e8ec8515204254685643de10811af0ed97ea37210dc26fb0032647f8"
+dependencies = [
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3888,3 +4123,31 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[package]]
+name = "zstd"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.0.16+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+dependencies = [
+ "cc",
+ "pkg-config",
+]

@@ -19,6 +19,10 @@ needless_return = "allow"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }
 parking_lot = "0.12"
 futures = "0.3"
+# Explicit pin — transitive through mihomo-tunnel, but engine.rs builds
+# `DashMap<String, Arc<ProxyProvider>>` for ApiServer::new and tun2socks.rs
+# uses the same NAT-key concrete type as mihomo-tunnel. Match upstream's 6.x.
+dashmap = "6"
 
 # Logging
 tracing = "0.1"
