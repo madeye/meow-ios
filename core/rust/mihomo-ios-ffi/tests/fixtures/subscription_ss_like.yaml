@@ -1,0 +1,4954 @@
+# Synthetic fixture derived from a real Clash subscription shape.
+# Server hostnames, passwords, UUIDs, plugin hosts, and DNS servers
+# replaced with fake/public values. Rules filtered to DOMAIN/IP-CIDR
+# only so the parser does not need GeoIP or rule-provider assets.
+# Purpose: regression test that mihomo-config is built with the `ss`
+# feature enabled. If any of the 141 ss proxies stop parsing, groups
+# that reference them collapse, which is the failure mode users saw.
+# Asserts in engine::config_parse_tests depend on these counts.
+
+port: 7890
+socks-port: 7891
+allow-lan: true
+mode: Rule
+log-level: info
+external-controller: 127.0.0.1:9090
+unified-delay: true
+sniffer:
+  sniff:
+    TLS:
+      ports:
+      - 443
+      override-destination: true
+    HTTP:
+      ports:
+      - 443
+      override-destination: true
+  enable: true
+  skip-domain:
+  - Mijia Cloud
+  - dlg.io.mi.com
+  parse-pure-ip: false
+  force-dns-mapping: true
+  override-destination: true
+dns:
+  ipv6: false
+  enable: true
+  listen: 0.0.0.0:1053
+  use-hosts: false
+  default-nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  - 1.1.1.1
+  nameserver:
+  - https://1.1.1.1/dns-query
+  - https://dns.google/dns-query
+  fake-ip-range: 198.18.0.1/15
+  fake-ip-filter:
+  - '*.lan'
+  - '*.localdomain'
+  - '*.example'
+  - '*.invalid'
+  - '*.localhost'
+  - '*.test'
+  - '*.local'
+  - '*.home.arpa'
+  - time.*.com
+  - time.*.gov
+  - time.*.edu.cn
+  - time.*.apple.com
+  - time1.*.com
+  - time2.*.com
+  - time3.*.com
+  - time4.*.com
+  - time5.*.com
+  - time6.*.com
+  - time7.*.com
+  - ntp.*.com
+  - ntp1.*.com
+  - ntp2.*.com
+  - ntp3.*.com
+  - ntp4.*.com
+  - ntp5.*.com
+  - ntp6.*.com
+  - ntp7.*.com
+  - '*.time.edu.cn'
+  - '*.ntp.org.cn'
+  - +.pool.ntp.org
+  - time1.cloud.tencent.com
+  - stun.*.*
+  - stun.*.*.*
+  - swscan.apple.com
+  - mesu.apple.com
+  - music.163.com
+  - '*.music.163.com'
+  - '*.126.net'
+  - musicapi.taihe.com
+  - music.taihe.com
+  - songsearch.kugou.com
+  - trackercdn.kugou.com
+  - '*.kuwo.cn'
+  - api-jooxtt.sanook.com
+  - api.joox.com
+  - y.qq.com
+  - '*.y.qq.com'
+  - streamoc.music.tc.qq.com
+  - mobileoc.music.tc.qq.com
+  - isure.stream.qqmusic.qq.com
+  - dl.stream.qqmusic.qq.com
+  - aqqmusic.tc.qq.com
+  - amobile.music.tc.qq.com
+  - localhost.ptlogin2.qq.com
+  - '*.msftconnecttest.com'
+  - '*.msftncsi.com'
+  - '*.xiami.com'
+  - '*.music.migu.cn'
+  - music.migu.cn
+  - +.wotgame.cn
+  - +.wggames.cn
+  - +.wowsgame.cn
+  - +.wargaming.net
+  - '*.*.*.srv.nintendo.net'
+  - '*.*.stun.playstation.net'
+  - xbox.*.*.microsoft.com
+  - '*.*.xboxlive.com'
+  - '*.ipv6.microsoft.com'
+  - teredo.*.*.*
+  - teredo.*.*
+  - speedtest.cros.wr.pvp.net
+  - +.jjvip8.com
+  - www.douyu.com
+  - activityapi.huya.com
+  - activityapi.huya.com.w.cdngslb.com
+  - www.bilibili.com
+  - api.bilibili.com
+  - a.w.bilicdn1.com
+proxies:
+- name: 137.15 G | 500.00 G
+  server: proxy-000.example.test
+  port: 43407
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-000.example.test
+  udp: true
+  tfo: false
+- name: Traffic Reset：19 Days Left
+  server: proxy-001.example.test
+  port: 43407
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-001.example.test
+  udp: true
+  tfo: false
+- name: Expire Date：2026/09/10
+  server: proxy-002.example.test
+  port: 43407
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-002.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 01
+  server: proxy-003.example.test
+  port: 43407
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-003.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 02
+  server: proxy-004.example.test
+  port: 46030
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-004.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 03
+  server: proxy-005.example.test
+  port: 41468
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-005.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 04
+  server: proxy-006.example.test
+  port: 47394
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-006.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 05
+  server: proxy-007.example.test
+  port: 44650
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-007.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 06
+  server: proxy-008.example.test
+  port: 44474
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-008.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 07
+  server: proxy-009.example.test
+  port: 41781
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-009.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 08
+  server: proxy-010.example.test
+  port: 46541
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-010.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 09
+  server: proxy-011.example.test
+  port: 45326
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-011.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 10
+  server: proxy-012.example.test
+  port: 44588
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-012.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 11
+  server: proxy-013.example.test
+  port: 46487
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-013.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 12
+  server: proxy-014.example.test
+  port: 40250
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-014.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 13
+  server: proxy-015.example.test
+  port: 40122
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-015.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 14
+  server: proxy-016.example.test
+  port: 40240
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-016.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 15
+  server: proxy-017.example.test
+  port: 42127
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-017.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 16
+  server: proxy-018.example.test
+  port: 45573
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-018.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 17
+  server: proxy-019.example.test
+  port: 41465
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-019.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 18
+  server: proxy-020.example.test
+  port: 41945
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-020.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 19
+  server: proxy-021.example.test
+  port: 44860
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-021.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 20 [Premium]
+  server: proxy-022.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-022.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 21 [Premium]
+  server: proxy-023.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-023.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 22 [Premium]
+  server: proxy-024.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-024.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇰 Hong Kong 23
+  server: proxy-025.example.test
+  port: 44635
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-025.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 01
+  server: proxy-026.example.test
+  port: 42528
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-026.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 02
+  server: proxy-027.example.test
+  port: 47132
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-027.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 03
+  server: proxy-028.example.test
+  port: 42960
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-028.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 04
+  server: proxy-029.example.test
+  port: 42590
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-029.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 05
+  server: proxy-030.example.test
+  port: 46451
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-030.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 06
+  server: proxy-031.example.test
+  port: 41457
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-031.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 07
+  server: proxy-032.example.test
+  port: 46531
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-032.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 08
+  server: proxy-033.example.test
+  port: 40576
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-033.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Seattle 09
+  server: proxy-034.example.test
+  port: 40617
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-034.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 01 [Premium]
+  server: proxy-035.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-035.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 02 [Premium]
+  server: proxy-036.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-036.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 03 [Premium]
+  server: proxy-037.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-037.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 04 [Premium]
+  server: proxy-038.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-038.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 05 [Premium]
+  server: proxy-039.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-039.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 06 [Premium]
+  server: proxy-040.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-040.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 07
+  server: proxy-041.example.test
+  port: 44112
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-041.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA San Jose 08
+  server: proxy-042.example.test
+  port: 43676
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-042.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 01
+  server: proxy-043.example.test
+  port: 46592
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-043.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 02
+  server: proxy-044.example.test
+  port: 45439
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-044.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 03
+  server: proxy-045.example.test
+  port: 43943
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-045.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 04
+  server: proxy-046.example.test
+  port: 42640
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-046.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 05
+  server: proxy-047.example.test
+  port: 46933
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-047.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 06
+  server: proxy-048.example.test
+  port: 41478
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-048.example.test
+  udp: true
+  tfo: false
+- name: 🇺🇸 USA Los Angeles 07
+  server: proxy-049.example.test
+  port: 46771
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-049.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 01
+  server: proxy-050.example.test
+  port: 43965
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-050.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 02
+  server: proxy-051.example.test
+  port: 41375
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-051.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 03
+  server: proxy-052.example.test
+  port: 46237
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-052.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 04
+  server: proxy-053.example.test
+  port: 45081
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-053.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 05
+  server: proxy-054.example.test
+  port: 42164
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-054.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 06
+  server: proxy-055.example.test
+  port: 47445
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-055.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 07
+  server: proxy-056.example.test
+  port: 40352
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-056.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 08
+  server: proxy-057.example.test
+  port: 40130
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-057.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 09
+  server: proxy-058.example.test
+  port: 43058
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-058.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 10
+  server: proxy-059.example.test
+  port: 42727
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-059.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 11
+  server: proxy-060.example.test
+  port: 42129
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-060.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 12
+  server: proxy-061.example.test
+  port: 41308
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-061.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 13
+  server: proxy-062.example.test
+  port: 42617
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-062.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 14
+  server: proxy-063.example.test
+  port: 41338
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-063.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 15
+  server: proxy-064.example.test
+  port: 44399
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-064.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 16
+  server: proxy-065.example.test
+  port: 45691
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-065.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 17
+  server: proxy-066.example.test
+  port: 41908
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-066.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 18
+  server: proxy-067.example.test
+  port: 43704
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-067.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 19
+  server: proxy-068.example.test
+  port: 46390
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-068.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 20
+  server: proxy-069.example.test
+  port: 40435
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-069.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 21
+  server: proxy-070.example.test
+  port: 43772
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-070.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 22 [Premium]
+  server: proxy-071.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-071.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 23 [Premium]
+  server: proxy-072.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-072.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 24
+  server: proxy-073.example.test
+  port: 45569
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-073.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 25
+  server: proxy-074.example.test
+  port: 45697
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-074.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 26
+  server: proxy-075.example.test
+  port: 42321
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-075.example.test
+  udp: true
+  tfo: false
+- name: 🇯🇵 Japan 27
+  server: proxy-076.example.test
+  port: 45629
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-076.example.test
+  udp: true
+  tfo: false
+- name: 🇳🇱 Netherlands 01
+  server: proxy-077.example.test
+  port: 45853
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-077.example.test
+  udp: true
+  tfo: false
+- name: 🇷🇺 Russia St. Petersburg
+  server: proxy-078.example.test
+  port: 46556
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-078.example.test
+  udp: true
+  tfo: false
+- name: 🇷🇺 Russia Moscow 01
+  server: proxy-079.example.test
+  port: 44364
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-079.example.test
+  udp: true
+  tfo: false
+- name: 🇩🇪 Germany 01
+  server: proxy-080.example.test
+  port: 41583
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-080.example.test
+  udp: true
+  tfo: false
+- name: 🇩🇪 Germany 02
+  server: proxy-081.example.test
+  port: 43977
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-081.example.test
+  udp: true
+  tfo: false
+- name: 🇩🇪 Germany 03
+  server: proxy-082.example.test
+  port: 42449
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-082.example.test
+  udp: true
+  tfo: false
+- name: 🇩🇪 Germany 04
+  server: proxy-083.example.test
+  port: 44223
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-083.example.test
+  udp: true
+  tfo: false
+- name: 🇩🇪 Germany 05
+  server: proxy-084.example.test
+  port: 43848
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-084.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇭 Switzerland 02
+  server: proxy-085.example.test
+  port: 43821
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-085.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇭 Switzerland 01
+  server: proxy-086.example.test
+  port: 46402
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-086.example.test
+  udp: true
+  tfo: false
+- name: 🇫🇷 France 01
+  server: proxy-087.example.test
+  port: 40791
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-087.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 01
+  server: proxy-088.example.test
+  port: 40711
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-088.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 02
+  server: proxy-089.example.test
+  port: 43535
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-089.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 03
+  server: proxy-090.example.test
+  port: 44212
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-090.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 04
+  server: proxy-091.example.test
+  port: 41394
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-091.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 05
+  server: proxy-092.example.test
+  port: 44184
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-092.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 06
+  server: proxy-093.example.test
+  port: 46762
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-093.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 07
+  server: proxy-094.example.test
+  port: 43556
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-094.example.test
+  udp: true
+  tfo: false
+- name: 🇬🇧 United Kingdom 08
+  server: proxy-095.example.test
+  port: 45362
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-095.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇪 Sweden 01
+  server: proxy-096.example.test
+  port: 45791
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-096.example.test
+  udp: true
+  tfo: false
+- name: 🇧🇬 Bulgaria 01
+  server: proxy-097.example.test
+  port: 43265
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-097.example.test
+  udp: true
+  tfo: false
+- name: 🇦🇹 Austria 01
+  server: proxy-098.example.test
+  port: 40115
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-098.example.test
+  udp: true
+  tfo: false
+- name: 🇮🇪 Ireland 01
+  server: proxy-099.example.test
+  port: 42665
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-099.example.test
+  udp: true
+  tfo: false
+- name: 🇮🇪 Ireland 02
+  server: proxy-100.example.test
+  port: 40321
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-100.example.test
+  udp: true
+  tfo: false
+- name: 🇹🇷 Turkey 01
+  server: proxy-101.example.test
+  port: 41348
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-101.example.test
+  udp: true
+  tfo: false
+- name: 🇭🇺 Hungary 01
+  server: proxy-102.example.test
+  port: 44705
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-102.example.test
+  udp: true
+  tfo: false
+- name: 🇰🇷 Korea 01
+  server: proxy-103.example.test
+  port: 41463
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-103.example.test
+  udp: true
+  tfo: false
+- name: 🇰🇷 Korea 02
+  server: proxy-104.example.test
+  port: 47287
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-104.example.test
+  udp: true
+  tfo: false
+- name: 🇰🇷 Korea 03 [Premium]
+  server: proxy-105.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-105.example.test
+  udp: true
+  tfo: false
+- name: 🇰🇷 Korea 04
+  server: proxy-106.example.test
+  port: 47075
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-106.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 01
+  server: proxy-107.example.test
+  port: 40012
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-107.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 02
+  server: proxy-108.example.test
+  port: 42370
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-108.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 03
+  server: proxy-109.example.test
+  port: 40626
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-109.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 04
+  server: proxy-110.example.test
+  port: 42733
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-110.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 05
+  server: proxy-111.example.test
+  port: 44520
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-111.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 06
+  server: proxy-112.example.test
+  port: 42509
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-112.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 07
+  server: proxy-113.example.test
+  port: 40996
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-113.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 08
+  server: proxy-114.example.test
+  port: 46815
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-114.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 09
+  server: proxy-115.example.test
+  port: 39771
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-115.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇳 Taiwan 10
+  server: proxy-116.example.test
+  port: 39793
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-116.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇦 Canada 01
+  server: proxy-117.example.test
+  port: 40036
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-117.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇦 Canada 02
+  server: proxy-118.example.test
+  port: 44754
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-118.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇦 Canada 03
+  server: proxy-119.example.test
+  port: 43844
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-119.example.test
+  udp: true
+  tfo: false
+- name: 🇦🇺 Australia Sydney 01 [Premium]
+  server: proxy-120.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-120.example.test
+  udp: true
+  tfo: false
+- name: 🇦🇺 Australia Sydney 02
+  server: proxy-121.example.test
+  port: 43181
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-121.example.test
+  udp: true
+  tfo: false
+- name: 🇦🇪 United Arab Emirates 01
+  server: proxy-122.example.test
+  port: 44415
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-122.example.test
+  udp: true
+  tfo: false
+- name: 🇮🇳 India 01
+  server: proxy-123.example.test
+  port: 45178
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-123.example.test
+  udp: true
+  tfo: false
+- name: 🇮🇳 India 02
+  server: proxy-124.example.test
+  port: 45317
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-124.example.test
+  udp: true
+  tfo: false
+- name: 🇮🇩 Indonesia 01
+  server: proxy-125.example.test
+  port: 46135
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-125.example.test
+  udp: true
+  tfo: false
+- name: 🇧🇷 Brazil 01
+  server: proxy-126.example.test
+  port: 44809
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-126.example.test
+  udp: true
+  tfo: false
+- name: 🇦🇷 Argentina 01
+  server: proxy-127.example.test
+  port: 40405
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-127.example.test
+  udp: true
+  tfo: false
+- name: 🇨🇱 Chile 01
+  server: proxy-128.example.test
+  port: 40049
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-128.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 01
+  server: proxy-129.example.test
+  port: 45894
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-129.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 02
+  server: proxy-130.example.test
+  port: 40600
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-130.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 03
+  server: proxy-131.example.test
+  port: 44124
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-131.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 04
+  server: proxy-132.example.test
+  port: 42734
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-132.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 05
+  server: proxy-133.example.test
+  port: 41388
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-133.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 06
+  server: proxy-134.example.test
+  port: 42670
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-134.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 07
+  server: proxy-135.example.test
+  port: 40971
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-135.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 08
+  server: proxy-136.example.test
+  port: 40035
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-136.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 09
+  server: proxy-137.example.test
+  port: 39936
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-137.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 10
+  server: proxy-138.example.test
+  port: 44884
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-138.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 11 [Premium]
+  server: proxy-139.example.test
+  port: 1
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-139.example.test
+  udp: true
+  tfo: false
+- name: 🇸🇬 Singapore 12
+  server: proxy-140.example.test
+  port: 43809
+  type: ss
+  cipher: aes-128-gcm
+  password: FAKE_TEST_PASSWORD_0000
+  plugin: obfs
+  plugin-opts:
+    mode: http
+    host: obfs-140.example.test
+  udp: true
+  tfo: false
+proxy-groups:
+- name: Proxies
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/Proxy.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Netflix
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/Netflix.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: HBO
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/HBO Max.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: DisneyPlus
+  icon: https://www.naiixi.com/DisneyPlus.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: YouTube
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/YouTube.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Bahamut
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/Bahamut.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Bilibili
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/Bilibili.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - 🎯Direct
+  - Proxies
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: MyTVSuper
+  icon: https://www.naiixi.com/images/myTVSUPER.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: AI
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Color/ChatGPT.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Telegram
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/Telegram.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Crypto
+  icon: https://www.naiixi.com/Crypto.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Steam
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/color/steam.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Epic
+  icon: https://www.naiixi.com/Epic.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Xbox
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/Xbox.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: PlayStation
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/PlayStation_1.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Microsoft
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/Microsoft.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - 🎯Direct
+  - Proxies
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Scholar
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/Scholar.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Apple
+  icon: https://raw.githubusercontent.com/HotKids/Rules/master/Quantumult/X/Images/Icons/Apple.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - 🎯Direct
+  - Proxies
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Google
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/color/google.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: Tiktok
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/TikTok_1.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+- name: 🎯Direct
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/Direct.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - DIRECT
+  - Proxies
+- name: ✈️Final
+  icon: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/icon/qure/color/Final.png
+  url: http://www.gstatic.com/generate_204
+  type: select
+  proxies:
+  - Proxies
+  - 🎯Direct
+  - 137.15 G | 500.00 G
+  - Traffic Reset：19 Days Left
+  - Expire Date：2026/09/10
+  - 🇭🇰 Hong Kong 01
+  - 🇭🇰 Hong Kong 02
+  - 🇭🇰 Hong Kong 03
+  - 🇭🇰 Hong Kong 04
+  - 🇭🇰 Hong Kong 05
+  - 🇭🇰 Hong Kong 06
+  - 🇭🇰 Hong Kong 07
+  - 🇭🇰 Hong Kong 08
+  - 🇭🇰 Hong Kong 09
+  - 🇭🇰 Hong Kong 10
+  - 🇭🇰 Hong Kong 11
+  - 🇭🇰 Hong Kong 12
+  - 🇭🇰 Hong Kong 13
+  - 🇭🇰 Hong Kong 14
+  - 🇭🇰 Hong Kong 15
+  - 🇭🇰 Hong Kong 16
+  - 🇭🇰 Hong Kong 17
+  - 🇭🇰 Hong Kong 18
+  - 🇭🇰 Hong Kong 19
+  - 🇭🇰 Hong Kong 20 [Premium]
+  - 🇭🇰 Hong Kong 21 [Premium]
+  - 🇭🇰 Hong Kong 22 [Premium]
+  - 🇭🇰 Hong Kong 23
+  - 🇺🇸 USA Seattle 01
+  - 🇺🇸 USA Seattle 02
+  - 🇺🇸 USA Seattle 03
+  - 🇺🇸 USA Seattle 04
+  - 🇺🇸 USA Seattle 05
+  - 🇺🇸 USA Seattle 06
+  - 🇺🇸 USA Seattle 07
+  - 🇺🇸 USA Seattle 08
+  - 🇺🇸 USA Seattle 09
+  - 🇺🇸 USA San Jose 01 [Premium]
+  - 🇺🇸 USA San Jose 02 [Premium]
+  - 🇺🇸 USA San Jose 03 [Premium]
+  - 🇺🇸 USA San Jose 04 [Premium]
+  - 🇺🇸 USA San Jose 05 [Premium]
+  - 🇺🇸 USA San Jose 06 [Premium]
+  - 🇺🇸 USA San Jose 07
+  - 🇺🇸 USA San Jose 08
+  - 🇺🇸 USA Los Angeles 01
+  - 🇺🇸 USA Los Angeles 02
+  - 🇺🇸 USA Los Angeles 03
+  - 🇺🇸 USA Los Angeles 04
+  - 🇺🇸 USA Los Angeles 05
+  - 🇺🇸 USA Los Angeles 06
+  - 🇺🇸 USA Los Angeles 07
+  - 🇯🇵 Japan 01
+  - 🇯🇵 Japan 02
+  - 🇯🇵 Japan 03
+  - 🇯🇵 Japan 04
+  - 🇯🇵 Japan 05
+  - 🇯🇵 Japan 06
+  - 🇯🇵 Japan 07
+  - 🇯🇵 Japan 08
+  - 🇯🇵 Japan 09
+  - 🇯🇵 Japan 10
+  - 🇯🇵 Japan 11
+  - 🇯🇵 Japan 12
+  - 🇯🇵 Japan 13
+  - 🇯🇵 Japan 14
+  - 🇯🇵 Japan 15
+  - 🇯🇵 Japan 16
+  - 🇯🇵 Japan 17
+  - 🇯🇵 Japan 18
+  - 🇯🇵 Japan 19
+  - 🇯🇵 Japan 20
+  - 🇯🇵 Japan 21
+  - 🇯🇵 Japan 22 [Premium]
+  - 🇯🇵 Japan 23 [Premium]
+  - 🇯🇵 Japan 24
+  - 🇯🇵 Japan 25
+  - 🇯🇵 Japan 26
+  - 🇯🇵 Japan 27
+  - 🇳🇱 Netherlands 01
+  - 🇷🇺 Russia St. Petersburg
+  - 🇷🇺 Russia Moscow 01
+  - 🇩🇪 Germany 01
+  - 🇩🇪 Germany 02
+  - 🇩🇪 Germany 03
+  - 🇩🇪 Germany 04
+  - 🇩🇪 Germany 05
+  - 🇨🇭 Switzerland 02
+  - 🇨🇭 Switzerland 01
+  - 🇫🇷 France 01
+  - 🇬🇧 United Kingdom 01
+  - 🇬🇧 United Kingdom 02
+  - 🇬🇧 United Kingdom 03
+  - 🇬🇧 United Kingdom 04
+  - 🇬🇧 United Kingdom 05
+  - 🇬🇧 United Kingdom 06
+  - 🇬🇧 United Kingdom 07
+  - 🇬🇧 United Kingdom 08
+  - 🇸🇪 Sweden 01
+  - 🇧🇬 Bulgaria 01
+  - 🇦🇹 Austria 01
+  - 🇮🇪 Ireland 01
+  - 🇮🇪 Ireland 02
+  - 🇹🇷 Turkey 01
+  - 🇭🇺 Hungary 01
+  - 🇰🇷 Korea 01
+  - 🇰🇷 Korea 02
+  - 🇰🇷 Korea 03 [Premium]
+  - 🇰🇷 Korea 04
+  - 🇨🇳 Taiwan 01
+  - 🇨🇳 Taiwan 02
+  - 🇨🇳 Taiwan 03
+  - 🇨🇳 Taiwan 04
+  - 🇨🇳 Taiwan 05
+  - 🇨🇳 Taiwan 06
+  - 🇨🇳 Taiwan 07
+  - 🇨🇳 Taiwan 08
+  - 🇨🇳 Taiwan 09
+  - 🇨🇳 Taiwan 10
+  - 🇨🇦 Canada 01
+  - 🇨🇦 Canada 02
+  - 🇨🇦 Canada 03
+  - 🇦🇺 Australia Sydney 01 [Premium]
+  - 🇦🇺 Australia Sydney 02
+  - 🇦🇪 United Arab Emirates 01
+  - 🇮🇳 India 01
+  - 🇮🇳 India 02
+  - 🇮🇩 Indonesia 01
+  - 🇧🇷 Brazil 01
+  - 🇦🇷 Argentina 01
+  - 🇨🇱 Chile 01
+  - 🇸🇬 Singapore 01
+  - 🇸🇬 Singapore 02
+  - 🇸🇬 Singapore 03
+  - 🇸🇬 Singapore 04
+  - 🇸🇬 Singapore 05
+  - 🇸🇬 Singapore 06
+  - 🇸🇬 Singapore 07
+  - 🇸🇬 Singapore 08
+  - 🇸🇬 Singapore 09
+  - 🇸🇬 Singapore 10
+  - 🇸🇬 Singapore 11 [Premium]
+  - 🇸🇬 Singapore 12
+rules:
+- DOMAIN-SUFFIX,ping0.cc,🎯Direct
+- DOMAIN-SUFFIX,durable0762.com,🎯Direct
+- DOMAIN-SUFFIX,delirium9599.com,🎯Direct
+- DOMAIN-SUFFIX,wrecking7857.com,🎯Direct
+- DOMAIN-SUFFIX,carrousel6917.com,🎯Direct
+- DOMAIN-SUFFIX,simmering3378.com,🎯Direct
+- PROCESS-NAME,Weixin.exe,🎯Direct
+- IP-CIDR,87.83.109.0/24,🎯Direct
+- IP-CIDR,142.248.148.0/24,🎯Direct
+- IP-CIDR,209.248.34.0/24,🎯Direct
+- DOMAIN,scholar.google.com,Scholar
+- DOMAIN-SUFFIX,1lib.cloud,Scholar
+- DOMAIN-SUFFIX,1lib.domains,Scholar
+- DOMAIN-SUFFIX,1lib.education,Scholar
+- DOMAIN-SUFFIX,1lib.eu,Scholar
+- DOMAIN-SUFFIX,1lib.limited,Scholar
+- DOMAIN-SUFFIX,1lib.pl,Scholar
+- DOMAIN-SUFFIX,1lib.to,Scholar
+- DOMAIN-SUFFIX,1lib.tw,Scholar
+- DOMAIN-SUFFIX,2lib.org,Scholar
+- MATCH,✈️Final
