@@ -2,7 +2,10 @@ import Foundation
 import MeowIPC
 import MeowModels
 import Observation
+import os
 import SwiftData
+
+private let replayLog = Logger(subsystem: "io.github.madeye.meow.app", category: "proxy-replay")
 
 /// Top-level observable that wires the app's long-lived services together and
 /// performs first-launch setup (asset seeding, IPC observer registration).
@@ -40,54 +43,65 @@ final class AppModel {
         didBootstrap = true
 
         vpnManager.onConnected = { [weak self] in
-            self?.replaySelectedProxiesOnConnect()
+            Task { @MainActor in
+                await self?.replaySelectedProxies()
+            }
         }
         await AssetSeeder.seedIfNeeded()
         await vpnManager.refresh()
         ipcBridge.start()
     }
 
-    /// Re-issues the active profile's persisted `selectedProxies` after the
-    /// engine starts. mihomo-rust drops in-memory group state on every
-    /// engine.start, so without this the UI shows the YAML defaults instead
-    /// of what the user last picked. Stale entries (HTTP 4xx — group/proxy
-    /// renamed or removed since the last save) are dropped and persisted
-    /// back. Transient errors (connection refused, timeout, 5xx) are left
-    /// alone: `meow_engine_start` returns before the in-process api_server
-    /// task binds :9090, so a replay fired on NEVPNStatus=.connected can
-    /// race it. Wiping persisted selections on that race is how #59
-    /// silently erased the user's picks after a single unlucky reconnect.
-    private func replaySelectedProxiesOnConnect() {
+    /// Re-issues the active profile's persisted `selectedProxies` each time
+    /// the tunnel transitions into `.connected`. mihomo-rust keeps group
+    /// state in-memory only, so every engine.start resets it to the YAML
+    /// defaults — without this the UI would show defaults instead of what
+    /// the user last picked.
+    ///
+    /// Read-only against persistence: a saved selection that no longer
+    /// exists server-side (group renamed, proxy removed) surfaces as an
+    /// HTTP 4xx here; it is logged and ignored. We do NOT proactively
+    /// delete the persisted entry — destructive cleanup on replay is how
+    /// #59 silently erased the user's picks on a single unlucky reconnect.
+    /// User can re-pick if they want; stale entries are otherwise harmless.
+    private func replaySelectedProxies() async {
+        let api = mihomoAPI
+        // Cold-connect readiness probe. `meow_engine_start` returns before
+        // the spawned api_server task binds :9090, so a replay fired on the
+        // `.connected` edge can race it. 1s cap (100ms × 10) is plenty on
+        // device; we give up silently rather than retry forever.
+        var ready = false
+        for attempt in 0 ..< 10 {
+            do {
+                _ = try await api.getProxies()
+                replayLog.notice("probe ready after \(attempt + 1) attempt(s)")
+                ready = true
+                break
+            } catch {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        guard ready else {
+            replayLog.error("probe gave up after 10 attempts — skipping replay")
+            return
+        }
+
         let context = AppModelContainer.shared.container.mainContext
         let descriptor = FetchDescriptor<Profile>(predicate: #Predicate { $0.isSelected })
-        guard let profile = try? context.fetch(descriptor).first else { return }
+        guard let profile = try? context.fetch(descriptor).first else {
+            replayLog.notice("no active profile — nothing to replay")
+            return
+        }
         let selections = profile.selectedProxies
-        guard !selections.isEmpty else { return }
-        let api = mihomoAPI
-        Task { @MainActor in
-            var ready = false
-            for _ in 0 ..< 10 {
-                do {
-                    _ = try await api.getProxies()
-                    ready = true
-                    break
-                } catch {
-                    try? await Task.sleep(for: .milliseconds(100))
-                }
+        replayLog.notice("replaying \(selections.count) selection(s)")
+        for (group, proxy) in selections {
+            do {
+                try await api.selectProxy(group: group, name: proxy)
+            } catch {
+                replayLog.error(
+                    "selectProxy failed group=\(group, privacy: .public) proxy=\(proxy, privacy: .public) err=\(String(describing: error), privacy: .public)",
+                )
             }
-            guard ready else { return }
-
-            let outcome = await SelectedProxyRestorer.restore(
-                selections: selections,
-                select: { group, name in try await api.selectProxy(group: group, name: name) },
-            )
-            guard !outcome.stale.isEmpty else { return }
-            var updated = profile.selectedProxies
-            for group in outcome.stale {
-                updated.removeValue(forKey: group)
-            }
-            profile.selectedProxies = updated
-            try? context.save()
         }
     }
 }
