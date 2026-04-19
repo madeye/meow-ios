@@ -50,8 +50,13 @@ final class AppModel {
     /// Re-issues the active profile's persisted `selectedProxies` after the
     /// engine starts. mihomo-rust drops in-memory group state on every
     /// engine.start, so without this the UI shows the YAML defaults instead
-    /// of what the user last picked. Stale entries (group/proxy renamed or
-    /// removed since the last save) are dropped and persisted back.
+    /// of what the user last picked. Stale entries (HTTP 4xx — group/proxy
+    /// renamed or removed since the last save) are dropped and persisted
+    /// back. Transient errors (connection refused, timeout, 5xx) are left
+    /// alone: `meow_engine_start` returns before the in-process api_server
+    /// task binds :9090, so a replay fired on NEVPNStatus=.connected can
+    /// race it. Wiping persisted selections on that race is how #59
+    /// silently erased the user's picks after a single unlucky reconnect.
     private func replaySelectedProxiesOnConnect() {
         let context = AppModelContainer.shared.container.mainContext
         let descriptor = FetchDescriptor<Profile>(predicate: #Predicate { $0.isSelected })
@@ -60,13 +65,25 @@ final class AppModel {
         guard !selections.isEmpty else { return }
         let api = mihomoAPI
         Task { @MainActor in
-            let stale = await SelectedProxyRestorer.restore(
+            var ready = false
+            for _ in 0 ..< 10 {
+                do {
+                    _ = try await api.getProxies()
+                    ready = true
+                    break
+                } catch {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            guard ready else { return }
+
+            let outcome = await SelectedProxyRestorer.restore(
                 selections: selections,
                 select: { group, name in try await api.selectProxy(group: group, name: name) },
             )
-            guard !stale.isEmpty else { return }
+            guard !outcome.stale.isEmpty else { return }
             var updated = profile.selectedProxies
-            for group in stale {
+            for group in outcome.stale {
                 updated.removeValue(forKey: group)
             }
             profile.selectedProxies = updated
