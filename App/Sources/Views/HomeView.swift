@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 struct HomeView: View {
+    @Environment(AppModel.self) private var appModel
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
     @Environment(MihomoAPI.self) private var mihomoAPI
@@ -30,6 +31,14 @@ struct HomeView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("home.nav.title")
         .task(id: vpnManager.stage) {
+            await refreshGroupsIfConnected()
+        }
+        // The stage-keyed task above fires on the `.connected` edge and races
+        // `AppModel.replaySelectedProxies`; the pre-replay fetch caches YAML
+        // defaults and the UI never re-reads post-replay engine state. Keying
+        // a second task on `replayGeneration` guarantees a re-fetch AFTER the
+        // replay pass finishes (success, probe timeout, or no-op alike).
+        .task(id: appModel.replayGeneration) {
             await refreshGroupsIfConnected()
         }
         .refreshable { await refreshGroupsIfConnected() }
