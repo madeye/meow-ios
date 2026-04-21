@@ -127,6 +127,11 @@ int meow_engine_test_dns(const char *host, int timeout_ms, char *out, int out_ca
  * driven by `meow_tun_ingest`; the tunnel uses an internal mpsc queue so
  * there's no file descriptor between Swift and Rust.
  *
+ * `socks_port` is the loopback port where the mihomo mixed listener is
+ * bound (see `meow_engine_start`). Pass `0` to inherit the engine's port —
+ * the FFI resolves it via `engine::mixed_port()`. If the engine isn't
+ * running yet, the call fails.
+ *
  * Returns 0 on success, -1 on error (inspect `meow_core_last_error`).
  *
  * # Safety
@@ -134,7 +139,7 @@ int meow_engine_test_dns(const char *host, int timeout_ms, char *out, int out_ca
  * between this call and `meow_tun_stop`. `write_cb` must be a non-null C
  * function pointer that stays valid for the lifetime of the tunnel.
  */
-int meow_tun_start(void *ctx, MeowWritePacket write_cb);
+int meow_tun_start(void *ctx, MeowWritePacket write_cb, uint16_t socks_port);
 
 /**
  * Feed a raw IP packet from `NEPacketTunnelFlow.readPackets` into the

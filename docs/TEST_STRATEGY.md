@@ -202,9 +202,9 @@ These tests live in the extension target's `PacketTunnelTests` bundle (runs insi
 |----------|---------|
 | Load GeoIP + Geosite assets | First launch copies from bundle to App Group; second launch uses cached copy |
 | `meow_engine_start` with test config | Returns 0 within 2s; `meow_engine_is_running()` → 1 |
-| `meow_tun_start` + engine coexistence | Both run in the same Rust library via Tokio channels; no SOCKS5 loopback |
+| `meow_tun_start` + engine coexistence | Both run in the same Rust library; tun2socks relays TCP to the engine's `MixedListener` on `127.0.0.1:<mixed-port>` (SOCKS5 loopback, mirrors madeye/meow Android FFI) |
 | REST API reachable | `GET http://127.0.0.1:9090/version` from inside extension returns `meow_engine_version()` output |
-| In-process tun2socks ↔ engine channel | Packet sent into TUN fd appears on upstream proxy socket within 20ms median (no loopback hop) |
+| SOCKS5 loopback ↔ engine | Packet sent into `NEPacketTunnelFlow` appears on upstream proxy socket within 25ms median (single loopback hop through `MixedListener`) |
 | DoH bootstrap | `meow_test_dns_resolver("https://1.1.1.1/dns-query")` returns 0 with at least one resolved IP |
 | Memory footprint after 60s idle | `proc_task_info` reports < 40 MB resident — must stay well under the ~50 MB iOS ceiling |
 

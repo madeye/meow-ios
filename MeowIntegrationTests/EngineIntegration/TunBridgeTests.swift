@@ -3,9 +3,12 @@ import Testing
 
 /// Exercises the Rust tun2socks bridge through the C ABI: start/stop
 /// lifecycle, ingest return codes, and the Swift-owned egress callback.
-/// The engine is brought up alongside tun2socks because `meow_tun_start`
-/// is only meaningful once the netstack-smoltcp stack is live; production
-/// (see `PacketTunnel/TunnelEngine.start`) calls the two in this order.
+/// The engine is brought up alongside tun2socks because (a) the SOCKS5
+/// mixed listener lives inside the engine, and (b) passing `socks_port = 0`
+/// to `meow_tun_start` asks the FFI to inherit the engine's mixed-port. If
+/// the engine isn't running, tun_start fails with "engine not running".
+/// Production (see `PacketTunnel/TunnelEngine.start`) calls the two in this
+/// order for the same reason.
 ///
 /// Packet semantics are deliberately light — we assert queueing return
 /// codes and callback wiring, not payload routing. End-to-end packet
@@ -27,7 +30,7 @@ struct TunBridgeTests {
         let ctx = Unmanaged.passRetained(sink)
         defer { ctx.release() }
 
-        let rc = meow_tun_start(ctx.toOpaque(), tunEgressCallback)
+        let rc = meow_tun_start(ctx.toOpaque(), tunEgressCallback, 0)
         #expect(rc == 0, "tun_start failed: \(lastError())")
 
         meow_tun_stop()
@@ -60,7 +63,7 @@ struct TunBridgeTests {
 
         let sink = EgressSink()
         let ctx = Unmanaged.passRetained(sink)
-        #expect(meow_tun_start(ctx.toOpaque(), tunEgressCallback) == 0,
+        #expect(meow_tun_start(ctx.toOpaque(), tunEgressCallback, 0) == 0,
                 "tun_start failed: \(lastError())")
         defer { meow_tun_stop(); ctx.release() }
 
@@ -82,11 +85,11 @@ struct TunBridgeTests {
         let ctx = Unmanaged.passRetained(sink)
         defer { ctx.release() }
 
-        #expect(meow_tun_start(ctx.toOpaque(), tunEgressCallback) == 0,
+        #expect(meow_tun_start(ctx.toOpaque(), tunEgressCallback, 0) == 0,
                 "first tun_start failed: \(lastError())")
         meow_tun_stop()
 
-        #expect(meow_tun_start(ctx.toOpaque(), tunEgressCallback) == 0,
+        #expect(meow_tun_start(ctx.toOpaque(), tunEgressCallback, 0) == 0,
                 "second tun_start failed: \(lastError())")
         meow_tun_stop()
     }

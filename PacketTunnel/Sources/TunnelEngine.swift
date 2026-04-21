@@ -6,10 +6,13 @@ import os.log
 
 /// Orchestrates the mihomo-rust engine and the tun2socks layer inside the
 /// packet-tunnel extension. Both halves live in the same static library
-/// (`MihomoCore.xcframework`) and dispatch in-process — no SOCKS5 loopback,
-/// no socketpair. `PacketWriter` + `meowPacketWriteCallback` form the egress
-/// bridge; this class drives ingress via `NEPacketTunnelFlow.readPackets` and
-/// forwards each packet into `meow_tun_ingest`.
+/// (`MihomoCore.xcframework`). Architecture mirrors the madeye/meow Android
+/// reference: netstack-smoltcp terminates TCP and relays each flow as a
+/// SOCKS5 CONNECT to the in-process mihomo `MixedListener` on
+/// `127.0.0.1:<mixed-port>`. `PacketWriter` + `meowPacketWriteCallback` form
+/// the egress bridge; this class drives ingress via
+/// `NEPacketTunnelFlow.readPackets` and forwards each packet into
+/// `meow_tun_ingest`.
 ///
 /// `@unchecked Sendable`: NEPacketTunnelProvider serializes startTunnel/stopTunnel
 /// for us (see NetworkExtension.framework docs), so this class is only touched
@@ -50,7 +53,10 @@ final class TunnelEngine: @unchecked Sendable {
         let writer = PacketWriter(flow: packetFlow)
         let ref = Unmanaged.passRetained(writer)
         writerRef = ref
-        if meow_tun_start(ref.toOpaque(), meowPacketWriteCallback) != 0 {
+        // socks_port = 0 asks the FFI to inherit the engine's mixed-port
+        // (the port we injected via `strip_listener_fields` on the Rust
+        // side). Keeps the Swift caller out of the config-parse business.
+        if meow_tun_start(ref.toOpaque(), meowPacketWriteCallback, 0) != 0 {
             ref.release()
             writerRef = nil
             meow_engine_stop()

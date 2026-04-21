@@ -1,23 +1,29 @@
-//! Rust half of the meow-ios native stack — unified into a single C ABI that
-//! the PacketTunnel extension and the main app both link against via
+//! Rust half of the meow-ios native stack — a single C ABI that the
+//! PacketTunnel extension and the main app both link against via
 //! `MihomoCore.xcframework`.
 //!
-//! Embeds the mihomo-rust proxy engine and the tun2socks layer in one static
-//! library. Both TCP and UDP flows are dispatched in-process:
+//! Architecture mirrors the madeye/meow Android FFI (mihomo-android-ffi):
 //!
-//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ⇆ mihomo_tunnel::{tcp,udp}::handle_*
-//!                                                              ↓
-//!                                          rules / proxies / DNS / REST API
+//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ──► SOCKS5 ──► MixedListener
+//!                                                               │
+//!                                                               ▼
+//!                                                     mihomo_tunnel adapters
+//!                                                     (rules / proxies / DNS)
 //!
-//! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
-//! owns a single tokio runtime that both halves share. UDP DNS is
-//! short-circuited pre-stack to DoH; everything else flows through netstack's
-//! UDP socket.
+//! The `MixedListener` runs inside the extension on `127.0.0.1:<mixed-port>`
+//! and accepts SOCKS5 and HTTP proxy traffic. tun2socks opens a SOCKS5
+//! connection to that listener for every TCP flow it accepts from netstack.
+//! DoH POSTs traverse the same listener via reqwest's `socks5h://` proxy, so
+//! DNS is subject to the same rule/proxy-group decisions as regular traffic.
+//!
+//! UDP through netstack is disabled (matching Android); only UDP DNS is
+//! intercepted pre-stack and answered via DoH. Non-DNS UDP is dropped.
 
 mod diagnostics;
 mod dns_table;
 mod doh_client;
 mod engine;
+mod listener;
 mod logging;
 mod subscription;
 mod tun2socks;
@@ -363,7 +369,7 @@ pub unsafe extern "C" fn meow_engine_test_dns(
 }
 
 // ---------------------------------------------------------------------------
-// tun2socks (NEPacketTunnelFlow bridge) — dispatches in-process into engine
+// tun2socks (NEPacketTunnelFlow bridge) — netstack → SOCKS5 loopback
 // ---------------------------------------------------------------------------
 
 /// C-compatible egress callback. Called from the tokio runtime whenever
@@ -376,6 +382,11 @@ pub type MeowWritePacket =
 /// driven by `meow_tun_ingest`; the tunnel uses an internal mpsc queue so
 /// there's no file descriptor between Swift and Rust.
 ///
+/// `socks_port` is the loopback port where the mihomo mixed listener is
+/// bound (see `meow_engine_start`). Pass `0` to inherit the engine's port —
+/// the FFI resolves it via `engine::mixed_port()`. If the engine isn't
+/// running yet, the call fails.
+///
 /// Returns 0 on success, -1 on error (inspect `meow_core_last_error`).
 ///
 /// # Safety
@@ -386,9 +397,21 @@ pub type MeowWritePacket =
 pub unsafe extern "C" fn meow_tun_start(
     ctx: *mut std::os::raw::c_void,
     write_cb: MeowWritePacket,
+    socks_port: u16,
 ) -> c_int {
-    logging::bridge_log("meow_tun_start (direct callback)");
-    match tun2socks::start(ctx, write_cb) {
+    let port = if socks_port == 0 {
+        match engine::mixed_port() {
+            Some(p) => p,
+            None => {
+                set_error("meow_tun_start: engine not running, cannot infer socks_port".into());
+                return -1;
+            }
+        }
+    } else {
+        socks_port
+    };
+    logging::bridge_log(&format!("meow_tun_start: socks_port={}", port));
+    match tun2socks::start(ctx, write_cb, port) {
         Ok(()) => 0,
         Err(e) => {
             logging::bridge_log(&format!("meow_tun_start ERROR: {}", e));

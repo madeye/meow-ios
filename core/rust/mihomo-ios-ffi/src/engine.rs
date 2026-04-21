@@ -1,14 +1,15 @@
-//! Embedded mihomo-rust engine. Owns the REST API and DNS server tasks and
-//! holds the `Tunnel` used directly (in-process) by `tun2socks` — there is no
-//! local SOCKS listener; TCP flows hop Rust-to-Rust through a shared
-//! `Arc<TunnelInner>` rather than through a loopback socket.
+//! Embedded mihomo-rust engine. Owns the REST API, the DNS server, and the
+//! local SOCKS/HTTP `MixedListener` — the listener is the loopback endpoint
+//! that `tun2socks` relays every accepted TCP flow into, matching the
+//! madeye/meow Android reference architecture (Rust → netstack →
+//! `127.0.0.1:<mixed-port>` SOCKS5 → mihomo adapters).
 //!
-//! Lifecycle: `start(config_path)` spawns the REST API and (optional) DNS
-//! listener on the shared tokio runtime and keeps their `JoinHandle`s in
-//! `EngineState`. `stop()` aborts those tasks and *blocks* on them before
-//! returning — dropping the futures drops the `TcpListener`/`UdpSocket` and
-//! releases the ports synchronously, so a fast `start → stop → start` cycle
-//! doesn't race the previous bind (`EADDRINUSE`).
+//! Lifecycle: `start(config_path)` spawns the mixed listener, REST API and
+//! (optional) DNS listener on the shared tokio runtime and keeps their
+//! `JoinHandle`s in `EngineState`. `stop()` aborts those tasks and *blocks* on
+//! them before returning — dropping the futures drops the `TcpListener` /
+//! `UdpSocket` and releases the ports synchronously, so a fast
+//! `start → stop → start` cycle doesn't race the previous bind (`EADDRINUSE`).
 use anyhow::{Context, Result};
 use dashmap::DashMap;
 use mihomo_api::log_stream::{LogBroadcastLayer, LogMessage};
@@ -18,6 +19,7 @@ use mihomo_dns::DnsServer;
 use mihomo_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
 use tokio::sync::broadcast;
@@ -26,13 +28,21 @@ use tracing::{error, info};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 
+use crate::listener::MixedListener;
 use crate::logging::LogForwardLayer;
+
+/// Default loopback port for the mixed listener when the stripped user YAML
+/// doesn't specify one. Matches the madeye/meow Android reference
+/// (`MihomoInstance.kt` pins `mixed-port: 7890` the same way).
+pub const DEFAULT_MIXED_PORT: u16 = 7890;
 
 struct EngineState {
     stats: Arc<Statistics>,
     tunnel: Tunnel,
+    mixed_port: u16,
     api_task: Option<JoinHandle<()>>,
     dns_task: Option<JoinHandle<()>>,
+    mixed_task: Option<JoinHandle<()>>,
 }
 
 fn slot() -> &'static Mutex<Option<EngineState>> {
@@ -44,16 +54,19 @@ fn install_tls_provider() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
-/// Strip the shorthand listener ports and explicit `listeners:` array from a
-/// raw config YAML. iOS v1.0 dispatches TCP flows + DoH in-process through
-/// `mihomo_tunnel::tcp::handle_tcp` + `tokio::io::duplex`; there is no
-/// loopback listener and no bound port. Upstream's `build_named_listeners`
-/// (mihomo-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
-/// Class A) — e.g. "port 7890 already used by listener 'mixed'" — so a
-/// user YAML combining `mixed-port: 7890` with a listeners entry on the
-/// same port would fail parse-time validation even though iOS never
-/// actually binds either. This strip enforces the no-listener constraint
-/// architecturally at the FFI boundary, regardless of YAML content.
+/// Normalize listener configuration: strip any user-provided `port`,
+/// `socks-port`, `tproxy-port`, and `listeners:` array, then pin
+/// `mixed-port: <DEFAULT_MIXED_PORT>`. Mirrors the Android reference's
+/// `MihomoInstance.kt` (strip then prepend `mixed-port: 7890`).
+///
+/// Why not let mihomo parse whatever the user wrote?
+/// - Upstream's `build_named_listeners` (mihomo-config/src/lib.rs) hard-errors
+///   on duplicate ports (ADR-0002 Class A) — e.g. "port 7890 already used by
+///   listener 'mixed'" — so a user YAML combining `mixed-port: 7890` with a
+///   named listener on 7890 would fail parse-time validation.
+/// - We own the mixed listener ourselves (see `spawn_mixed_listener` below);
+///   the parsed `config.listeners.mixed_port` is what drives tun2socks's
+///   SOCKS5 target, so we need it set to a value we control.
 ///
 /// Operates on a generic `serde_yaml::Value` rather than projecting through
 /// `RawConfig`: the latter has no `#[serde(flatten)]` catch-all and no
@@ -73,6 +86,10 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
         ] {
             m.remove(serde_yaml::Value::String(key.to_string()));
         }
+        m.insert(
+            serde_yaml::Value::String("mixed-port".to_string()),
+            serde_yaml::Value::Number(serde_yaml::Number::from(DEFAULT_MIXED_PORT)),
+        );
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
 }
@@ -201,6 +218,24 @@ pub fn start(config_path: &str) -> Result<()> {
         })
     });
 
+    // Mixed (SOCKS5 + HTTP) listener on loopback. tun2socks dials this for
+    // every TCP flow; DoH POSTs traverse it via reqwest's socks5h:// proxy.
+    // Bind address defaults to the config's `bind-address` (commonly "*");
+    // we force loopback because the NE extension must not expose listeners
+    // to other apps on the device.
+    let mixed_port = cfg.listeners.mixed_port.unwrap_or(DEFAULT_MIXED_PORT);
+    let mixed_addr: SocketAddr = format!("127.0.0.1:{}", mixed_port)
+        .parse()
+        .context("parsing mixed listener bind address")?;
+    let mixed_task = {
+        let listener = MixedListener::new(tunnel.clone(), mixed_addr);
+        Some(crate::get_runtime().spawn(async move {
+            if let Err(e) = listener.run().await {
+                error!("Mixed listener error: {}", e);
+            }
+        }))
+    };
+
     let api_task = cfg.api.external_controller.map(|addr| {
         let api_server = ApiServer::new(
             tunnel.clone(),
@@ -220,13 +255,18 @@ pub fn start(config_path: &str) -> Result<()> {
         })
     });
 
-    info!("mihomo-rust engine running (in-process dispatch)");
+    info!(
+        "mihomo-rust engine running (SOCKS5 loopback on 127.0.0.1:{})",
+        mixed_port
+    );
 
     *slot().lock() = Some(EngineState {
         stats,
         tunnel,
+        mixed_port,
         api_task,
         dns_task,
+        mixed_task,
     });
     Ok(())
 }
@@ -241,13 +281,18 @@ pub fn stop() {
     // Aborting the task drops its future, which drops the TcpListener /
     // UdpSocket and releases the port. `block_on` waits for that drop to
     // actually happen before `stop()` returns — without it, a rapid
-    // start → stop → start cycle observed `EADDRINUSE` on the REST bind.
+    // start → stop → start cycle observed `EADDRINUSE` on the REST bind
+    // (and on the mixed listener's loopback port).
     let runtime = crate::get_runtime();
     if let Some(h) = state.api_task {
         h.abort();
         let _ = runtime.block_on(h);
     }
     if let Some(h) = state.dns_task {
+        h.abort();
+        let _ = runtime.block_on(h);
+    }
+    if let Some(h) = state.mixed_task {
         h.abort();
         let _ = runtime.block_on(h);
     }
@@ -270,6 +315,12 @@ pub fn tunnel() -> Option<Tunnel> {
     slot().lock().as_ref().map(|s| s.tunnel.clone())
 }
 
+/// Loopback port the mixed listener is bound on. Used by the FFI to hand
+/// tun2socks a SOCKS5 target without duplicating the config-parse logic.
+pub fn mixed_port() -> Option<u16> {
+    slot().lock().as_ref().map(|s| s.mixed_port)
+}
+
 pub fn validate(yaml: &str) -> Result<()> {
     install_tls_provider();
     // Match start()'s strip behaviour so the editor doesn't surface
@@ -282,12 +333,14 @@ pub fn validate(yaml: &str) -> Result<()> {
 mod tests {
     use super::strip_listener_fields;
 
+    use super::DEFAULT_MIXED_PORT;
+
     #[test]
-    fn strip_removes_listener_keys_only() {
+    fn strip_removes_user_listener_keys_and_pins_default_mixed_port() {
         let yaml = r#"
 port: 7890
 socks-port: 7891
-mixed-port: 7892
+mixed-port: 9999
 tproxy-port: 7895
 listeners:
   - name: mixed
@@ -299,18 +352,19 @@ log-level: info
         let out = strip_listener_fields(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let m = doc.as_mapping().unwrap();
-        for k in [
-            "port",
-            "socks-port",
-            "mixed-port",
-            "tproxy-port",
-            "listeners",
-        ] {
+        for k in ["port", "socks-port", "tproxy-port", "listeners"] {
             assert!(
                 !m.contains_key(serde_yaml::Value::String(k.into())),
                 "{k} should have been stripped",
             );
         }
+        // mixed-port must survive — but pinned to the value we control, not
+        // whatever the user wrote.
+        assert_eq!(
+            m.get(serde_yaml::Value::String("mixed-port".into()))
+                .and_then(|v| v.as_u64()),
+            Some(DEFAULT_MIXED_PORT as u64),
+        );
         assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
         assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
     }
@@ -339,7 +393,11 @@ proxies:
         let out = strip_listener_fields(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let m = doc.as_mapping().unwrap();
-        assert!(!m.contains_key(serde_yaml::Value::String("mixed-port".into())));
+        assert_eq!(
+            m.get(serde_yaml::Value::String("mixed-port".into()))
+                .and_then(|v| v.as_u64()),
+            Some(DEFAULT_MIXED_PORT as u64),
+        );
         for k in [
             "tun",
             "profile",

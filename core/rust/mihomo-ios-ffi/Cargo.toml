@@ -2,7 +2,7 @@
 name = "mihomo-ios-ffi"
 version = "0.1.0"
 edition = "2021"
-description = "mihomo-rust engine + tun2socks + DoH for meow-ios — C ABI, no Go, no JNI."
+description = "mihomo-rust engine + tun2socks + DoH for meow-ios — C ABI, no Go, no JNI. Mirrors madeye/meow (Android) architecture: netstack-smoltcp → SOCKS5 loopback → mihomo mixed listener."
 
 [lib]
 crate-type = ["staticlib"]
@@ -20,8 +20,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync"
 parking_lot = "0.12"
 futures = "0.3"
 # Explicit pin — transitive through mihomo-tunnel, but engine.rs builds
-# `DashMap<String, Arc<ProxyProvider>>` for ApiServer::new and tun2socks.rs
-# uses the same NAT-key concrete type as mihomo-tunnel. Match upstream's 6.x.
+# `DashMap<String, Arc<ProxyProvider>>` for ApiServer::new. Match upstream's 6.x.
 dashmap = "6"
 
 # Logging
@@ -31,14 +30,12 @@ log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
 # HTTP / YAML / serialization
-# DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` over a
-# `tokio::io::duplex` pair (no loopback listener), so we need hyper + tokio-rustls
-# directly rather than reqwest's pooled client + Proxy machinery.
-hyper = { version = "1", default-features = false, features = ["client", "http1"] }
-hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
-http-body-util = "0.1"
-bytes = "1"
-tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+# DoH is dispatched through the local SOCKS5 mixed listener (mirrors the
+# madeye/meow Android reference): reqwest routes the DoH POST via
+# `socks5h://127.0.0.1:<mixed-port>` so the request follows the user's configured
+# proxy rules without us building a second TCP path. `rustls` stays for the
+# process-wide ring provider install — required by mihomo-tunnel's TLS outbound.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "socks"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

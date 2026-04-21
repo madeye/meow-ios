@@ -94,9 +94,14 @@ so source compiles before the `.a` exists, but link fails without it.
 - `cbindgen` emits `mihomo_core.h` from `build.rs` on every build.
 - Mihomo crates pulled as git deps (`mihomo-common`, `mihomo-config`,
   `mihomo-dns`, `mihomo-tunnel`, `mihomo-api`, `mihomo-proxy`) from
-  `github.com/madeye/mihomo-rust`. The FFI crate owns the tokio runtime,
-  hosts the mihomo-rust engine directly, and dispatches tun2socks flows
-  in-process through `mihomo_tunnel::tcp::handle_tcp` — no SOCKS5 loopback.
+  `github.com/madeye/mihomo-rust`. The FFI crate owns the tokio runtime
+  and hosts the mihomo-rust engine. Architecture mirrors the madeye/meow
+  Android FFI: tun2socks accepts TCP from netstack-smoltcp and relays each
+  flow as a SOCKS5 CONNECT to an in-process `MixedListener` on
+  `127.0.0.1:<mixed-port>` — the listener then dispatches to the engine via
+  `mihomo_tunnel::tcp::handle_tcp`. DoH POSTs traverse the same loopback
+  via reqwest's `socks5h://` proxy. UDP through netstack is disabled (only
+  UDP DNS is intercepted pre-stack).
 
 ## Running locally
 

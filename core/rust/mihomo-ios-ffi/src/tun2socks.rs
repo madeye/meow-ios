@@ -1,38 +1,37 @@
-//! tun2socks using netstack-smoltcp: Swift pushes raw IP packets in via
-//! [`ingest`], netstack terminates TCP and UDP sessions in a userspace
-//! smoltcp stack, and each flow dispatches directly into
-//! `mihomo_tunnel::{tcp,udp}::handle_*` — no SOCKS5 loopback, no cross-process
-//! hop.
+//! tun2socks using netstack-smoltcp. Mirrors the madeye/meow Android FFI
+//! (`core/src/main/rust/mihomo-android-ffi/src/tun2socks.rs`): netstack
+//! terminates TCP sessions in a userspace smoltcp stack and each accepted
+//! stream is relayed through a SOCKS5 CONNECT to the local mihomo mixed
+//! listener at `127.0.0.1:<socks_port>`. UDP DNS is short-circuited pre-stack
+//! to DoH; other UDP is dropped (netstack's UDP half is disabled — same as the
+//! Android reference).
 //!
-//! Egress packets (netstack output + DNS replies) are handed back to Swift via
-//! a C callback registered in [`start`]. No file descriptors cross the FFI.
-//! UDP DNS is short-circuited pre-stack to DoH; non-DNS UDP flows through
-//! netstack's `UdpSocket` into `mihomo_tunnel::udp::handle_udp`, and a
-//! per-NAT-session reader drains proxy replies back through netstack's
-//! `WriteHalf` so the IP packet emitted to Swift is synthesized with
-//! source = external peer.
+//! iOS divergence: Android owns the TUN `fd` directly via `libc::{read,write}`;
+//! on iOS the packet plane lives on the Swift side of `NEPacketTunnelProvider`
+//! so ingest/egress runs over an mpsc channel plus a C callback
+//! (`WritePacketFn`). The SOCKS5 + netstack core below is otherwise a straight
+//! port of the Android version.
 
 use crate::dns_table;
 use crate::doh_client;
 use crate::logging;
 use futures::{SinkExt, StreamExt};
-use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
-use mihomo_tunnel::tunnel::TunnelInner;
-use mihomo_tunnel::udp::UdpSession;
-use parking_lot::Mutex;
-use std::collections::HashSet;
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::os::raw::c_void;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
-use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use std::sync::OnceLock;
+use parking_lot::Mutex;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{debug, info};
 
-use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
+use netstack_smoltcp::{AnyIpPktFrame, StackBuilder};
+
+// ---------------------------------------------------------------------------
+// Public FFI surface types
+// ---------------------------------------------------------------------------
 
 /// Matches the cbindgen-emitted typedef in `mihomo_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
@@ -58,6 +57,10 @@ impl EgressEmitter {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
 static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 
 fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
@@ -65,25 +68,25 @@ fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
     S.get_or_init(|| Mutex::new(None))
 }
 
-pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
+pub fn start(ctx: *mut c_void, cb: WritePacketFn, socks_port: u16) -> Result<(), String> {
     if TUN2SOCKS_RUNNING.swap(true, Ordering::SeqCst) {
         return Err("tun2socks already running".into());
     }
 
     let emitter = EgressEmitter { ctx: EmitCtx(ctx), cb };
+    let socks_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, socks_port));
 
-    info!("tun2socks starting (direct-callback ingest)");
-    // DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` —
-    // same in-process Rust-to-Rust path as netstack TCP flows below — so no
-    // loopback port is involved.
-    doh_client::init_doh_client();
+    info!("tun2socks starting: socks={}", socks_addr);
+    // DoH runs through the same SOCKS5 mixed listener that TCP relays use, so
+    // the client needs to know which loopback port to connect to.
+    doh_client::init_doh_client(socks_port);
 
     let (ingress_tx, ingress_rx) = mpsc::channel::<Vec<u8>>(256);
     *ingress_slot().lock() = Some(ingress_tx);
 
     let rt = crate::get_runtime();
     rt.spawn(async move {
-        if let Err(e) = run_tun2socks(ingress_rx, emitter).await {
+        if let Err(e) = run_tun2socks(ingress_rx, emitter, socks_addr).await {
             logging::bridge_log(&format!("tun2socks error: {}", e));
         }
         ingress_slot().lock().take();
@@ -130,37 +133,39 @@ pub fn ingest(packet: &[u8]) -> i32 {
 async fn run_tun2socks(
     mut ingress_rx: mpsc::Receiver<Vec<u8>>,
     emitter: EgressEmitter,
+    socks_addr: SocketAddr,
 ) -> io::Result<()> {
     logging::bridge_log("tun2socks: building netstack-smoltcp stack");
 
-    let (mut stack, tcp_runner, udp_socket, tcp_listener) = StackBuilder::default()
+    // UDP is disabled at netstack so non-DNS UDP traffic is silently dropped
+    // (matches Android). Only UDP DNS is handled, via the pre-stack DoH
+    // short-circuit below.
+    let (mut stack, tcp_runner, _udp_socket, tcp_listener) = StackBuilder::default()
         .enable_tcp(true)
-        .enable_udp(true)
+        .enable_udp(false)
         .stack_buffer_size(1024)
         .tcp_buffer_size(512)
         .build()?;
 
     let tcp_runner = tcp_runner.expect("TCP runner");
     let mut tcp_listener = tcp_listener.expect("TCP listener");
-    let udp_socket = udp_socket.expect("UDP socket");
-    let (mut udp_read, udp_write) = udp_socket.split();
 
-    let (udp_reply_tx, mut udp_reply_rx) = mpsc::unbounded_channel::<UdpMsg>();
-    // NAT key mirrors mihomo-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
-    // post-ADR-0008 Direction-A refactor. We must key reader spawns on the
-    // same tuple mihomo-tunnel uses, or dedupe breaks and we leak readers.
-    let reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>> =
-        Arc::new(Mutex::new(HashSet::new()));
+    logging::bridge_log("tun2socks: starting tasks");
 
+    // Channel: TUN reader → stack driver (ingress packets)
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
+
+    // Channel: stack driver + DoH replies → emitter (egress packets)
     let (egress_tx, mut egress_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
+    // Task 1: TCP runner (smoltcp internal polling)
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
             logging::bridge_log(&format!("tun2socks: TCP runner error: {}", e));
         }
     });
 
+    // Task 2: Stack driver — single owner of Stack, no split
     let egress_tx_stack = egress_tx.clone();
     let stack_handle = tokio::spawn(async move {
         loop {
@@ -190,45 +195,27 @@ async fn run_tun2socks(
         }
     });
 
+    // Task 3: Accept TCP connections → SOCKS5 relay
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            let sa = socks_addr;
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
             tokio::spawn(async move {
-                dispatch_tcp(stream, local_addr, remote_addr).await;
+                handle_tcp_stream(stream, local_addr, remote_addr, sa).await;
             });
         }
     });
 
+    // Task 4: Egress writer — single consumer of egress_rx feeds the Swift
+    // callback. Keeps emitter !Sync concerns out of other tasks.
     let egress_handle = tokio::spawn(async move {
         while let Some(pkt) = egress_rx.recv().await {
             emitter.emit(&pkt);
         }
     });
 
-    // Single writer task owns `UdpWriteHalf`; per-session readers feed it via
-    // `udp_reply_tx`. Using an mpsc serializer avoids an Arc<Mutex<WriteHalf>>.
-    let udp_writer_handle = tokio::spawn(async move {
-        let mut udp_write = udp_write;
-        while let Some(msg) = udp_reply_rx.recv().await {
-            if let Err(e) = udp_write.send(msg).await {
-                logging::bridge_log(&format!("tun2socks: UDP reply send error: {}", e));
-                break;
-            }
-        }
-    });
-
-    let udp_reply_tx_accept = udp_reply_tx.clone();
-    let reply_readers_accept = reply_readers.clone();
-    let udp_accept_handle = tokio::spawn(async move {
-        while let Some((payload, src, dst)) = udp_read.next().await {
-            let reply_tx = udp_reply_tx_accept.clone();
-            let readers = reply_readers_accept.clone();
-            tokio::spawn(async move {
-                dispatch_udp(payload, src, dst, reply_tx, readers).await;
-            });
-        }
-    });
-
+    // Main loop — pulls from the FFI ingress queue, short-circuits UDP DNS
+    // to DoH, forwards everything else to the stack driver.
     let doh_reply_tx = egress_tx.clone();
     while let Some(ip_data) = ingress_rx.recv().await {
         if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
@@ -244,11 +231,16 @@ async fn run_tun2socks(
                 });
                 continue;
             }
+            // Non-DNS UDP: drop (netstack UDP is disabled). Matches Android.
+            continue;
         }
 
-        match stack_ingress_tx.try_send(ip_data) {
+        // Send to stack for TCP processing (non-blocking try_send to avoid stall).
+        let frame: AnyIpPktFrame = ip_data;
+        match stack_ingress_tx.try_send(frame) {
             Ok(()) => {}
             Err(mpsc::error::TrySendError::Full(frame)) => {
+                // Channel full — block briefly to let stack drain.
                 let _ = stack_ingress_tx.send(frame).await;
             }
             Err(mpsc::error::TrySendError::Closed(_)) => break,
@@ -258,188 +250,132 @@ async fn run_tun2socks(
     runner_handle.abort();
     stack_handle.abort();
     tcp_accept_handle.abort();
-    udp_accept_handle.abort();
-    udp_writer_handle.abort();
     egress_handle.abort();
-    drop(udp_reply_tx);
 
     logging::bridge_log("tun2socks: exiting");
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// In-process TCP dispatch into mihomo_tunnel
-// ---------------------------------------------------------------------------
-
-async fn dispatch_tcp(stream: NetstackTcpStream, src: SocketAddr, dst: SocketAddr) {
-    let Some(tunnel) = crate::engine::tunnel() else {
-        logging::bridge_log("tun2socks: engine not running, dropping TCP flow");
-        return;
-    };
-
-    let (host, dst_ip) = match dns_table::dns_table_lookup(dst.ip()) {
-        // `fake-ip` / `redir-host` scenarios: the netstack receives a synthetic
-        // destination IP and we recover the real hostname from the DNS cache.
-        Some(hostname) => (hostname, None),
-        None => (String::new(), Some(dst.ip())),
-    };
-
-    let metadata = Metadata {
-        network: Network::Tcp,
-        conn_type: ConnType::Inner,
-        src_ip: Some(src.ip()),
-        src_port: src.port(),
-        dst_ip,
-        dst_port: dst.port(),
-        host,
-        ..Default::default()
-    };
-
-    let conn: Box<dyn ProxyConn> = Box::new(NetstackConn(stream));
-    mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata).await;
-}
-
-// ---------------------------------------------------------------------------
-// ProxyConn newtype wrapper — orphan rules force a local impl for the netstack
-// TCP stream. The wrapper only forwards AsyncRead / AsyncWrite; everything
-// else takes the trait's defaults.
-// ---------------------------------------------------------------------------
-
-struct NetstackConn(NetstackTcpStream);
-
-impl AsyncRead for NetstackConn {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for NetstackConn {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_shutdown(cx)
-    }
-}
-
-impl ProxyConn for NetstackConn {
-    fn remote_destination(&self) -> String {
-        String::new()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// In-process UDP dispatch into mihomo_tunnel
+// TCP → SOCKS5 relay
 //
-// `mihomo_tunnel::udp::handle_udp` installs the outbound session into the NAT
-// table on the first packet of a flow but does not drive the reply side — the
-// caller owns the reader loop. We key replies on the same NAT key
-// mihomo-tunnel uses internally (`"{src}:{remote_address}"`) so reader
-// spawns stay deduped without a second source of truth.
+// For each netstack-accepted TCP stream, open a loopback TCP connection to the
+// local mixed listener and perform a SOCKS5 CONNECT, then relay bidirectionally.
+// Host lookup via the DNS table resolves synthetic IPs back to the original
+// hostname when the app asked for it (mirrors fake-ip / redir-host behaviour).
 // ---------------------------------------------------------------------------
 
-async fn dispatch_udp(
-    payload: Vec<u8>,
-    src: SocketAddr,
-    dst: SocketAddr,
-    reply_tx: mpsc::UnboundedSender<UdpMsg>,
-    reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
+async fn handle_tcp_stream(
+    mut tun_stream: netstack_smoltcp::TcpStream,
+    src_addr: SocketAddr,
+    dst_addr: SocketAddr,
+    socks_addr: SocketAddr,
 ) {
-    let Some(tunnel) = crate::engine::tunnel() else {
-        logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
-        return;
+    let target = match dns_table::dns_table_lookup(dst_addr.ip()) {
+        Some(hostname) => SocksTarget::Domain(hostname, dst_addr.port()),
+        None => SocksTarget::Ip(dst_addr),
     };
 
-    let (host, dst_ip) = match dns_table::dns_table_lookup(dst.ip()) {
-        Some(hostname) => (hostname, None),
-        None => (String::new(), Some(dst.ip())),
+    let target_desc = match &target {
+        SocksTarget::Domain(h, p) => format!("{}:{}", h, p),
+        SocksTarget::Ip(a) => format!("{}", a),
+    };
+    logging::bridge_log(&format!("SOCKS5 connect: {} -> {}", src_addr, target_desc));
+
+    let mut socks_stream = match socks5_connect(socks_addr, target).await {
+        Ok(s) => s,
+        Err(e) => {
+            logging::bridge_log(&format!(
+                "SOCKS5 FAIL: {} -> {} err={}",
+                src_addr, dst_addr, e
+            ));
+            return;
+        }
     };
 
-    let mut metadata = Metadata {
-        network: Network::Udp,
-        conn_type: ConnType::Inner,
-        src_ip: Some(src.ip()),
-        src_port: src.port(),
-        dst_ip,
-        dst_port: dst.port(),
-        host,
-        ..Default::default()
-    };
-
-    // ADR-0008 post-Direction-A NAT key: (src SocketAddr, resolved dst
-    // SocketAddr). mihomo-tunnel calls `pre_resolve` internally before
-    // inserting into `nat_table`; we must match its output exactly or the
-    // subsequent `nat_table.get(&key)` misses. Calling `pre_resolve` here
-    // (same method handle_udp would call) guarantees parity for fake-ip /
-    // host-mode flows — it's idempotent once `dst_ip` is populated.
-    tunnel.inner().pre_resolve(&mut metadata).await;
-    let Some(resolved_ip) = metadata.dst_ip else {
-        // Resolution failed — handle_udp will also bail, nothing to dispatch.
-        return;
-    };
-    let key = (src, SocketAddr::new(resolved_ip, metadata.dst_port));
-
-    mihomo_tunnel::udp::handle_udp(tunnel.inner(), &payload, src, metadata).await;
-
-    if !reply_readers.lock().insert(key) {
-        return;
+    match tokio::io::copy_bidirectional(&mut tun_stream, &mut socks_stream).await {
+        Ok((up, down)) => {
+            debug!("TCP relay done: {} up={} down={}", dst_addr, up, down);
+        }
+        Err(e) => {
+            debug!("TCP relay error: {} err={}", dst_addr, e);
+        }
     }
-
-    let inner = tunnel.inner().clone();
-    let Some(session) = inner.nat_table.get(&key).map(|r| r.value().clone()) else {
-        // handle_udp bailed before NAT insert (no matching rule / dial error).
-        reply_readers.lock().remove(&key);
-        return;
-    };
-
-    spawn_udp_reply_reader(key, session, src, dst, reply_tx, reply_readers, inner);
 }
 
-fn spawn_udp_reply_reader(
-    key: (SocketAddr, SocketAddr),
-    session: Arc<UdpSession>,
-    app_src: SocketAddr,
-    app_dst: SocketAddr,
-    reply_tx: mpsc::UnboundedSender<UdpMsg>,
-    reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
-    tunnel_inner: Arc<TunnelInner>,
-) {
-    tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
-        loop {
-            match session.conn.read_packet(&mut buf).await {
-                Ok((n, _from)) => {
-                    // Reply injection: the IP frame handed back to the app
-                    // must look like it came FROM the external peer (app_dst)
-                    // TO the app (app_src). netstack's Sink builds the header
-                    // from (src, dst) in that argument order.
-                    let msg: UdpMsg = (buf[..n].to_vec(), app_dst, app_src);
-                    if reply_tx.send(msg).is_err() {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    info!("UDP reply reader closing for {:?}: {}", key, e);
-                    break;
-                }
+// ---------------------------------------------------------------------------
+// SOCKS5 client
+// ---------------------------------------------------------------------------
+
+enum SocksTarget {
+    Ip(SocketAddr),
+    Domain(String, u16),
+}
+
+async fn socks5_connect(proxy: SocketAddr, target: SocksTarget) -> io::Result<TcpStream> {
+    let mut stream = TcpStream::connect(proxy).await?;
+
+    stream.write_all(&[0x05, 0x01, 0x00]).await?;
+    let mut resp = [0u8; 2];
+    stream.read_exact(&mut resp).await?;
+    if resp[0] != 0x05 || resp[1] != 0x00 {
+        return Err(io::Error::other("SOCKS5 auth failed"));
+    }
+
+    match &target {
+        SocksTarget::Ip(dst) => match dst {
+            SocketAddr::V4(v4) => {
+                let ip = v4.ip().octets();
+                let port = v4.port().to_be_bytes();
+                stream
+                    .write_all(&[
+                        0x05, 0x01, 0x00, 0x01, ip[0], ip[1], ip[2], ip[3], port[0], port[1],
+                    ])
+                    .await?;
             }
+            SocketAddr::V6(v6) => {
+                let mut req = vec![0x05, 0x01, 0x00, 0x04];
+                req.extend_from_slice(&v6.ip().octets());
+                req.extend_from_slice(&v6.port().to_be_bytes());
+                stream.write_all(&req).await?;
+            }
+        },
+        SocksTarget::Domain(domain, port) => {
+            let db = domain.as_bytes();
+            let mut req = Vec::with_capacity(4 + 1 + db.len() + 2);
+            req.extend_from_slice(&[0x05, 0x01, 0x00, 0x03, db.len() as u8]);
+            req.extend_from_slice(db);
+            req.extend_from_slice(&port.to_be_bytes());
+            stream.write_all(&req).await?;
         }
-        tunnel_inner.nat_table.remove(&key);
-        reply_readers.lock().remove(&key);
-    });
+    }
+
+    let mut rh = [0u8; 4];
+    stream.read_exact(&mut rh).await?;
+    if rh[0] != 0x05 || rh[1] != 0x00 {
+        return Err(io::Error::other(format!(
+            "SOCKS5 CONNECT failed: rep={}",
+            rh[1]
+        )));
+    }
+    match rh[3] {
+        0x01 => {
+            let mut b = [0u8; 6];
+            stream.read_exact(&mut b).await?;
+        }
+        0x03 => {
+            let mut l = [0u8; 1];
+            stream.read_exact(&mut l).await?;
+            let mut b = vec![0u8; l[0] as usize + 2];
+            stream.read_exact(&mut b).await?;
+        }
+        0x04 => {
+            let mut b = [0u8; 18];
+            stream.read_exact(&mut b).await?;
+        }
+        _ => {}
+    }
+    Ok(stream)
 }
 
 // ---------------------------------------------------------------------------
