@@ -29,10 +29,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
 use tracing::info;
 
 use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
+
+/// Upper bound on concurrent in-flight TCP flows through the netstack. Each
+/// flow pins two buffers (512 B netstack TCP + per-task proxy conn) plus a
+/// tokio task; the Network Extension's ~50 MB resident ceiling makes an
+/// unbounded accept loop a real DoS vector under port-scan or buggy clients.
+const MAX_TCP_CONNECTIONS: usize = 2048;
 
 /// Matches the cbindgen-emitted typedef in `mihomo_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
@@ -190,10 +196,19 @@ async fn run_tun2socks(
         }
     });
 
+    let tcp_conn_limiter = Arc::new(Semaphore::new(MAX_TCP_CONNECTIONS));
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            // `acquire_owned` applies backpressure to the accept loop when the
+            // cap is hit — netstack holds the SYN until an existing flow ends
+            // and drops its permit. Moving `permit` into the per-flow task
+            // ties permit lifetime to task lifetime via the drop.
+            let Ok(permit) = tcp_conn_limiter.clone().acquire_owned().await else {
+                break;
+            };
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
             tokio::spawn(async move {
+                let _permit = permit;
                 dispatch_tcp(stream, local_addr, remote_addr).await;
             });
         }
