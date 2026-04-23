@@ -160,8 +160,6 @@ targets:
       - path: MeowIntegrationTests
         excludes:
           - "README.md"
-      - path: PacketTunnel/Sources/TunnelSettings.swift
-        group: PacketTunnel/Sources
     dependencies:
       - target: meow-ios
       - package: MeowShared
@@ -190,7 +188,7 @@ targets:
         CFBundleVersion: "2026041901"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+          NSExtensionPrincipalClass: PacketTunnelProvider
     entitlements:
       path: PacketTunnel/PacketTunnel.entitlements
       properties:
@@ -206,7 +204,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: PacketTunnel/PacketTunnel.entitlements
         GENERATE_INFOPLIST_FILE: NO
         CLANG_ENABLE_MODULES: YES
-        SWIFT_OBJC_BRIDGING_HEADER: PacketTunnel/Sources/BridgingHeader.h
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)/MeowCore/include
         LIBRARY_SEARCH_PATHS:
@@ -214,10 +211,6 @@ targets:
         OTHER_LDFLAGS:
           - -ObjC
     dependencies:
-      - package: MeowShared
-        product: MeowModels
-      - package: MeowShared
-        product: MeowIPC
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true

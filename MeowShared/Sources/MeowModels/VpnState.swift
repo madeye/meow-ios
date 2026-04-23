@@ -39,6 +39,11 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
     public var ingressPackets: Int64
     public var egressPackets: Int64
     public var timestamp: Date
+    public var footprintMB: Int64
+    public var heapUsedKB: Int64
+    public var heapFreeKB: Int64
+    public var tcpConns: Int64
+    public var pumpTick: Int64
 
     public init(
         uploadBytes: Int64 = 0,
@@ -48,6 +53,11 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
         ingressPackets: Int64 = 0,
         egressPackets: Int64 = 0,
         timestamp: Date = Date(),
+        footprintMB: Int64 = 0,
+        heapUsedKB: Int64 = 0,
+        heapFreeKB: Int64 = 0,
+        tcpConns: Int64 = 0,
+        pumpTick: Int64 = 0,
     ) {
         self.uploadBytes = uploadBytes
         self.downloadBytes = downloadBytes
@@ -56,6 +66,11 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
         self.ingressPackets = ingressPackets
         self.egressPackets = egressPackets
         self.timestamp = timestamp
+        self.footprintMB = footprintMB
+        self.heapUsedKB = heapUsedKB
+        self.heapFreeKB = heapFreeKB
+        self.tcpConns = tcpConns
+        self.pumpTick = pumpTick
     }
 }
 

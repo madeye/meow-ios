@@ -61,11 +61,6 @@ final class VpnManager {
         do {
             if manager == nil { await refresh() }
             guard let manager else { return }
-            if !manager.isOnDemandEnabled {
-                manager.isOnDemandEnabled = true
-                try await manager.saveToPreferences()
-                try await manager.loadFromPreferences()
-            }
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription
@@ -79,11 +74,6 @@ final class VpnManager {
     /// intentionally wants the VPN off.
     func disconnect() async {
         guard let manager else { return }
-        if manager.isOnDemandEnabled {
-            manager.isOnDemandEnabled = false
-            try? await manager.saveToPreferences()
-            try? await manager.loadFromPreferences()
-        }
         manager.connection.stopVPNTunnel()
     }
 
@@ -113,17 +103,8 @@ final class VpnManager {
         mgr.protocolConfiguration = proto
         mgr.localizedDescription = "meow"
         mgr.isEnabled = true
-        // iOS reclaims NE extensions under resource pressure (media playback
-        // resource arbiter, network-stack APN refresh, containing app entering
-        // after-life). Without on-demand, the user sees "VPN died" and has to
-        // toggle manually. With on-demand + an always-connect rule, iOS
-        // auto-reestablishes the tunnel the moment the kernel sees an outbound
-        // flow on any interface. `disconnect()` disables on-demand before
-        // stopping so the user can still turn the VPN off.
-        let rule = NEOnDemandRuleConnect()
-        rule.interfaceTypeMatch = .any
-        mgr.onDemandRules = [rule]
-        mgr.isOnDemandEnabled = true
+        mgr.onDemandRules = []
+        mgr.isOnDemandEnabled = false
     }
 
     private func attach(_ mgr: NETunnelProviderManager) {
