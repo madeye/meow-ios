@@ -58,6 +58,21 @@ final class AppIPCBridge {
     private func reloadTraffic() {
         if let traffic = SharedStore.readTraffic() {
             currentTraffic = traffic
+            relayMemstats(traffic)
         }
+    }
+
+    /// Write memstats to the app's Documents folder so `xcrun devicectl device
+    /// copy from --domain-type appDataContainer` can pull it from the Mac.
+    private nonisolated func relayMemstats(_ t: TrafficSnapshot) {
+        let line = "tick=\(t.pumpTick) footprint=\(t.footprintMB)MB " +
+            "heap_used=\(t.heapUsedKB)KB heap_free=\(t.heapFreeKB)KB " +
+            "tcp_conns=\(t.tcpConns) " +
+            "up=\(t.uploadRate)B/s down=\(t.downloadRate)B/s " +
+            "totalUp=\(t.uploadBytes)B totalDown=\(t.downloadBytes)B\n"
+        guard let docs = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let url = docs.appending(path: "memstats.txt")
+        try? line.write(to: url, atomically: false, encoding: .utf8)
     }
 }

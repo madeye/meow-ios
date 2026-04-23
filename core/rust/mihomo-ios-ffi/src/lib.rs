@@ -40,16 +40,15 @@ static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 pub(crate) fn get_runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
-        // 4 workers, not 2. Observed under load: during a burst of concurrent
-        // TLS dials + DoH resolutions + /configs or /providers handler work,
-        // the previous 2-worker runtime could starve — both workers busy on
-        // serde/TLS CPU work while new TCP flows queued up, eventually the
-        // tunnel stopped making progress (same PID, no death, just frozen).
-        // 4 gives the scheduler enough headroom on iPhone 17 Pro without
-        // meaningfully increasing resident memory (per-worker stack is ~2 MB
-        // of virtual address space, not committed).
+        // Single worker thread to minimize RSS under jetsam's 50 MB cap.
+        // Tasks still interleave at every .await point (cooperative concurrency),
+        // but only one OS thread is ever created. Stack capped at 512 KB (default
+        // is 2 MB) — sufficient for async leaf tasks that don't recurse deeply.
+        // Trade-off: CPU-bound bursts (TLS handshake + DoH + serde simultaneously)
+        // cannot overlap; measure if throughput regresses under load.
         tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
+            .worker_threads(1)
+            .thread_stack_size(512 * 1024)
             .enable_all()
             .build()
             .expect("failed to create tokio runtime")
@@ -198,6 +197,13 @@ pub unsafe extern "C" fn meow_engine_validate_config(yaml: *const c_char, len: c
             -1
         }
     }
+}
+
+/// Return the number of currently active (in-flight) TCP flows dispatched
+/// through the tun2socks layer. Useful for diagnosing connection accumulation.
+#[no_mangle]
+pub extern "C" fn meow_active_tcp_conns() -> i64 {
+    tun2socks::ACTIVE_TCP_CONNS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Write cumulative upload/download byte counters. Safe to call before
@@ -357,6 +363,83 @@ pub unsafe extern "C" fn meow_engine_test_dns(
         }
         Err(e) => {
             set_error(e.to_string());
+            -1
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Config patching (replaces the Swift/Yams EffectiveConfigWriter)
+// ---------------------------------------------------------------------------
+
+/// Patch a Clash YAML config for iOS: strips `dns`, `subscriptions`, `secret`;
+/// pins `mixed-port` and `external-controller`; injects `geox-url` when absent.
+/// Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
+/// NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
+/// Returns -1 on error (inspect `meow_core_last_error`).
+///
+/// # Safety
+/// `source_yaml` must be NUL-terminated UTF-8. `out` must reference `out_cap`
+/// bytes if non-NULL.
+#[no_mangle]
+pub unsafe extern "C" fn meow_patch_config(
+    source_yaml: *const c_char,
+    mixed_port: c_int,
+    out: *mut c_char,
+    out_cap: c_int,
+) -> c_int {
+    let Some(yaml) = cstr_to_str(source_yaml) else {
+        set_error("source_yaml is null or not utf-8".into());
+        return -1;
+    };
+
+    let mut doc: serde_yaml::Value = match serde_yaml::from_str(yaml) {
+        Ok(v) => v,
+        Err(e) => {
+            set_error(format!("yaml parse error: {e}"));
+            return -1;
+        }
+    };
+
+    let Some(root) = doc.as_mapping_mut() else {
+        set_error("config root is not a yaml mapping".into());
+        return -1;
+    };
+
+    for key in ["dns", "subscriptions", "secret"] {
+        root.remove(serde_yaml::Value::String(key.to_string()));
+    }
+
+    let port = if mixed_port > 0 { mixed_port as i64 } else { 7890 };
+    root.insert(
+        serde_yaml::Value::String("mixed-port".into()),
+        serde_yaml::Value::Number(port.into()),
+    );
+    root.insert(
+        serde_yaml::Value::String("external-controller".into()),
+        serde_yaml::Value::String("127.0.0.1:9090".into()),
+    );
+
+    let geox_key = serde_yaml::Value::String("geox-url".into());
+    if !root.contains_key(&geox_key) {
+        let mut geox = serde_yaml::Mapping::new();
+        for (k, v) in [
+            ("geoip",    "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"),
+            ("mmdb",     "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"),
+            ("geosite",  "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"),
+        ] {
+            geox.insert(
+                serde_yaml::Value::String(k.into()),
+                serde_yaml::Value::String(v.into()),
+            );
+        }
+        root.insert(geox_key, serde_yaml::Value::Mapping(geox));
+    }
+
+    match serde_yaml::to_string(&doc) {
+        Ok(s) => write_out(s.as_bytes(), out, out_cap),
+        Err(e) => {
+            set_error(format!("yaml serialize error: {e}"));
             -1
         }
     }

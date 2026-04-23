@@ -59,6 +59,8 @@ impl EgressEmitter {
 }
 
 static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
+pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
+    std::sync::atomic::AtomicI64::new(0);
 
 fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
     static S: OnceLock<Mutex<Option<mpsc::Sender<Vec<u8>>>>> = OnceLock::new();
@@ -145,7 +147,7 @@ async fn run_tun2socks(
     let udp_socket = udp_socket.expect("UDP socket");
     let (mut udp_read, udp_write) = udp_socket.split();
 
-    let (udp_reply_tx, mut udp_reply_rx) = mpsc::unbounded_channel::<UdpMsg>();
+    let (udp_reply_tx, mut udp_reply_rx) = mpsc::channel::<UdpMsg>(256);
     // NAT key mirrors mihomo-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
     // post-ADR-0008 Direction-A refactor. We must key reader spawns on the
     // same tuple mihomo-tunnel uses, or dedupe breaks and we leak readers.
@@ -153,7 +155,7 @@ async fn run_tun2socks(
         Arc::new(Mutex::new(HashSet::new()));
 
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
-    let (egress_tx, mut egress_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
@@ -178,7 +180,7 @@ async fn run_tun2socks(
                 }
                 pkt = stack.next() => {
                     match pkt {
-                        Some(Ok(frame)) => { let _ = egress_tx_stack.send(frame); }
+                        Some(Ok(frame)) => { let _ = egress_tx_stack.try_send(frame); }
                         Some(Err(e)) => {
                             logging::bridge_log(&format!("stack recv error: {}", e));
                             break;
@@ -272,6 +274,7 @@ async fn run_tun2socks(
 // ---------------------------------------------------------------------------
 
 async fn dispatch_tcp(stream: NetstackTcpStream, src: SocketAddr, dst: SocketAddr) {
+    ACTIVE_TCP_CONNS.fetch_add(1, Ordering::Relaxed);
     let Some(tunnel) = crate::engine::tunnel() else {
         logging::bridge_log("tun2socks: engine not running, dropping TCP flow");
         return;
@@ -297,6 +300,7 @@ async fn dispatch_tcp(stream: NetstackTcpStream, src: SocketAddr, dst: SocketAdd
 
     let conn: Box<dyn ProxyConn> = Box::new(NetstackConn(stream));
     mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata).await;
+    ACTIVE_TCP_CONNS.fetch_sub(1, Ordering::Relaxed);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +359,7 @@ async fn dispatch_udp(
     payload: Vec<u8>,
     src: SocketAddr,
     dst: SocketAddr,
-    reply_tx: mpsc::UnboundedSender<UdpMsg>,
+    reply_tx: mpsc::Sender<UdpMsg>,
     reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
 ) {
     let Some(tunnel) = crate::engine::tunnel() else {
@@ -413,7 +417,7 @@ fn spawn_udp_reply_reader(
     session: Arc<UdpSession>,
     app_src: SocketAddr,
     app_dst: SocketAddr,
-    reply_tx: mpsc::UnboundedSender<UdpMsg>,
+    reply_tx: mpsc::Sender<UdpMsg>,
     reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
     tunnel_inner: Arc<TunnelInner>,
 ) {
@@ -427,7 +431,9 @@ fn spawn_udp_reply_reader(
                     // TO the app (app_src). netstack's Sink builds the header
                     // from (src, dst) in that argument order.
                     let msg: UdpMsg = (buf[..n].to_vec(), app_dst, app_src);
-                    if reply_tx.send(msg).is_err() {
+                    // UDP is inherently lossy; drop if writer is backed up
+                    // rather than accumulating unbounded Vec<u8> allocations.
+                    if reply_tx.try_send(msg).is_err() {
                         break;
                     }
                 }
@@ -520,7 +526,7 @@ async fn handle_dns_query(
     dst_ip: u32,
     dst_port: u16,
     query: Vec<u8>,
-    reply_tx: mpsc::UnboundedSender<Vec<u8>>,
+    reply_tx: mpsc::Sender<Vec<u8>>,
 ) {
     let name = dns_table::parse_dns_query_name(&query).unwrap_or_default();
     logging::bridge_log(&format!(
@@ -534,7 +540,7 @@ async fn handle_dns_query(
         for (ip, hostname, ttl) in dns_table::parse_dns_response_records(&response) {
             dns_table::dns_table_insert(ip, hostname, ttl);
         }
-        let _ = reply_tx.send(build_udp_packet(
+        let _ = reply_tx.try_send(build_udp_packet(
             dst_ip, dst_port, src_ip, src_port, &response,
         ));
     }

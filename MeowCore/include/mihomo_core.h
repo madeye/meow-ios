@@ -74,6 +74,12 @@ int meow_engine_is_running(void);
 int meow_engine_validate_config(const char *yaml, int len);
 
 /**
+ * Return the number of currently active (in-flight) TCP flows dispatched
+ * through the tun2socks layer. Useful for diagnosing connection accumulation.
+ */
+int64_t meow_active_tcp_conns(void);
+
+/**
  * Write cumulative upload/download byte counters. Safe to call before
  * `meow_engine_start` — returns zero counters.
  *
@@ -121,6 +127,19 @@ int meow_engine_test_proxy_http(const char *url, int timeout_ms, int *out_status
  * non-NULL.
  */
 int meow_engine_test_dns(const char *host, int timeout_ms, char *out, int out_cap);
+
+/**
+ * Patch a Clash YAML config for iOS: strips `dns`, `subscriptions`, `secret`;
+ * pins `mixed-port` and `external-controller`; injects `geox-url` when absent.
+ * Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
+ * NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
+ * Returns -1 on error (inspect `meow_core_last_error`).
+ *
+ * # Safety
+ * `source_yaml` must be NUL-terminated UTF-8. `out` must reference `out_cap`
+ * bytes if non-NULL.
+ */
+int meow_patch_config(const char *source_yaml, int mixed_port, char *out, int out_cap);
 
 /**
  * Start tun2socks with a Swift-owned egress callback. The ingest side is
