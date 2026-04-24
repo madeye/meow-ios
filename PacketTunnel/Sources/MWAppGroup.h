@@ -4,6 +4,7 @@
 extern NSString *const MWAppGroupIdentifier;
 
 @interface MWAppGroup : NSObject
+@property (class, nonatomic, readonly) NSString *identifier;
 @property (class, nonatomic, readonly) NSURL *containerURL;
 @property (class, nonatomic, readonly) NSURL *configURL;
 @property (class, nonatomic, readonly) NSURL *effectiveConfigURL;
