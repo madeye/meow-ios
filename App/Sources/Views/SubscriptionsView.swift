@@ -5,6 +5,7 @@ struct SubscriptionsView: View {
     @Environment(SubscriptionService.self) private var service
     @Query(sort: \Profile.lastUpdated, order: .reverse) private var profiles: [Profile]
     @State private var showingAdd = false
+    @State private var editing: Profile?
     @State private var error: String?
 
     var body: some View {
@@ -25,11 +26,23 @@ struct SubscriptionsView: View {
                         }
                         Spacer()
                         Button {
+                            editing = profile
+                        } label: {
+                            Image(systemName: "pencil")
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Edit YAML for \(profile.name)")
+                        .accessibilityIdentifier("subscriptions.row.editYaml")
+                        Button {
                             Task { try? await service.refresh(profile) }
                         } label: {
                             Image(systemName: "arrow.clockwise")
                                 .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.borderless)
                         .accessibilityLabel("Refresh \(profile.name)")
                     }
                 }
@@ -61,6 +74,11 @@ struct SubscriptionsView: View {
         }
         .sheet(isPresented: $showingAdd) {
             AddSubscriptionSheet(error: $error)
+        }
+        .sheet(item: $editing) { profile in
+            NavigationStack {
+                YamlEditorView(profile: profile)
+            }
         }
         .alert("common.error", isPresented: .constant(error != nil)) {
             Button("common.ok") { error = nil }

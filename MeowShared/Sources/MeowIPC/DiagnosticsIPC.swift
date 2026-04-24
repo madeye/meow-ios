@@ -14,13 +14,23 @@ import MeowModels
 /// - `0x02` (one byte tag, followed by JSON) — "run one user-initiated
 ///   diagnostics request." Payload body decodes to ``UserDiagnosticsRequest``
 ///   and the response is a JSON-encoded ``UserDiagnosticsResponse``.
+/// - `0x03` (exactly one byte) — "report your current physical memory
+///   footprint." Response is a JSON-encoded ``MemoryUsageResponse`` sourced
+///   from `task_info(TASK_VM_INFO).phys_footprint` inside the extension —
+///   the same metric iOS jetsam compares against the NE memory limit and
+///   that Xcode's Memory gauge shows. This is what the Settings
+///   "About / Memory" row displays; mihomo's `/memory` REST endpoint is
+///   WebSocket-only in mihomo-rust and returns 400 to plain GETs, and
+///   mihomo's internal accounting under-reports by the Swift/ObjC/tokio
+///   overhead anyway, so the IPC path is the only reliable snapshot.
 ///
-/// Two tags share one `sendProviderMessage` channel because the extension
+/// Tags share one `sendProviderMessage` channel because the extension
 /// only exposes a single `handleAppMessage` entry point; the tag byte lets
 /// the dispatcher route without spinning up a second IPC mailbox.
 public enum DiagnosticsIPC {
     public static let messageTag: UInt8 = 0x01
     public static let userMessageTag: UInt8 = 0x02
+    public static let memoryMessageTag: UInt8 = 0x03
 
     /// Encodes a "please run canned diagnostics" request as a single-byte tag
     /// so the extension can dispatch without instantiating a codec just for
@@ -72,6 +82,40 @@ public enum DiagnosticsIPC {
 
     public static func decodeUserResponse(_ data: Data) throws -> UserDiagnosticsResponse {
         try JSONDecoder().decode(UserDiagnosticsResponse.self, from: data)
+    }
+
+    // MARK: - Memory snapshot (tag 0x03)
+
+    public static func encodeMemoryRequest() -> Data {
+        Data([memoryMessageTag])
+    }
+
+    public static func isMemoryRequest(_ data: Data) -> Bool {
+        data.count == 1 && data[0] == memoryMessageTag
+    }
+
+    public static func encodeMemoryResponse(_ payload: MemoryUsageResponse) throws -> Data {
+        try JSONEncoder().encode(payload)
+    }
+
+    public static func decodeMemoryResponse(_ data: Data) throws -> MemoryUsageResponse {
+        try JSONDecoder().decode(MemoryUsageResponse.self, from: data)
+    }
+}
+
+/// Current physical memory footprint of the PacketTunnel extension process,
+/// in bytes. Sourced from `task_info(TASK_VM_INFO).phys_footprint` — the
+/// same metric iOS jetsam compares against the NE memory limit and that
+/// Xcode's Memory gauge shows (preferred over `MACH_TASK_BASIC_INFO.resident_size`,
+/// which can include shared read-only pages and under-count compressed memory).
+///
+/// Field name kept as `residentBytes` for brevity; the actual value is the
+/// physical footprint, not RSS.
+public struct MemoryUsageResponse: Codable, Sendable, Equatable {
+    public var residentBytes: UInt64
+
+    public init(residentBytes: UInt64) {
+        self.residentBytes = residentBytes
     }
 }
 

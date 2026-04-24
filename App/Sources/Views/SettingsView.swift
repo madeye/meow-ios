@@ -1,4 +1,6 @@
+import MeowIPC
 import MeowModels
+import NetworkExtension
 import SwiftUI
 
 struct SettingsView: View {
@@ -7,7 +9,6 @@ struct SettingsView: View {
     #if DEBUG
         @State private var showDebugPanel = false
     #endif
-    @Environment(MihomoAPI.self) private var api
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
 
@@ -104,12 +105,39 @@ struct SettingsView: View {
         }
     }
 
+    /// Asks the PacketTunnel extension for its current physical memory
+    /// footprint via the `DiagnosticsIPC` `0x03` channel. mihomo's `/memory`
+    /// REST endpoint is WebSocket-only in mihomo-rust, so the previous
+    /// `api.getMemory()` path always 400'd. This IPC reads
+    /// `task_info(TASK_VM_INFO).phys_footprint` inside the extension — the
+    /// same metric iOS jetsam compares against the NE memory limit and that
+    /// Xcode's Memory gauge shows. Returns `nil` when the tunnel isn't running.
     private func refreshMemory() async {
-        if let mem = try? await api.getMemory() {
-            memoryMB = mem.inuse / (1024 * 1024)
-        } else {
+        guard vpnManager.stage == .connected else {
             memoryMB = nil
+            return
         }
+        let managers = await (try? NETunnelProviderManager.loadAllFromPreferences()) ?? []
+        guard let session = managers.first?.connection as? NETunnelProviderSession else {
+            memoryMB = nil
+            return
+        }
+        let bytes = await withCheckedContinuation { (cont: CheckedContinuation<UInt64?, Never>) in
+            do {
+                try session.sendProviderMessage(DiagnosticsIPC.encodeMemoryRequest()) { data in
+                    guard let data,
+                          let response = try? DiagnosticsIPC.decodeMemoryResponse(data)
+                    else {
+                        cont.resume(returning: nil)
+                        return
+                    }
+                    cont.resume(returning: response.residentBytes)
+                }
+            } catch {
+                cont.resume(returning: nil)
+            }
+        }
+        memoryMB = bytes.map { Int64($0 / (1024 * 1024)) }
     }
 
     private var appVersion: String {
