@@ -2,48 +2,8 @@ import Foundation
 
 /// Shared App Group identifier used by the app and the packet-tunnel extension.
 public enum AppGroup {
-    /// Authored identifier as declared in the .entitlements files. Apple-signed
-    /// builds (TestFlight / App Store) preserve this verbatim — the embedded
-    /// provisioning profile is absent on App Store builds, so `identifier`
-    /// resolves to this constant. Sideloaders (AltStore / SideStore) rewrite
-    /// the app-group entitlement to append the installer's team prefix.
-    public static let authoredIdentifier = "group.io.github.madeye.meow"
+    public static let identifier = "group.io.github.madeye.meow"
 
-    /// Live app-group identifier. For Ad Hoc / Development / Enterprise builds
-    /// we read the first `com.apple.security.application-groups` entry out of
-    /// the bundle's `embedded.mobileprovision`, which is where AltStore's
-    /// team-prefix rewrite lands. App Store builds strip that file, so we fall
-    /// back to `authoredIdentifier` — fine because Apple signs with the
-    /// authoring team and the identifier is preserved verbatim.
-    public static let identifier: String = resolveIdentifier()
-
-    private static func resolveIdentifier() -> String {
-        // mobileprovision is a CMS/PKCS7 envelope: DER signature blocks (bytes
-        // ≥ 0x80) wrapping an XML plist. `.ascii` decode fails on those high
-        // bytes; `.isoLatin1` is lossless 1:1 over 0x00–0xFF, and the plist
-        // payload itself is pure ASCII so the substring round-trip is safe.
-        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
-              let data = try? Data(contentsOf: url),
-              let ascii = String(data: data, encoding: .isoLatin1),
-              let start = ascii.range(of: "<plist"),
-              let end = ascii.range(of: "</plist>", range: start.upperBound ..< ascii.endIndex)
-        else {
-            return authoredIdentifier
-        }
-        let plistSlice = Data(ascii[start.lowerBound ..< end.upperBound].utf8)
-        guard
-            let parsed = try? PropertyListSerialization.propertyList(from: plistSlice, format: nil),
-            let plist = parsed as? [String: Any],
-            let entitlements = plist["Entitlements"] as? [String: Any],
-            let groups = entitlements["com.apple.security.application-groups"] as? [String],
-            let first = groups.first
-        else {
-            return authoredIdentifier
-        }
-        return first
-    }
-
-    /// Root of the shared container visible to both processes.
     public static var containerURL: URL {
         guard let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) else {
             fatalError("App Group container unavailable — entitlements missing '\(identifier)'")
