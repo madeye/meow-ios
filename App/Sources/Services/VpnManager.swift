@@ -79,9 +79,45 @@ final class VpnManager {
 
     // MARK: - Private
 
+    /// Authored PacketTunnel bundle id as declared in project.yml. Apple-signed
+    /// builds preserve this verbatim. Sideloaders (AltStore / SideStore) often
+    /// rewrite the extension bundle id to prepend their team prefix or swap
+    /// the whole identifier, so a hard-coded value leaves `startVPNTunnel()`
+    /// pointed at a provider bundle id that no longer exists — it resolves to
+    /// no matching appex, the extension never starts, and the UI sees the
+    /// connection go straight back to `.disconnected`.
+    private static let authoredTunnelProviderBundleIdentifier = "io.github.madeye.meow.PacketTunnel"
+
+    /// Resolve the packet-tunnel extension's actual bundle id at runtime by
+    /// enumerating `PlugIns/*.appex` and picking the one whose
+    /// `NSExtensionPointIdentifier` is `com.apple.networkextension.packet-tunnel`.
+    /// That way re-signers can rewrite the id freely without breaking the
+    /// NE wiring.
+    private static func resolveTunnelProviderBundleIdentifier() -> String {
+        guard let pluginsURL = Bundle.main.builtInPlugInsURL,
+              let contents = try? FileManager.default.contentsOfDirectory(
+                  at: pluginsURL,
+                  includingPropertiesForKeys: nil,
+              )
+        else {
+            return authoredTunnelProviderBundleIdentifier
+        }
+        for url in contents where url.pathExtension == "appex" {
+            guard let bundle = Bundle(url: url),
+                  let info = bundle.infoDictionary,
+                  let ext = info["NSExtension"] as? [String: Any],
+                  let point = ext["NSExtensionPointIdentifier"] as? String,
+                  point == "com.apple.networkextension.packet-tunnel",
+                  let bundleID = bundle.bundleIdentifier
+            else { continue }
+            return bundleID
+        }
+        return authoredTunnelProviderBundleIdentifier
+    }
+
     private func configureIfNeeded(_ mgr: NETunnelProviderManager) {
         let proto = (mgr.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
-        proto.providerBundleIdentifier = "io.github.madeye.meow.PacketTunnel"
+        proto.providerBundleIdentifier = Self.resolveTunnelProviderBundleIdentifier()
         // RFC 5737 TEST-NET-1 placeholder — iOS 26 rejects non-RFC strings
         // (e.g. "meow") at NEPacketTunnelNetworkSettings construction with
         // "invalid tunnel remote address". The real proxy endpoint lives in

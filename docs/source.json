@@ -19,18 +19,27 @@
       "tintColor": "#5BC0EB",
       "category": "utilities",
       "screenshotURLs": [],
-      "version": "1.1.2",
+      "version": "1.1.3",
       "versionDate": "2026-04-24T00:00:00Z",
-      "versionDescription": "- Actually fix the AltStore / SideStore sideload crash. 1.1.1 tried to resolve the app-group identifier from the embedded provisioning profile, but decoded the CMS-wrapped payload as ASCII — any byte ≥ 0x80 returned nil and the code silently fell back to the hard-coded identifier, so re-signed builds still crashed. 1.1.2 decodes as ISO Latin-1 (lossless over 0x00–0xFF) and correctly recovers the team-prefixed group.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
-      "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.2/meow-ios-1.1.2-b2026042403-adhoc.ipa",
-      "size": 9267136,
+      "versionDescription": "- Fix Network Extension not starting on AltStore / SideStore sideloads. VpnManager was hard-coded to `providerBundleIdentifier = io.github.madeye.meow.PacketTunnel`, but re-signers rewrite the extension's bundle id (team-prefix or outright swap) — iOS then had no matching appex to launch and `startVPNTunnel()` silently snapped back to .disconnected. The app now discovers the real PacketTunnel bundle id at runtime by scanning `PlugIns/*.appex` for the one whose `NSExtensionPointIdentifier` is `com.apple.networkextension.packet-tunnel`.\n- Previous 1.1.2 change: app-group identifier resolution (Latin-1 decode of the embedded provisioning profile).\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+      "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.3/meow-ios-1.1.3-b2026042404-adhoc.ipa",
+      "size": 9268070,
       "minOSVersion": "17.0",
       "versions": [
+        {
+          "version": "1.1.3",
+          "buildVersion": "2026042404",
+          "date": "2026-04-24T00:00:00Z",
+          "localizedDescription": "- Fix Network Extension not starting on AltStore / SideStore sideloads. VpnManager was hard-coded to `providerBundleIdentifier = io.github.madeye.meow.PacketTunnel`, but re-signers rewrite the extension's bundle id (team-prefix or outright swap) — iOS then had no matching appex to launch and `startVPNTunnel()` silently snapped back to .disconnected. The app now discovers the real PacketTunnel bundle id at runtime by scanning `PlugIns/*.appex` for the one whose `NSExtensionPointIdentifier` is `com.apple.networkextension.packet-tunnel`.\n- Previous 1.1.2 change: app-group identifier resolution (Latin-1 decode of the embedded provisioning profile).\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+          "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.3/meow-ios-1.1.3-b2026042404-adhoc.ipa",
+          "size": 9268070,
+          "minOSVersion": "17.0"
+        },
         {
           "version": "1.1.2",
           "buildVersion": "2026042403",
           "date": "2026-04-24T00:00:00Z",
-          "localizedDescription": "- Actually fix the AltStore / SideStore sideload crash. 1.1.1 tried to resolve the app-group identifier from the embedded provisioning profile, but decoded the CMS-wrapped payload as ASCII — any byte ≥ 0x80 returned nil and the code silently fell back to the hard-coded identifier, so re-signed builds still crashed. 1.1.2 decodes as ISO Latin-1 (lossless over 0x00–0xFF) and correctly recovers the team-prefixed group.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+          "localizedDescription": "- Fix app-group identifier resolution for AltStore / SideStore sideloads (Latin-1 decode of the embedded provisioning profile). The NE bundle-id lookup was still hard-coded in this build, so startVPNTunnel() did not actually start the tunnel — install 1.1.3 or later.",
           "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.2/meow-ios-1.1.2-b2026042403-adhoc.ipa",
           "size": 9267136,
           "minOSVersion": "17.0"
