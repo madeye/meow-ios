@@ -19,18 +19,27 @@
       "tintColor": "#5BC0EB",
       "category": "utilities",
       "screenshotURLs": [],
-      "version": "1.1.1",
+      "version": "1.1.2",
       "versionDate": "2026-04-24T00:00:00Z",
-      "versionDescription": "- Fix instant crash on AltStore / SideStore sideload: app-group identifier is now resolved from the embedded provisioning profile at runtime, so team-prefix rewrites by re-signers no longer hit a hard-coded lookup.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
-      "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.1/meow-ios-1.1.1-b2026042402-adhoc.ipa",
-      "size": 9267134,
+      "versionDescription": "- Actually fix the AltStore / SideStore sideload crash. 1.1.1 tried to resolve the app-group identifier from the embedded provisioning profile, but decoded the CMS-wrapped payload as ASCII — any byte ≥ 0x80 returned nil and the code silently fell back to the hard-coded identifier, so re-signed builds still crashed. 1.1.2 decodes as ISO Latin-1 (lossless over 0x00–0xFF) and correctly recovers the team-prefixed group.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+      "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.2/meow-ios-1.1.2-b2026042403-adhoc.ipa",
+      "size": 9267136,
       "minOSVersion": "17.0",
       "versions": [
+        {
+          "version": "1.1.2",
+          "buildVersion": "2026042403",
+          "date": "2026-04-24T00:00:00Z",
+          "localizedDescription": "- Actually fix the AltStore / SideStore sideload crash. 1.1.1 tried to resolve the app-group identifier from the embedded provisioning profile, but decoded the CMS-wrapped payload as ASCII — any byte ≥ 0x80 returned nil and the code silently fell back to the hard-coded identifier, so re-signed builds still crashed. 1.1.2 decodes as ISO Latin-1 (lossless over 0x00–0xFF) and correctly recovers the team-prefixed group.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+          "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.2/meow-ios-1.1.2-b2026042403-adhoc.ipa",
+          "size": 9267136,
+          "minOSVersion": "17.0"
+        },
         {
           "version": "1.1.1",
           "buildVersion": "2026042402",
           "date": "2026-04-24T00:00:00Z",
-          "localizedDescription": "- Fix instant crash on AltStore / SideStore sideload: app-group identifier is now resolved from the embedded provisioning profile at runtime, so team-prefix rewrites by re-signers no longer hit a hard-coded lookup.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+          "localizedDescription": "- Attempted to fix the AltStore / SideStore sideload crash by resolving the app-group identifier from the embedded provisioning profile, but the ASCII decoder choked on CMS/PKCS7 bytes and the fix was a no-op in practice. Install 1.1.2 or later.",
           "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.1/meow-ios-1.1.1-b2026042402-adhoc.ipa",
           "size": 9267134,
           "minOSVersion": "17.0"
