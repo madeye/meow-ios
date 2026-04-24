@@ -1,0 +1,50 @@
+{
+  "name": "meow",
+  "identifier": "io.github.madeye.meow.altstore",
+  "subtitle": "mihomo-based VPN client for iOS",
+  "description": "A lightweight iOS VPN client powered by mihomo (Clash.Meta). Distributed as an AltStore source for sideloading.",
+  "iconURL": "https://madeye.github.io/meow-ios/icon.png",
+  "headerURL": "https://madeye.github.io/meow-ios/icon.png",
+  "website": "https://github.com/madeye/meow-ios",
+  "patreonURL": "",
+  "tintColor": "#5BC0EB",
+  "featuredApps": ["io.github.madeye.meow"],
+  "apps": [
+    {
+      "name": "meow",
+      "bundleIdentifier": "io.github.madeye.meow",
+      "developerName": "Max Lv",
+      "subtitle": "mihomo-based VPN client",
+      "localizedDescription": "meow is a lightweight iOS VPN client built on top of mihomo (Clash.Meta). It supports modern proxy protocols and runs as a Network Extension.\n\nNote: installation requires a paid Apple Developer account because the bundled PacketTunnel extension uses the Network Extension entitlement, which free Apple IDs cannot sign.",
+      "iconURL": "https://madeye.github.io/meow-ios/icon.png",
+      "tintColor": "#5BC0EB",
+      "category": "utilities",
+      "screenshotURLs": [],
+      "versions": [
+        {
+          "version": "1.1.0",
+          "buildVersion": "2026042401",
+          "date": "2026-04-24T00:00:00Z",
+          "localizedDescription": "- Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker)\n- On-demand VPN enabled, disconnectOnSleep=false\n- Build tooling & logging improvements",
+          "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.0/meow-ios-1.1.0-b2026042401-adhoc.ipa",
+          "size": 9261201,
+          "minOSVersion": "17.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          { "name": "com.apple.developer.networking.networkextension" },
+          { "name": "com.apple.security.application-groups" },
+          { "name": "keychain-access-groups" }
+        ],
+        "privacy": [
+          {
+            "name": "NSLocalNetworkUsageDescription",
+            "usageDescription": "Used by the VPN packet tunnel to forward traffic."
+          }
+        ]
+      }
+    }
+  ],
+  "news": []
+}
