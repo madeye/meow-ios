@@ -21,10 +21,19 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.1.1",
+          "buildVersion": "2026042402",
+          "date": "2026-04-24T00:00:00Z",
+          "localizedDescription": "- Fix instant crash on AltStore / SideStore sideload: app-group identifier is now resolved from the embedded provisioning profile at runtime, so team-prefix rewrites by re-signers no longer hit a hard-coded lookup.\n- Previous 1.1.0 changes: Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker); on-demand VPN enabled with disconnectOnSleep=false.",
+          "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.1/meow-ios-1.1.1-b2026042402-adhoc.ipa",
+          "size": 9267134,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "1.1.0",
           "buildVersion": "2026042401",
           "date": "2026-04-24T00:00:00Z",
-          "localizedDescription": "- Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker)\n- On-demand VPN enabled, disconnectOnSleep=false\n- Build tooling & logging improvements",
+          "localizedDescription": "- Jetsam / memory-growth fix in PacketTunnel (Rust→ObjC rewrite, single tokio worker)\n- On-demand VPN enabled, disconnectOnSleep=false\n- Build tooling & logging improvements\n\nNote: this build has a hard-coded app-group identifier and crashes on launch when sideloaded via AltStore / SideStore. Install 1.1.1 or later.",
           "downloadURL": "https://github.com/madeye/meow-ios/releases/download/v1.1.0/meow-ios-1.1.0-b2026042401-adhoc.ipa",
           "size": 9261201,
           "minOSVersion": "17.0"
