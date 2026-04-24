@@ -43,8 +43,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: meow
-        CFBundleShortVersionString: "1.1.1"
-        CFBundleVersion: "2026042402"
+        CFBundleShortVersionString: "1.1.2"
+        CFBundleVersion: "2026042403"
         LSRequiresIPhoneOS: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -184,8 +184,8 @@ targets:
       path: PacketTunnel/Info.plist
       properties:
         CFBundleDisplayName: meow Tunnel
-        CFBundleShortVersionString: "1.1.1"
-        CFBundleVersion: "2026042402"
+        CFBundleShortVersionString: "1.1.2"
+        CFBundleVersion: "2026042403"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: PacketTunnelProvider
