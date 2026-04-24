@@ -18,9 +18,13 @@ public enum AppGroup {
     public static let identifier: String = resolveIdentifier()
 
     private static func resolveIdentifier() -> String {
+        // mobileprovision is a CMS/PKCS7 envelope: DER signature blocks (bytes
+        // ≥ 0x80) wrapping an XML plist. `.ascii` decode fails on those high
+        // bytes; `.isoLatin1` is lossless 1:1 over 0x00–0xFF, and the plist
+        // payload itself is pure ASCII so the substring round-trip is safe.
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
               let data = try? Data(contentsOf: url),
-              let ascii = String(data: data, encoding: .ascii),
+              let ascii = String(data: data, encoding: .isoLatin1),
               let start = ascii.range(of: "<plist"),
               let end = ascii.range(of: "</plist>", range: start.upperBound ..< ascii.endIndex)
         else {
