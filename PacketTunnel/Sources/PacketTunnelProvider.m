@@ -6,9 +6,11 @@
 #import "MWDarwinBridge.h"
 #import "MWDiagnosticsRunner.h"
 #import <os/log.h>
+#import <mach/mach.h>
 
 static const uint8_t kDiagTagCanned = 0x01;
 static const uint8_t kDiagTagUser   = 0x02;
+static const uint8_t kDiagTagMemory = 0x03;
 
 static os_log_t gLog;
 
@@ -104,6 +106,27 @@ static os_log_t gLog;
                            ?: [NSData data];
             if (completionHandler) completionHandler(data);
         });
+        return;
+    }
+
+    // Memory snapshot (0x03): TASK_VM_INFO.phys_footprint — the same
+    // "memory footprint" metric iOS jetsam compares against the NE limit
+    // and that Xcode's Memory gauge displays. Preferred over
+    // MACH_TASK_BASIC_INFO.resident_size because resident_size can include
+    // read-only shared pages and under-count compressed memory.
+    if (messageData.length == 1 &&
+        ((const uint8_t *)messageData.bytes)[0] == kDiagTagMemory) {
+        task_vm_info_data_t info;
+        mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(),
+                                     TASK_VM_INFO,
+                                     (task_info_t)&info,
+                                     &count);
+        uint64_t footprint = (kr == KERN_SUCCESS) ? info.phys_footprint : 0;
+        NSDictionary *response = @{@"residentBytes": @(footprint)};
+        NSData *data = [NSJSONSerialization dataWithJSONObject:response options:0 error:nil]
+                       ?: [NSData data];
+        if (completionHandler) completionHandler(data);
         return;
     }
 

@@ -137,4 +137,34 @@ struct DiagnosticsIPCTests {
         #expect(decoded.latencyMs == 18)
         #expect(decoded.httpStatus == nil)
     }
+
+    // MARK: - Memory snapshot (tag 0x03)
+
+    @Test
+    func `memory request is exactly one byte with tag 0x03`() {
+        let data = DiagnosticsIPC.encodeMemoryRequest()
+        #expect(data.count == 1)
+        #expect(data[0] == 0x03)
+    }
+
+    @Test
+    func `isMemoryRequest disambiguates from 0x01 and 0x02 tags`() throws {
+        let memoryData = DiagnosticsIPC.encodeMemoryRequest()
+        let cannedData = DiagnosticsIPC.encodeRequest()
+        let userData = try DiagnosticsIPC.encodeUserRequest(.dns(host: "a", timeoutMs: 1))
+        #expect(DiagnosticsIPC.isMemoryRequest(memoryData))
+        #expect(!DiagnosticsIPC.isMemoryRequest(cannedData))
+        #expect(!DiagnosticsIPC.isMemoryRequest(userData))
+        #expect(!DiagnosticsIPC.isMemoryRequest(Data()))
+        #expect(!DiagnosticsIPC.isMemoryRequest(Data([0x03, 0x00])))
+    }
+
+    @Test
+    func `memory response roundtrips through JSON`() throws {
+        let original = MemoryUsageResponse(residentBytes: 42 * 1024 * 1024)
+        let data = try DiagnosticsIPC.encodeMemoryResponse(original)
+        let decoded = try DiagnosticsIPC.decodeMemoryResponse(data)
+        #expect(decoded == original)
+        #expect(decoded.residentBytes == 42 * 1024 * 1024)
+    }
 }
