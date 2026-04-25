@@ -1,0 +1,1 @@
+Public beta. Full Mihomo proxy engine running on-device, with Clash-style YAML subscriptions, rule-based routing, and a Liquid Glass UI built for iOS 26.

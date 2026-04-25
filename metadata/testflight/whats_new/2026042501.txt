@@ -1,0 +1,20 @@
+Build 2026042501 (1.1.4)
+
+WHAT TO TEST
+1. Subscriptions list (Settings tab)
+   • Each row now shows a pencil icon next to the refresh button — tap it to open the built-in YAML editor as a sheet.
+   • The pencil hit area should not interfere with selecting the row by tapping elsewhere on it.
+   • Edit, save, and confirm the change is reflected in routing on the next connection.
+
+2. Settings → About → Memory
+   • The Memory row should now display a live byte count, refreshed periodically while the tunnel is connected.
+   • Previously this row was blank; verify it now populates and updates.
+
+3. General regression pass
+   • Connect, disconnect, switch proxy groups, refresh subscriptions — confirm no new crashes or UI hangs.
+
+KNOWN LIMITATIONS
+• Non-DNS UDP traffic is not forwarded yet. WireGuard outbounds will not pass traffic. QUIC / HTTP3 falls back to TCP HTTP/2 (usually transparent).
+
+Please send TestFlight feedback or open an issue at:
+https://github.com/madeye/meow-ios/issues

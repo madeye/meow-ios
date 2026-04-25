@@ -1,0 +1,1 @@
+公开测试版。完整的 Mihomo 代理引擎在设备上运行，支持 Clash 风格的 YAML 订阅、基于规则的路由，以及为 iOS 26 打造的 Liquid Glass 界面。

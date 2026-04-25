@@ -1,0 +1,27 @@
+meow is a native iOS port of the Android "meow" client — a full Mihomo proxy engine wrapped in a SwiftUI iOS 26 Liquid Glass UI, with traffic carried by a NetworkExtension packet tunnel provider.
+
+If you have ever managed a Clash or Mihomo configuration, meow will feel familiar. Subscribe to a YAML config, choose a proxy group, flip the toggle, and your traffic flows through the proxy engine — all on-device, with no cloud component.
+
+WHAT IT DOES
+• Clash-protocol YAML subscriptions with auto-refresh and a built-in YAML editor
+• Rule-based traffic routing (domain, IP, GeoIP, GeoSITE)
+• DNS-over-HTTPS resolution
+• Per-app proxy groups, latency tests, and selector switching
+• On-device packet tunnel — no external server handles your traffic
+
+SUPPORTED PROTOCOLS
+Shadowsocks, Trojan, VLESS, WireGuard, TUIC, Hysteria2, and other protocols supported by the Mihomo core.
+
+PRIVACY
+meow does not collect, transmit, or share usage data. Your subscription URLs, configurations, and traffic stay on your device. The packet tunnel runs locally inside the Network Extension sandbox; the only network traffic is the proxy traffic you configure yourself.
+
+REQUIREMENTS
+• iOS 26 or later (iPhone and iPad)
+• A proxy subscription you trust — meow does not provide any proxy servers
+
+PUBLIC BETA
+This release is a public beta. Some features are in active development. Please report issues on GitHub or via the in-app feedback link.
+
+OPEN SOURCE
+meow-ios is open source. Source, issue tracker, and release notes:
+https://github.com/madeye/meow-ios
