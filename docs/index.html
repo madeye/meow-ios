@@ -99,6 +99,18 @@
         align-items: center;
         margin: 0 0 28px;
       }
+      .cta-alt {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--accent);
+        text-decoration: none;
+        padding: 13px 18px;
+        border: 1px solid var(--accent);
+        border-radius: 12px;
+        font-weight: 600;
+      }
+      .cta-alt:hover { background: var(--bg-alt); text-decoration: none; }
       .cta-secondary {
         display: inline-flex;
         align-items: center;
@@ -183,6 +195,9 @@
           <a class="cta" href="https://testflight.apple.com/join/nnDAn7ZH"
             >Join the TestFlight public beta →</a
           >
+          <a class="cta-alt" href="https://appdistribution.firebase.dev/i/e47c2a75b1e72734"
+            >Firebase Ad Hoc (direct install)</a
+          >
           <a class="cta-secondary" href="https://github.com/madeye/meow-ios"
             >View on GitHub</a
           >
@@ -190,6 +205,14 @@
         <p class="req">
           Requires iOS 26 or later (iPhone and iPad). Bring your own Mihomo /
           Clash subscription — meow does not provide proxy servers.
+        </p>
+        <p class="req">
+          <strong>TestFlight</strong> is the recommended channel for most
+          users — install Apple's TestFlight app, tap the link, done.
+          <strong>Firebase Ad Hoc</strong> is a smaller-batch alternative that
+          installs the app directly through Safari (no TestFlight app, no
+          90-day rebuild for installed devices); it requires a one-time
+          device registration step and is capped at ~100 active devices.
         </p>
       </header>
 

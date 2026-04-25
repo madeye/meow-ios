@@ -47,6 +47,16 @@ APP_STORE_CONNECT_API_KEY_P8 = /absolute/path/to/AuthKey_<ASC_KEY_ID>.p8
   secrets (`APP_STORE_CONNECT_API_KEY_P8` / `KEY_ID` / `ISSUER_ID`); no
   team is embedded in the repo.
 
+## Firebase config
+
+The app links `FirebaseAnalytics` and expects `GoogleService-Info.plist` at
+`App/Resources/GoogleService-Info.plist`. The file is gitignored — fetch your
+own copy from <https://console.firebase.google.com/> → Project Settings →
+General → "Your apps" → Download GoogleService-Info.plist. Drop it at that
+path; the build picks it up from disk regardless of git state. Without it,
+`FirebaseApp.configure()` will crash at launch on a real run; building still
+succeeds.
+
 ## Regenerating the Xcode project
 
 `project.yml` is the source of truth. `meow-ios.xcodeproj` is git-ignored
