@@ -4,9 +4,17 @@ Native iOS port of the Android "meow" VPN/proxy client. Full mihomo proxy engine
 wrapped in a SwiftUI iOS 26 Liquid Glass UI with a NetworkExtension packet
 tunnel provider.
 
+## Install
+
+[<img src="https://img.shields.io/badge/TestFlight-Public%20Beta-0070F5?style=for-the-badge&logo=apple&logoColor=white" alt="Join the TestFlight public beta" height="60">](https://testflight.apple.com/join/nnDAn7ZH)
+
+Public beta is open on TestFlight: <https://testflight.apple.com/join/nnDAn7ZH>.
+Requires iOS 26 or later (iPhone and iPad). Bring your own Mihomo / Clash
+subscription — meow does not provide proxy servers.
+
 ## Status
 
-Bootstrapping. See [`docs/PRD.md`](docs/PRD.md) and
+Public beta. See [`docs/PRD.md`](docs/PRD.md) and
 [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for the product spec and task
 breakdown.
 
