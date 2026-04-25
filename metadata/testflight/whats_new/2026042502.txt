@@ -1,0 +1,32 @@
+Build 2026042502 (1.1.4)
+
+WHAT'S NEW
+• Firebase Analytics is now linked for anonymous, aggregate usage metrics
+  (sessions, app/iOS version, screen views). Advertising identifiers
+  (IDFA / AdID) are explicitly disabled, so no App Tracking Transparency
+  prompt is shown. Subscription URLs, proxy credentials, configuration
+  contents, and tunneled traffic are NOT sent to analytics. See the
+  privacy policy linked in the App Store / TestFlight description.
+
+WHAT TO TEST
+1. First launch on a fresh install
+   • Confirm NO ATT ("Allow App to Track") prompt appears.
+   • Confirm the app launches normally — no crashes related to Firebase
+     initialization.
+
+2. Existing functionality from build 2026042501 (please re-verify)
+   • Subscriptions list (Settings tab): pencil icon next to refresh
+     opens the built-in YAML editor as a sheet. Editing, saving, and
+     reflecting in routing on the next connection.
+   • Settings → About → Memory: shows live PacketTunnel memory usage
+     while the tunnel is connected.
+   • Connect, disconnect, switch proxy groups, refresh subscriptions —
+     no new crashes or UI hangs.
+
+KNOWN LIMITATIONS
+• Non-DNS UDP traffic is not yet forwarded by the tunnel. WireGuard
+  outbounds will not pass traffic. QUIC / HTTP3 falls back to TCP
+  HTTP/2 (usually transparent).
+
+Please send TestFlight feedback or open an issue at:
+https://github.com/madeye/meow-ios/issues
