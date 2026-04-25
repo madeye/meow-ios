@@ -1,0 +1,27 @@
+meow 是 Android 版 "meow" 客户端的原生 iOS 版本——将完整的 Mihomo 代理引擎包裹在 SwiftUI iOS 26 Liquid Glass 界面中，通过 NetworkExtension 数据包隧道承载流量。
+
+如果你管理过 Clash 或 Mihomo 配置，使用 meow 会非常顺手：订阅一份 YAML 配置、选择代理组、打开开关——你的流量便会通过代理引擎转发。整个过程完全在设备上完成，没有任何云端组件。
+
+主要特性
+• 支持 Clash 协议 YAML 订阅，支持自动刷新与内置 YAML 编辑器
+• 基于规则的流量路由（域名、IP、GeoIP、GeoSITE）
+• DNS over HTTPS 解析
+• 按应用选择代理组、延迟测试、选择器切换
+• 设备内数据包隧道——没有外部服务器处理你的流量
+
+支持的协议
+Shadowsocks、Trojan、VLESS、WireGuard、TUIC、Hysteria2，以及 Mihomo 内核支持的其他协议。
+
+隐私
+meow 不收集、传输或分享使用数据。你的订阅地址、配置和流量都保留在本机。数据包隧道在 Network Extension 沙盒中本地运行；所有网络流量都只按你自己设置的代理路径转发。
+
+系统要求
+• iOS 26 或更高版本（iPhone、iPad）
+• 一份你信任的代理订阅——meow 本身不提供任何代理服务器
+
+公开测试版
+本次为公开测试版本。部分功能仍在开发中。请通过 GitHub 或 App 内的反馈链接报告问题。
+
+开源
+meow-ios 是开源软件。源代码、问题追踪与发布说明：
+https://github.com/madeye/meow-ios

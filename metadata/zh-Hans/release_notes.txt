@@ -1,0 +1,9 @@
+iOS 26 公开测试版。
+
+• 订阅：点击刷新按钮旁的铅笔图标，可打开内置 YAML 编辑器编辑任意订阅
+• 设置 → 关于 → 内存：现在会显示 PacketTunnel 的实时内存占用
+• 针对 App Store / TestFlight 分发渠道的稳定性与签名改进
+
+已知限制：隧道尚未转发非 DNS 的 UDP 流量。WireGuard 出站将无法通过流量，QUIC/HTTP3 会回退到 TCP HTTP/2（对用户通常是透明的）。正在修复。
+
+问题与反馈：https://github.com/madeye/meow-ios/issues

@@ -1,0 +1,7 @@
+meow 是原生 iOS 版 Mihomo 代理客户端——支持 Clash 风格的 YAML 订阅、基于规则的路由、DoH 解析，以及 iOS 26 的 Liquid Glass 界面。流量由 NetworkExtension 数据包隧道在设备内转发；meow 不提供代理服务器。
+
+本公开测试版面向希望试用 iOS 版本并反馈问题的测试者。请自备 Mihomo / Clash 订阅。请通过 TestFlight 反馈按钮或 GitHub 报告崩溃、界面问题与路由错误。
+
+已知限制：尚未转发非 DNS 的 UDP 流量——WireGuard 出站无法通过，QUIC/HTTP3 将回退至 TCP HTTP/2。
+
+GitHub：https://github.com/madeye/meow-ios
