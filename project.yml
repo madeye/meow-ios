@@ -28,6 +28,9 @@ packages:
   Yams:
     url: https://github.com/jpsim/Yams.git
     from: "5.1.3"
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk.git
+    from: "12.0.0"
 
 targets:
   meow-ios:
@@ -63,6 +66,8 @@ targets:
           NSAllowsArbitraryLoads: false
           NSAllowsLocalNetworking: true
         ITSAppUsesNonExemptEncryption: false
+        GOOGLE_ANALYTICS_IDFA_COLLECTION_ENABLED: false
+        GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED: false
         CFBundleURLTypes:
           - CFBundleURLName: io.github.madeye.meow.deeplink
             CFBundleURLSchemes:
@@ -100,6 +105,8 @@ targets:
       - package: MeowShared
         product: MeowIPC
       - package: Yams
+      - package: Firebase
+        product: FirebaseAnalytics
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true

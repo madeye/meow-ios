@@ -73,6 +73,10 @@ local.properties
 .env
 .env.*
 
+# Firebase config — fetch from console.firebase.google.com per-developer.
+# Build picks it up from disk; gitignored to avoid leaks and keep env separation clean.
+App/Resources/GoogleService-Info.plist
+
 # ---- IDE ----
 .vscode/
 .idea/

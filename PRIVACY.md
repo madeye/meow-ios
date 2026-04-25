@@ -4,7 +4,7 @@
 
 ## TL;DR
 
-meow-ios does not collect, transmit, or share any personal data. Everything you configure — subscription URLs, proxy credentials, routing rules, DNS settings — stays on your device.
+meow-ios collects only minimal anonymous usage analytics via Firebase Analytics, with advertising identifiers (IDFA / AdID) explicitly disabled. Everything you configure — subscription URLs, proxy credentials, routing rules, DNS settings — stays on your device and is never transmitted.
 
 ## What the app does
 
@@ -14,12 +14,30 @@ Where your traffic goes from there is entirely determined by the proxy configura
 
 ## Data we collect
 
-**None.**
+The app is linked against **Firebase Analytics** (Google) for anonymous,
+aggregate usage metrics — session counts, app version, screen views, and
+similar product-interaction events. This is used solely to understand how the
+app is used so the developer can prioritize bug fixes and feature work. It is
+explicitly configured to **not** collect:
 
-- No analytics SDKs are linked into the app.
-- No crash reporting beyond Apple's own (TestFlight / App Store) crash logs, which you can opt into or out of in iOS Settings. These are delivered directly to Apple; we receive only aggregate reports.
-- No unique identifiers, advertising IDs, or device fingerprints are generated.
-- No account creation, login, or contact with any server operated by the developer.
+- Advertising identifiers (`IDFA` / `AdID`) — disabled via `GOOGLE_ANALYTICS_IDFA_COLLECTION_ENABLED=false` and `GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED=false` in the app's `Info.plist`. Because of this, no App Tracking Transparency (ATT) prompt appears.
+- Subscription URLs, proxy credentials, YAML configuration contents, DNS query contents, or any traffic carried by the tunnel.
+- Account information — meow-ios has no login or user accounts.
+
+What Firebase Analytics does collect: an installation-scoped pseudonymous
+identifier (resets on app reinstall), the app version, the iOS version, the
+device model, the country (derived server-side from IP), and event timestamps
+plus event names. None of this is linked to your real identity.
+
+Crash logs beyond Apple's own (TestFlight / App Store crash reports) are not
+collected. Apple's crash reporting can be opted into or out of in iOS Settings;
+those reports go directly to Apple, and the developer sees only aggregate
+summaries.
+
+You can disable analytics on a per-device basis at any time by deleting the
+app, or by disabling **Allow Apps to Request to Track** plus **Personalized
+Ads** in iOS Settings → Privacy & Security (the IDFA gates are already off
+regardless).
 
 ## Data stored on-device
 
@@ -40,9 +58,17 @@ Subscription refreshes fetch YAML from the URL you provided, using a standard HT
 
 ## Third parties
 
-meow-ios does not embed third-party analytics, advertising, or tracking SDKs.
+meow-ios links one third-party SDK that transmits data off-device:
 
-Open-source dependencies used by the app (for example, the Mihomo proxy core, Yams YAML parser, and other libraries listed in the project manifest) run entirely on-device and do not phone home.
+- **Firebase Analytics** (Google) — see "Data we collect" above. Google's
+  privacy practices for Firebase: <https://firebase.google.com/support/privacy>.
+
+No advertising SDKs, attribution SDKs, A/B-testing SDKs, or session-replay /
+behavioral-analytics SDKs are embedded.
+
+Open-source on-device dependencies (the Mihomo proxy core, Yams YAML parser,
+and other libraries listed in the project manifest) run entirely on-device and
+do not phone home.
 
 ## Children's privacy
 

@@ -13,7 +13,9 @@ meow 是 Android 版 "meow" 客户端的原生 iOS 版本——将完整的 Miho
 Shadowsocks、Trojan、VLESS、WireGuard、TUIC、Hysteria2，以及 Mihomo 内核支持的其他协议。
 
 隐私
-meow 不收集、传输或分享使用数据。你的订阅地址、配置和流量都保留在本机。数据包隧道在 Network Extension 沙盒中本地运行；所有网络流量都只按你自己设置的代理路径转发。
+你的订阅地址、代理凭证、配置和经隧道转发的流量都保留在本机，meow 不会上传这些数据。数据包隧道在 Network Extension 沙盒中本地运行。
+
+应用集成了 Firebase Analytics，用于收集匿名的聚合使用统计（会话、页面浏览、应用 / iOS 版本）以指导后续开发方向。广告标识符（IDFA / AdID）已显式关闭，因此不会触发 App Tracking Transparency 弹窗。详情见隐私政策。
 
 系统要求
 • iOS 26 或更高版本（iPhone、iPad）

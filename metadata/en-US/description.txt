@@ -13,7 +13,9 @@ SUPPORTED PROTOCOLS
 Shadowsocks, Trojan, VLESS, WireGuard, TUIC, Hysteria2, and other protocols supported by the Mihomo core.
 
 PRIVACY
-meow does not collect, transmit, or share usage data. Your subscription URLs, configurations, and traffic stay on your device. The packet tunnel runs locally inside the Network Extension sandbox; the only network traffic is the proxy traffic you configure yourself.
+Your subscription URLs, proxy credentials, configurations, and tunneled traffic stay on your device and are never transmitted by meow. The packet tunnel runs locally inside the Network Extension sandbox.
+
+The app uses Firebase Analytics for anonymous, aggregate usage metrics (sessions, screen views, app/iOS version) to guide development priorities. Advertising identifiers (IDFA / AdID) are explicitly disabled, so no App Tracking Transparency prompt is shown. See the privacy policy for details.
 
 REQUIREMENTS
 • iOS 26 or later (iPhone and iPad)
