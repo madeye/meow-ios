@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>meow — iOS Mihomo proxy client (public beta)</title>
+    <meta
+      name="description"
+      content="meow is a native iOS Mihomo proxy client for iOS 26: Clash-style YAML subscriptions, rule-based routing, DNS over HTTPS, and a Liquid Glass UI. Public beta on TestFlight."
+    />
+    <meta name="theme-color" content="#0070f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a84ff" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="meow — iOS Mihomo proxy client" />
+    <meta
+      property="og:description"
+      content="Public beta on TestFlight. Clash-style YAML subscriptions, rule-based routing, DoH, and a Liquid Glass UI on iOS 26."
+    />
+    <meta property="og:url" content="https://madeye.github.io/meow-ios/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='28'%3E%F0%9F%90%B1%3C/text%3E%3C/svg%3E" />
+
+    <style>
+      :root {
+        --fg: #1a1a1a;
+        --fg-muted: #555;
+        --bg: #ffffff;
+        --bg-alt: #f5f6f8;
+        --border: #e3e5e8;
+        --accent: #0070f5;
+        --accent-fg: #ffffff;
+        --code-bg: #f0f1f4;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #f1f1f1;
+          --fg-muted: #a8a8a8;
+          --bg: #0e1014;
+          --bg-alt: #15181d;
+          --border: #2a2e35;
+          --accent: #0a84ff;
+          --accent-fg: #ffffff;
+          --code-bg: #1c2026;
+        }
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+        font-size: 17px;
+        line-height: 1.55;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 56px 24px 96px;
+      }
+      header h1 {
+        font-size: 2.6rem;
+        font-weight: 700;
+        margin: 0 0 8px;
+        letter-spacing: -0.02em;
+      }
+      header p.tagline {
+        color: var(--fg-muted);
+        font-size: 1.1rem;
+        margin: 0 0 36px;
+      }
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--accent);
+        color: var(--accent-fg);
+        text-decoration: none;
+        padding: 14px 22px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1.05rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 112, 245, 0.18);
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+      }
+      .cta:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 20px rgba(0, 112, 245, 0.25);
+      }
+      .cta:active { transform: translateY(0); }
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin: 0 0 28px;
+      }
+      .cta-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--fg);
+        text-decoration: none;
+        padding: 13px 18px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        font-weight: 500;
+      }
+      .cta-secondary:hover { background: var(--bg-alt); }
+      .req {
+        color: var(--fg-muted);
+        font-size: 0.95rem;
+        margin: 0 0 48px;
+      }
+      h2 {
+        font-size: 1.4rem;
+        font-weight: 650;
+        margin: 48px 0 16px;
+        letter-spacing: -0.01em;
+      }
+      ul { padding-left: 1.3em; }
+      li { margin: 6px 0; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        font-size: 0.9em;
+        background: var(--code-bg);
+        padding: 1px 6px;
+        border-radius: 5px;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .protocols {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .protocols li {
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 0.92rem;
+        color: var(--fg-muted);
+        margin: 0;
+      }
+      .callout {
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        padding: 14px 18px;
+        border-radius: 10px;
+        margin: 24px 0;
+        font-size: 0.96rem;
+        color: var(--fg-muted);
+      }
+      footer {
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        font-size: 0.9rem;
+        color: var(--fg-muted);
+      }
+      footer a { color: var(--fg-muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>meow</h1>
+        <p class="tagline">
+          A native iOS Mihomo proxy client. Clash-style YAML subscriptions,
+          rule-based routing, DoH, and a Liquid Glass UI on iOS 26.
+        </p>
+
+        <div class="cta-row">
+          <a class="cta" href="https://testflight.apple.com/join/nnDAn7ZH"
+            >Join the TestFlight public beta →</a
+          >
+          <a class="cta-secondary" href="https://github.com/madeye/meow-ios"
+            >View on GitHub</a
+          >
+        </div>
+        <p class="req">
+          Requires iOS 26 or later (iPhone and iPad). Bring your own Mihomo /
+          Clash subscription — meow does not provide proxy servers.
+        </p>
+      </header>
+
+      <h2>What it does</h2>
+      <ul>
+        <li>Clash-protocol YAML subscriptions, with auto-refresh and a built-in YAML editor.</li>
+        <li>Rule-based traffic routing (domain, IP, GeoIP, GeoSITE).</li>
+        <li>DNS over HTTPS resolution.</li>
+        <li>Per-app proxy groups, latency tests, selector switching.</li>
+        <li>On-device packet tunnel — no external server handles your traffic.</li>
+      </ul>
+
+      <h2>Supported protocols</h2>
+      <ul class="protocols">
+        <li>Shadowsocks</li>
+        <li>Trojan</li>
+        <li>VLESS</li>
+        <li>WireGuard</li>
+        <li>TUIC</li>
+        <li>Hysteria2</li>
+      </ul>
+
+      <h2>Privacy</h2>
+      <p>
+        meow does not collect, transmit, or share usage data. Subscription URLs,
+        configurations, and traffic stay on your device. The packet tunnel runs
+        locally inside the Network Extension sandbox; the only network traffic
+        is the proxy traffic you configure yourself. See the
+        <a href="https://github.com/madeye/meow-ios/blob/main/PRIVACY.md"
+          >privacy policy</a
+        >.
+      </p>
+
+      <h2>Public beta</h2>
+      <div class="callout">
+        Some features are still under active development. Known limitation: the
+        tunnel does not yet forward non-DNS UDP traffic — WireGuard outbounds
+        will not pass traffic, and QUIC / HTTP3 falls back to TCP HTTP/2.
+        Please report issues via
+        <a href="https://github.com/madeye/meow-ios/issues">GitHub Issues</a>
+        or the in-app TestFlight feedback button.
+      </div>
+
+      <h2>Open source</h2>
+      <p>
+        meow-ios is open source under the
+        <a href="https://github.com/madeye/meow-ios/blob/main/LICENSE">MIT license</a>.
+        Source, issue tracker, and release notes live at
+        <a href="https://github.com/madeye/meow-ios">github.com/madeye/meow-ios</a>.
+      </p>
+
+      <footer>
+        Sibling project:
+        <a href="https://github.com/madeye/meow">madeye/meow</a> (Android, Flutter UI).
+      </footer>
+    </main>
+  </body>
+</html>
