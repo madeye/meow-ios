@@ -1,6 +1,7 @@
 import Foundation
 import MeowIPC
 import MeowModels
+import Network
 import NetworkExtension
 import Observation
 
@@ -11,6 +12,12 @@ import Observation
 final class VpnManager {
     private(set) var stage: VpnStage = .idle
     private(set) var lastError: String?
+
+    /// True between a user-initiated `connect()` and the next `disconnect()`.
+    /// The network-path observer only retriggers `connect()` while this is
+    /// true — otherwise a wifi/cellular handoff after the user explicitly
+    /// turned the VPN off would silently bring it back up.
+    private(set) var wantsConnection = false
 
     /// Fires each time `stage` transitions into `.connected`, including the
     /// synthetic attach-time edge when the tunnel is already connected on
@@ -31,7 +38,18 @@ final class VpnManager {
     // thread-safe, so a torn read here is harmless.
     private nonisolated(unsafe) var statusObserver: NSObjectProtocol?
 
+    // NWPathMonitor.cancel() is documented thread-safe; the let-bound monitor
+    // can be reached from the nonisolated deinit without isolation gymnastics.
+    private let pathMonitor = NWPathMonitor()
+    private let pathMonitorQueue = DispatchQueue(label: "io.github.madeye.meow.app.vpn-path-monitor")
+    private var pathMonitorStarted = false
+    // Initial value matches the assumption "device probably has a network at
+    // launch". If the device is offline at attach time we'll observe the
+    // satisfied-edge later when it comes back.
+    private var lastPathSatisfied = true
+
     deinit {
+        pathMonitor.cancel()
         if let statusObserver {
             NotificationCenter.default.removeObserver(statusObserver)
         }
@@ -58,6 +76,7 @@ final class VpnManager {
     /// `disconnect` previously turned it off.
     func connect() async {
         lastError = nil
+        wantsConnection = true
         do {
             if manager == nil { await refresh() }
             guard let manager else { return }
@@ -73,6 +92,7 @@ final class VpnManager {
     /// on-demand rule — so we have to actively disable it when the user
     /// intentionally wants the VPN off.
     func disconnect() async {
+        wantsConnection = false
         guard let manager else { return }
         manager.connection.stopVPNTunnel()
     }
@@ -109,6 +129,7 @@ final class VpnManager {
 
     private func attach(_ mgr: NETunnelProviderManager) {
         manager = mgr
+        startPathMonitorIfNeeded()
         // Reading the initial connection.status is NOT an observed
         // .NEVPNStatusDidChange edge, so on app relaunch into an
         // already-connected tunnel (force-quit while VPN up), the observer
@@ -148,6 +169,63 @@ final class VpnManager {
         if next == .connected, previous != .connected {
             onConnected?()
         }
+    }
+
+    private func startPathMonitorIfNeeded() {
+        guard !pathMonitorStarted else { return }
+        pathMonitorStarted = true
+        // Seed from the current path so the first delivered update doesn't
+        // look like an unsatisfied → satisfied transition on a device that
+        // was already online at attach time.
+        lastPathSatisfied = pathMonitor.currentPath.status == .satisfied
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor in
+                self?.handleNetworkPathChange(satisfied: satisfied)
+            }
+        }
+        pathMonitor.start(queue: pathMonitorQueue)
+    }
+
+    /// Reducer for network-path edges. Only the unsatisfied → satisfied
+    /// transition triggers a reconnect — firing on every interface delta
+    /// (e.g. wifi/cellular handoffs while the tunnel is healthy) would race
+    /// iOS's own `.reasserting` recovery and double-start the NE. Exposed at
+    /// `internal` so unit tests can drive the edge without spinning up a real
+    /// `NWPathMonitor`.
+    func handleNetworkPathChange(satisfied: Bool) {
+        let previous = lastPathSatisfied
+        lastPathSatisfied = satisfied
+        let trigger = Self.shouldReconnect(
+            previousSatisfied: previous,
+            currentSatisfied: satisfied,
+            wantsConnection: wantsConnection,
+            stage: stage,
+        )
+        guard trigger else { return }
+        Task { @MainActor in
+            await self.connect()
+        }
+    }
+
+    /// Pure gating predicate for `handleNetworkPathChange`. Returns true when
+    /// (1) the network just transitioned unsatisfied → satisfied, (2) the user
+    /// last asked for the tunnel up, and (3) the tunnel is in a stage where
+    /// kicking off a fresh `connect()` is well-defined (i.e. not already
+    /// connecting / connected / disconnecting). Static + nonisolated so tests
+    /// can exercise every cell of the truth table cheaply.
+    nonisolated static func shouldReconnect(
+        previousSatisfied: Bool,
+        currentSatisfied: Bool,
+        wantsConnection: Bool,
+        stage: VpnStage,
+    ) -> Bool {
+        guard currentSatisfied, !previousSatisfied else { return false }
+        guard wantsConnection else { return false }
+        // .connecting / .connected / .stopping: leave the existing transition
+        // alone. .stopped / .idle / .error: the tunnel is down with the user
+        // still wanting it up, and we just got a working network — reconnect.
+        return stage == .stopped || stage == .idle || stage == .error
     }
 
     private nonisolated func map(_ status: NEVPNStatus) -> VpnStage {
