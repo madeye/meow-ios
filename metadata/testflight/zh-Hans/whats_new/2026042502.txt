@@ -1,0 +1,27 @@
+版本 2026042502（1.1.4）
+
+更新内容
+• 集成了 Firebase Analytics，用于收集匿名的聚合使用统计（会话、应用 /
+  iOS 版本、页面浏览）。广告标识符（IDFA / AdID）已明确关闭，因此不会
+  弹出 App Tracking Transparency 弹窗。订阅地址、代理凭证、配置内容与
+  隧道转发的流量均不会上报至分析服务。详情请参阅 App Store / TestFlight
+  描述中的隐私政策链接。
+
+测试要点
+1. 全新安装首次启动
+   • 确认 没有 出现 ATT（"允许 App 跟踪"）弹窗。
+   • 确认应用正常启动——没有与 Firebase 初始化相关的崩溃。
+
+2. 上一版本（2026042501）功能回归测试
+   • 订阅列表（设置 Tab）：点击刷新按钮旁的铅笔图标，可将内置 YAML
+     编辑器以 sheet 方式打开。编辑、保存，并确认下次连接时路由按新
+     配置生效。
+   • 设置 → 关于 → 内存：连接隧道后应显示 PacketTunnel 实时内存占用。
+   • 连接、断开、切换代理组、刷新订阅——确认没有新的崩溃或界面卡顿。
+
+已知限制
+• 尚未转发非 DNS 的 UDP 流量。WireGuard 出站无法通过，QUIC / HTTP3
+  会回退到 TCP HTTP/2（通常对用户透明）。
+
+请通过 TestFlight 反馈，或在此处提交 Issue：
+https://github.com/madeye/meow-ios/issues
