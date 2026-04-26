@@ -238,12 +238,9 @@ static os_log_t gLog;
 
     // Grace period: skip the soft-cap check for the first 60 ticks (30 s) to
     // let the engine and GeoIP data finish initializing before we measure.
-    if (_pumpTick > 60 && footprintMB >= 40 && !atomic_load_explicit(&_restarting, memory_order_relaxed)) {
-        atomic_store_explicit(&_restarting, YES, memory_order_relaxed);
-        os_log_error(gLog, "softcap: footprint=%ldMB >= 40MB — scheduling engine restart", (long)footprintMB);
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            [self performEngineRestart];
-        });
+    if (_pumpTick > 60 && footprintMB >= 40) {
+        os_log_error(gLog, "softcap: footprint=%ldMB >= 40MB — requesting restart", (long)footprintMB);
+        [self restartWithCompletion:nil];
     }
 
     NSTimeInterval epoch = now + NSTimeIntervalSince1970;
@@ -270,10 +267,26 @@ static os_log_t gLog;
     [MWDarwinBridge post:MWNotificationTraffic];
 }
 
-// MARK: - Soft-cap engine restart
+// MARK: - Engine restart
 
-- (void)performEngineRestart {
-    os_log_info(gLog, "softcap restart: stopping tun + engine");
+- (void)restartWithCompletion:(void (^)(BOOL))completion {
+    if (!_started) {
+        if (completion) completion(NO);
+        return;
+    }
+    if (atomic_exchange(&_restarting, YES)) {
+        os_log_info(gLog, "restart: already in flight, skipping");
+        if (completion) completion(NO);
+        return;
+    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        BOOL ok = [self performEngineRestart];
+        if (completion) completion(ok);
+    });
+}
+
+- (BOOL)performEngineRestart {
+    os_log_info(gLog, "restart: stopping tun + engine");
 
     meow_tun_stop();
     _tunStarted = NO;
@@ -290,27 +303,26 @@ static os_log_t gLog;
     malloc_zone_pressure_relief(NULL, 0);
 
     if (!_started) {
-        // stop() was called on us during the restart window — don't come back up.
-        os_log_info(gLog, "softcap restart: engine was stopped externally, aborting");
+        os_log_info(gLog, "restart: engine was stopped externally, aborting");
         atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return;
+        return NO;
     }
 
     MWPreferences *prefs = [MWPreferences loadFromDefaults:[MWAppGroup defaults]];
     NSError *err = nil;
     if (![self writeEffectiveConfigWithPrefs:prefs error:&err]) {
-        os_log_error(gLog, "softcap restart: config write failed: %{public}@", err);
+        os_log_error(gLog, "restart: config write failed: %{public}@", err);
         atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return;
+        return NO;
     }
 
     NSString *configPath = [MWAppGroup effectiveConfigURL].path;
     int rc = meow_engine_start(configPath.UTF8String);
     if (rc != 0) {
-        os_log_error(gLog, "softcap restart: engine start failed: %{public}@",
+        os_log_error(gLog, "restart: engine start failed: %{public}@",
                      [self lastRustError]);
         atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return;
+        return NO;
     }
 
     MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
@@ -319,19 +331,20 @@ static os_log_t gLog;
 
     rc = meow_tun_start(_writerCtx, meowPacketWriterCB);
     if (rc != 0) {
-        os_log_error(gLog, "softcap restart: tun start failed: %{public}@",
+        os_log_error(gLog, "restart: tun start failed: %{public}@",
                      [self lastRustError]);
         CFBridgingRelease(_writerCtx);
         _writerCtx = NULL;
         _writer    = nil;
         meow_engine_stop();
         atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return;
+        return NO;
     }
     _tunStarted = YES;
 
-    os_log_info(gLog, "softcap restart: complete");
+    os_log_info(gLog, "restart: complete");
     atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
+    return YES;
 }
 
 // MARK: - Config patching

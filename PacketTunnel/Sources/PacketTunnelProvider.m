@@ -7,6 +7,7 @@
 #import "MWDiagnosticsRunner.h"
 #import <os/log.h>
 #import <mach/mach.h>
+@import Network;
 
 static const uint8_t kDiagTagCanned = 0x01;
 static const uint8_t kDiagTagUser   = 0x02;
@@ -15,8 +16,14 @@ static const uint8_t kDiagTagMemory = 0x03;
 static os_log_t gLog;
 
 @implementation PacketTunnelProvider {
-    MWTunnelEngine  *_engine;
-    MWIPCListener   *_ipcListener;
+    MWTunnelEngine     *_engine;
+    MWIPCListener      *_ipcListener;
+    nw_path_monitor_t   _pathMonitor;
+    dispatch_queue_t    _pathQueue;
+    dispatch_source_t   _pathDebounceTimer;
+    BOOL                _havePath;
+    BOOL                _lastSatisfied;
+    nw_interface_type_t _lastInterfaceType;
 }
 
 + (void)initialize {
@@ -64,6 +71,8 @@ static os_log_t gLog;
             [listener start];
             self->_ipcListener = listener;
 
+            [self startPathMonitor];
+
             [self writeState:@"connected" profileID:profileID errorMessage:nil];
             completionHandler(nil);
         });
@@ -73,6 +82,7 @@ static os_log_t gLog;
 - (void)stopTunnelWithReason:(NEProviderStopReason)reason
            completionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "stopTunnel reason=%ld", (long)reason);
+    [self stopPathMonitor];
     [_engine stop];
     _engine = nil;
     [_ipcListener stop];
@@ -181,6 +191,126 @@ static os_log_t gLog;
         return;
     }
     [MWDarwinBridge post:MWNotificationState];
+}
+
+// MARK: - Network path monitoring
+
+- (void)startPathMonitor {
+    _pathQueue = dispatch_queue_create("io.github.madeye.meow.PacketTunnel.path",
+                                       DISPATCH_QUEUE_SERIAL);
+    _havePath = NO;
+    _lastSatisfied = NO;
+    _lastInterfaceType = nw_interface_type_other;
+
+    nw_path_monitor_t monitor = nw_path_monitor_create();
+    nw_path_monitor_set_queue(monitor, _pathQueue);
+
+    __weak __typeof__(self) weak = self;
+    nw_path_monitor_set_update_handler(monitor, ^(nw_path_t _Nonnull path) {
+        __strong __typeof__(weak) self = weak;
+        if (!self) return;
+        [self handlePathUpdate:path];
+    });
+    nw_path_monitor_start(monitor);
+    _pathMonitor = monitor;
+}
+
+- (void)stopPathMonitor {
+    if (_pathDebounceTimer) {
+        dispatch_source_cancel(_pathDebounceTimer);
+        _pathDebounceTimer = nil;
+    }
+    if (_pathMonitor) {
+        nw_path_monitor_cancel(_pathMonitor);
+        _pathMonitor = nil;
+    }
+    _pathQueue = nil;
+}
+
+// Caller queue: _pathQueue (serial). All ivar access here is single-threaded.
+- (void)handlePathUpdate:(nw_path_t)path {
+    nw_path_status_t status = nw_path_get_status(path);
+    BOOL satisfied = (status == nw_path_status_satisfied);
+
+    nw_interface_type_t iface = nw_interface_type_other;
+    if (satisfied) {
+        if (nw_path_uses_interface_type(path, nw_interface_type_wifi)) {
+            iface = nw_interface_type_wifi;
+        } else if (nw_path_uses_interface_type(path, nw_interface_type_cellular)) {
+            iface = nw_interface_type_cellular;
+        } else if (nw_path_uses_interface_type(path, nw_interface_type_wired)) {
+            iface = nw_interface_type_wired;
+        }
+    }
+
+    if (!_havePath) {
+        _havePath = YES;
+        _lastSatisfied = satisfied;
+        _lastInterfaceType = iface;
+        os_log_info(gLog, "path: initial satisfied=%d iface=%d", satisfied, iface);
+        return;
+    }
+
+    BOOL meaningful = NO;
+    if (satisfied && !_lastSatisfied) {
+        os_log_info(gLog, "path: connectivity regained");
+        meaningful = YES;
+    } else if (satisfied && iface != _lastInterfaceType) {
+        os_log_info(gLog, "path: interface changed %d -> %d", _lastInterfaceType, iface);
+        meaningful = YES;
+    }
+
+    _lastSatisfied = satisfied;
+    _lastInterfaceType = iface;
+
+    if (meaningful) {
+        [self scheduleReconnect];
+    }
+}
+
+// Caller queue: _pathQueue. Coalesces a burst of path updates into one restart.
+- (void)scheduleReconnect {
+    if (_pathDebounceTimer) return;
+
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,
+                                                     0, 0, _pathQueue);
+    dispatch_source_set_timer(timer,
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
+        DISPATCH_TIME_FOREVER,
+        100 * NSEC_PER_MSEC);
+
+    __weak __typeof__(self) weak = self;
+    dispatch_source_set_event_handler(timer, ^{
+        __strong __typeof__(weak) self = weak;
+        if (!self) return;
+        if (self->_pathDebounceTimer) {
+            dispatch_source_cancel(self->_pathDebounceTimer);
+            self->_pathDebounceTimer = nil;
+        }
+        [self triggerReconnect];
+    });
+    _pathDebounceTimer = timer;
+    dispatch_resume(timer);
+}
+
+- (void)triggerReconnect {
+    MWTunnelEngine *engine = _engine;
+    if (!engine) return;
+
+    os_log_info(gLog, "path: triggering engine restart");
+    self.reasserting = YES;
+
+    __weak __typeof__(self) weak = self;
+    [engine restartWithCompletion:^(BOOL success) {
+        __strong __typeof__(weak) self = weak;
+        if (!self) return;
+        self.reasserting = NO;
+        os_log_info(gLog, "path: restart finished success=%d", success);
+        if (!success) {
+            [self writeState:@"error" profileID:nil
+                errorMessage:@"reconnect after network change failed"];
+        }
+    }];
 }
 
 @end
