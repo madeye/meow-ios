@@ -236,13 +236,6 @@ static os_log_t gLog;
         malloc_zone_pressure_relief(NULL, 0);
     }
 
-    // Grace period: skip the soft-cap check for the first 60 ticks (30 s) to
-    // let the engine and GeoIP data finish initializing before we measure.
-    if (_pumpTick > 60 && footprintMB >= 40) {
-        os_log_error(gLog, "softcap: footprint=%ldMB >= 40MB — requesting restart", (long)footprintMB);
-        [self restartWithCompletion:nil];
-    }
-
     NSTimeInterval epoch = now + NSTimeIntervalSince1970;
     NSDictionary *snapshot = @{
         @"uploadBytes":    @(up),
