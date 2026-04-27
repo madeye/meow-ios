@@ -94,6 +94,7 @@ unsafe fn write_out(src: &[u8], out: *mut c_char, out_cap: c_int) -> c_int {
 #[no_mangle]
 pub extern "C" fn meow_core_init() {
     logging::init_os_logger();
+    logging::install_panic_hook();
     logging::bridge_log("meow_core_init: os_log initialized");
 }
 

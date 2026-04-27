@@ -65,6 +65,16 @@ mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", branch = "main"
 mihomo-api = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
 mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
 
+# Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
+# ("tcp: Reject bytes outside the receive window"). Without it, peers that
+# accept bytes past our advertised window edge trigger a panic in
+# smoltcp::socket::tcp::Socket::last_scaled_window via the SeqNumber
+# subtraction underflow guard, aborting the PacketTunnel process. The fix
+# is in upstream main but has not been released; netstack-smoltcp 0.2 still
+# pins smoltcp 0.12, so a 0.13 bump would also need to fork netstack-smoltcp.
+[patch.crates-io]
+smoltcp = { git = "https://github.com/madeye/smoltcp", branch = "fix/reject-bytes-outside-recv-win" }
+
 [build-dependencies]
 cbindgen = "0.28"
 
