@@ -40,14 +40,12 @@ static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 pub(crate) fn get_runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
-        // Single worker thread to minimize RSS under jetsam's 50 MB cap.
-        // Tasks still interleave at every .await point (cooperative concurrency),
-        // but only one OS thread is ever created. Stack capped at 512 KB (default
-        // is 2 MB) — sufficient for async leaf tasks that don't recurse deeply.
-        // Trade-off: CPU-bound bursts (TLS handshake + DoH + serde simultaneously)
-        // cannot overlap; measure if throughput regresses under load.
+        // Two worker threads to allow CPU-bound bursts (TLS handshake + DoH +
+        // serde) to overlap while keeping RSS in check under jetsam's 50 MB cap.
+        // Stack capped at 512 KB (default is 2 MB) — sufficient for async leaf
+        // tasks that don't recurse deeply.
         tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
+            .worker_threads(2)
             .thread_stack_size(512 * 1024)
             .enable_all()
             .build()
