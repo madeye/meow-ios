@@ -4,6 +4,7 @@
 //! `tun2socks::dispatch_tcp`. There is no loopback SOCKS listener; mihomo
 //! sees the TLS bytes the same way it sees TUN-originated TCP.
 
+use crate::dns_table;
 use crate::engine;
 use crate::logging;
 use bytes::Bytes;
@@ -13,14 +14,16 @@ use hyper::header::{ACCEPT, CONTENT_TYPE, HOST};
 use hyper::{Method, Request, Uri};
 use hyper_util::rt::TokioIo;
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
+use parking_lot::Mutex;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
+use std::collections::HashMap;
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncRead, AsyncWrite, DuplexStream, ReadBuf};
 use tokio_rustls::TlsConnector;
 use tracing::{info, warn};
@@ -29,6 +32,69 @@ const DOH_TIMEOUT_SECS: u64 = 5;
 const DUPLEX_BUF_SIZE: usize = 64 * 1024;
 
 const IP_BASED_DOH_URLS: &[&str] = &["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
+
+// Answer cache: collapses duplicate in-flight queries (e.g. the 17:30:45
+// reconnect burst that hit `app-measurement.com` 5×, `app-analytics-services.com`
+// 4×, `www.google.com` 2× within a single millisecond, each paying the full
+// 128 KiB-duplex + TLS + mihomo-flow cost). Keyed on the raw question section
+// (name + qtype + qclass); txid is patched onto the cached response per request.
+const CACHE_MAX_ENTRIES: usize = 1024;
+const CACHE_TTL_FLOOR: Duration = Duration::from_secs(10);
+const CACHE_TTL_CEIL: Duration = Duration::from_secs(300);
+const CACHE_TTL_DEFAULT: Duration = Duration::from_secs(60);
+
+type CacheEntry = (Vec<u8>, Instant);
+type AnswerCache = Mutex<HashMap<Vec<u8>, CacheEntry>>;
+
+fn cache() -> &'static AnswerCache {
+    static C: OnceLock<AnswerCache> = OnceLock::new();
+    C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Returns the bytes of the question section (qname + qtype + qclass) starting
+/// at offset 12, suitable for use as a cache key. Walks uncompressed labels —
+/// queries from clients don't use compression in the question.
+fn question_section(query: &[u8]) -> Option<&[u8]> {
+    if query.len() < 12 {
+        return None;
+    }
+    let mut i = 12usize;
+    loop {
+        if i >= query.len() {
+            return None;
+        }
+        let len = query[i];
+        if len == 0 {
+            i += 1;
+            break;
+        }
+        if len & 0xc0 != 0 {
+            // compression pointer (2 bytes) — not expected in client queries,
+            // but bail rather than mis-parse.
+            return None;
+        }
+        i += 1 + len as usize;
+        if i > query.len() {
+            return None;
+        }
+    }
+    if i + 4 > query.len() {
+        return None;
+    }
+    Some(&query[12..i + 4])
+}
+
+/// TTL to cache a response for: min TTL across A/AAAA records, clamped to
+/// [`CACHE_TTL_FLOOR`, `CACHE_TTL_CEIL`]. Empty/unparseable responses get
+/// `CACHE_TTL_DEFAULT` so NXDOMAIN bursts are still collapsed.
+fn cache_ttl(response: &[u8]) -> Duration {
+    let records = dns_table::parse_dns_response_records(response);
+    let min_ttl = records.iter().map(|(_, _, ttl)| *ttl).min();
+    match min_ttl {
+        Some(ttl) => Duration::from_secs(ttl as u64).clamp(CACHE_TTL_FLOOR, CACHE_TTL_CEIL),
+        None => CACHE_TTL_DEFAULT,
+    }
+}
 
 struct DohClient {
     doh_urls: Vec<String>,
@@ -61,6 +127,24 @@ pub fn init_doh_client() {
 pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
     let client = DOH_CLIENT.get()?;
 
+    let key = question_section(query).map(|q| q.to_vec());
+    if let Some(ref k) = key {
+        let now = Instant::now();
+        let mut cache = cache().lock();
+        if let Some((bytes, expires)) = cache.get(k) {
+            if *expires > now {
+                let mut resp = bytes.clone();
+                if resp.len() >= 2 && query.len() >= 2 {
+                    // Patch txid so caller's transaction matches.
+                    resp[0] = query[0];
+                    resp[1] = query[1];
+                }
+                return Some(resp);
+            }
+            cache.remove(k);
+        }
+    }
+
     for url in &client.doh_urls {
         match tokio::time::timeout(
             Duration::from_secs(DOH_TIMEOUT_SECS),
@@ -68,7 +152,26 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
         )
         .await
         {
-            Ok(Ok(bytes)) => return Some(bytes),
+            Ok(Ok(bytes)) => {
+                if let Some(k) = key {
+                    let ttl = cache_ttl(&bytes);
+                    let mut cache = cache().lock();
+                    if cache.len() >= CACHE_MAX_ENTRIES {
+                        // Evict the entry closest to expiry — cheap O(n) at n≤1024
+                        // and naturally biases toward dropping near-stale entries
+                        // before fresh ones.
+                        if let Some(oldest) = cache
+                            .iter()
+                            .min_by_key(|(_, (_, e))| *e)
+                            .map(|(k, _)| k.clone())
+                        {
+                            cache.remove(&oldest);
+                        }
+                    }
+                    cache.insert(k, (bytes.clone(), Instant::now() + ttl));
+                }
+                return Some(bytes);
+            }
             Ok(Err(e)) => warn!("DoH request failed to {}: {}", url, e),
             Err(_) => warn!("DoH request timed out to {}", url),
         }
