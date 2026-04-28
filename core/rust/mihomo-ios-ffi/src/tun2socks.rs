@@ -25,12 +25,13 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::os::raw::c_void;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::mpsc;
-use tracing::info;
+use tokio::sync::{mpsc, Semaphore};
+use tracing::{info, warn};
 
 use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
 
@@ -61,6 +62,34 @@ impl EgressEmitter {
 static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
+
+// Burst caps: defensive backstop against the "bursty-on-flow" leak that lets a
+// reconnect storm (DoH lookups + pent-up connect attempts from every
+// backgrounded app) blow past the 50 MiB NE memory ceiling before any flow
+// completes. Drops at the accept boundary; peers see RST / packet loss for a
+// few hundred ms instead of the whole tunnel dying.
+const TCP_BURST_CAP: usize = 256;
+const UDP_BURST_CAP: usize = 512;
+const DOH_BURST_CAP: usize = 256;
+
+static TCP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+static DOH_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+fn warn_capped(slot: &AtomicU64, msg: &str) {
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let last = slot.load(Ordering::Relaxed);
+    if now_ms.saturating_sub(last) >= 1000
+        && slot
+            .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+    {
+        warn!("{}", msg);
+    }
+}
 
 fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
     static S: OnceLock<Mutex<Option<mpsc::Sender<Vec<u8>>>>> = OnceLock::new();
@@ -157,6 +186,10 @@ async fn run_tun2socks(
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
+    let tcp_sem = Arc::new(Semaphore::new(TCP_BURST_CAP));
+    let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
+    let doh_sem = Arc::new(Semaphore::new(DOH_BURST_CAP));
+
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
             logging::bridge_log(&format!("tun2socks: TCP runner error: {}", e));
@@ -192,10 +225,23 @@ async fn run_tun2socks(
         }
     });
 
+    let tcp_sem_accept = tcp_sem.clone();
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            let permit = match tcp_sem_accept.clone().try_acquire_owned() {
+                Ok(p) => p,
+                Err(_) => {
+                    warn_capped(
+                        &TCP_CAP_LOG_LAST_MS,
+                        "tun2socks: TCP burst cap reached, dropping flow",
+                    );
+                    drop(stream);
+                    continue;
+                }
+            };
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
             tokio::spawn(async move {
+                let _permit = permit;
                 dispatch_tcp(stream, local_addr, remote_addr).await;
             });
         }
@@ -221,11 +267,23 @@ async fn run_tun2socks(
 
     let udp_reply_tx_accept = udp_reply_tx.clone();
     let reply_readers_accept = reply_readers.clone();
+    let udp_sem_accept = udp_sem.clone();
     let udp_accept_handle = tokio::spawn(async move {
         while let Some((payload, src, dst)) = udp_read.next().await {
+            let permit = match udp_sem_accept.clone().try_acquire_owned() {
+                Ok(p) => p,
+                Err(_) => {
+                    warn_capped(
+                        &UDP_CAP_LOG_LAST_MS,
+                        "tun2socks: UDP burst cap reached, dropping datagram",
+                    );
+                    continue;
+                }
+            };
             let reply_tx = udp_reply_tx_accept.clone();
             let readers = reply_readers_accept.clone();
             tokio::spawn(async move {
+                let _permit = permit;
                 dispatch_udp(payload, src, dst, reply_tx, readers).await;
             });
         }
@@ -239,9 +297,20 @@ async fn run_tun2socks(
 
         if let Some((src_ip, src_port, dst_ip, dst_port, payload)) = parse_udp_packet(&ip_data) {
             if dst_port == 53 {
+                let permit = match doh_sem.clone().try_acquire_owned() {
+                    Ok(p) => p,
+                    Err(_) => {
+                        warn_capped(
+                            &DOH_CAP_LOG_LAST_MS,
+                            "tun2socks: DoH burst cap reached, dropping query",
+                        );
+                        continue;
+                    }
+                };
                 let reply_tx = doh_reply_tx.clone();
                 let query = payload.to_vec();
                 tokio::spawn(async move {
+                    let _permit = permit;
                     handle_dns_query(src_ip, src_port, dst_ip, dst_port, query, reply_tx).await;
                 });
                 continue;
