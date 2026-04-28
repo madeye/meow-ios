@@ -9,6 +9,7 @@
 - v1.3 — Removed `mihomo-listener` from Rust dep list (confirmed not needed in in-process path, commit `dd3d44a`). Added T2.9 (non-DNS UDP path) as post-M1.5 backlog task with upstream dependency gate. Noted `src/subscription.rs` and `src/diagnostics.rs` as Rust-native replacements for old Go paths; T3.5 and T4.10 depend on T1.4 directly.
 - v1.4 — Automated E2E scope retired per user directive 2026-04-18. T6.5 (Nightly E2E Gate, vphone-cli harness) deleted. T2.6 no longer flagged as nightly gate blocker — now feeds a manual on-device smoke owned by the user. T2.8 reframed from automated E2E smoke to manual device smoke. T6.3 UI Tests scope clarified: unit-level UI only, not full-tunnel. M1.5 milestone row rewritten to "Manual Smoke Passes". Critical path updated — nightly gate removed. Self-hosted runner docs, `nightly.yml`, tart/vphone scripts, LocalE2ETests target all queued for deletion in a separate QA-led audit PR.
 - v1.5 — T4.10 (User-Facing Diagnostics Screen) deferred from M4 to M5 per team-lead directive 2026-04-18. Architectural addendum added to §T4.10 documenting the process-affinity constraint on 2/3 FFIs (`meow_engine_test_proxy_http`, `meow_engine_test_dns` gate on `engine::tunnel()` which is `Some` only inside the PacketTunnel extension process). M4 close-out diff: T4.7, T4.8, T4.9, T4.11, T4.12 shipped; T4.10 moved to M5 alongside Traffic + UDP work that already requires extension-side surface area.
+- v1.6 — Added T4.13 (Proxy Groups Subview): proxy group list moves out of Home into a dedicated pushed view; Home shows only a count + navigation row. Amends T4.2 acceptance.
 
 ---
 
@@ -305,6 +306,14 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - List proxy providers with their proxies and delay test button
 - **Depends on:** T3.4, T4.1
 
+#### T4.13 — Proxy Groups Subview
+- Move the proxy groups section (currently inline in Home — see T4.2) into a dedicated `ProxyGroupsView` pushed from Home
+- Home screen replaces the inline group list with a single summary row: label "Proxy Groups" + count of selectable groups returned by `MihomoAPI.getProxies()`; tapping the row pushes `ProxyGroupsView`
+- `ProxyGroupsView` owns the per-group proxy picker UX (bottom sheet or inline picker) previously embedded in Home; restoring `selectedProxies` on connect remains in `VpnManager` and is unaffected
+- Empty state when count is 0 (e.g., not connected / no profile selected): show "—" instead of a count and disable the row
+- Update T4.2 acceptance: Home no longer renders individual groups; only the count + navigation row
+- **Depends on:** T4.2
+
 ---
 
 ### Phase 5: Polish & Assets
@@ -393,6 +402,7 @@ T3.3 + T3.6 + T4.1 → T4.4
 T3.4 + T4.1 → T4.5, T4.6, T4.7, T4.8, T4.11
 T3.1 + T1.4 + T4.3 → T4.9
 T1.4 + T4.8 → T4.10
+T4.2 → T4.13
 All T4.* → T5.1
 T6.* after T5.*
 ```
