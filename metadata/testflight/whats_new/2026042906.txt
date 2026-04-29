@@ -1,0 +1,47 @@
+Build 2026042906 (1.1.5)
+
+WHAT'S NEW
+• Trust-China-DNS split-horizon resolver. For A / AAAA queries the
+  tunnel now races a Chinese plain-UDP resolver (DNSPod 119.29.29.29 +
+  AliDNS 223.5.5.5 by default, configurable via dns.china_nameserver in
+  config.yaml) against the existing trusted DoH path. If any A / AAAA
+  record in the China response falls in the bundled Country.mmdb's CN
+  ranges, the China answer wins; otherwise the trusted DoH answer is
+  used. Result: CN-hosted CDNs return geographically-near IPs again
+  (Weibo, Bilibili, Taobao, etc.) without leaking unrelated lookups.
+• Memory-conscious GeoIP. The full Country.mmdb (~8 MB) is parsed once
+  at PacketTunnel start, the CN ranges are extracted into a compact
+  iprange::IpRange<IpNet>, and the mmdb buffer is released. Resident
+  memory drops by ~5 MB versus keeping the whole DB mmap'd, easing
+  pressure on the 50 MB extension jetsam cap.
+
+WHAT TO TEST
+1. CN-hosted hostnames resolve to CN IPs
+   • Connect the tunnel.
+   • In Settings → About → Diagnostics (or any browser), open
+     https://www.weibo.com or https://www.bilibili.com.
+   • Confirm pages load reasonably fast (no Hong-Kong / Singapore
+     CDN routing artefacts that the previous DoH-only path produced).
+
+2. Non-CN hostnames stay routed via trusted DoH
+   • Open https://www.google.com, https://www.youtube.com.
+   • Confirm normal proxy routing (depends on your proxy rules) and
+     no regression in connectivity vs build 2026042901.
+
+3. Cold-start of PacketTunnel
+   • Toggle the VPN OFF then ON.
+   • Confirm the tunnel comes up within the usual 1-2 s; nothing
+     appears stuck during the initial GeoIP scan.
+
+4. Connect / disconnect cycles, proxy group switching, subscription
+   refresh, settings YAML editor — no new crashes or UI hangs.
+
+KNOWN LIMITATIONS
+• Non-DNS UDP traffic is not yet forwarded by the tunnel. WireGuard
+  outbounds will not pass traffic. QUIC / HTTP3 falls back to TCP
+  HTTP/2 (usually transparent).
+• The China-side path is plain UDP (no DoT / DoH on the CN upstreams
+  by design — matches trust-china-dns upstream).
+
+Please send TestFlight feedback or open an issue at:
+https://github.com/madeye/meow-ios/issues
