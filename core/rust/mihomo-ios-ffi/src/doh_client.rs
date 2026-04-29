@@ -164,17 +164,23 @@ static DOH_CLIENT: OnceLock<DohClient> = OnceLock::new();
 
 pub fn init_doh_client() {
     DOH_CLIENT.get_or_init(|| {
-        let doh_urls = read_doh_urls_from_config();
+        let (doh_urls, china_upstreams) = read_dns_config();
         info!("DoH client (in-process dispatch): urls={:?}", doh_urls);
 
         // Open the persistent answer cache and hydrate the in-memory map from
         // its unexpired entries. Cold-start now reuses warm DoH answers from
         // prior PacketTunnel runs instead of re-paying the launch-burst.
-        {
+        let home_dir_for_geoip = {
             let home_dir = crate::HOME_DIR.lock();
             doh_cache::init(home_dir.as_deref());
-        }
+            home_dir.clone()
+        };
         hydrate_in_memory_from_disk();
+
+        // Wire the trust-china-dns split-horizon layer. Reads `Country.mmdb`
+        // from the same `$HOME_DIR/mihomo/` path mihomo's engine uses; if the
+        // file is missing the orchestrator quietly degrades to DoH-only.
+        crate::china_dns::init(home_dir_for_geoip.as_deref(), china_upstreams);
 
         // The DoH path can traverse arbitrary upstream proxies the user
         // configured; matching the previous reqwest behavior, accept any
@@ -602,15 +608,29 @@ struct MinimalConfig {
 struct MinimalDns {
     nameserver: Option<Vec<serde_yaml::Value>>,
     fallback: Option<Vec<serde_yaml::Value>>,
+    /// `china_dns`-only field — Chinese plain-UDP nameservers, raced
+    /// first-response-wins. `None` (key missing) → use built-in defaults
+    /// (DNSPod + AliDNS). `Some(empty)` → disable the split entirely.
+    china_nameserver: Option<Vec<serde_yaml::Value>>,
 }
 
-fn read_doh_urls_from_config() -> Vec<String> {
+fn default_doh_urls() -> Vec<String> {
+    IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect()
+}
+
+/// Reads `config.yaml` once for both the DoH upstream pool and the China-side
+/// UDP nameservers consumed by `china_dns::init`. Falls back to the built-in
+/// defaults on any error: missing file, malformed YAML, missing `dns:` block.
+fn read_dns_config() -> (Vec<String>, Vec<std::net::SocketAddr>) {
     let home_dir = crate::HOME_DIR.lock();
     let config_path = match home_dir.as_ref() {
         Some(dir) => format!("{}/config.yaml", dir),
         None => {
-            info!("DoH: no HOME_DIR, using default URL");
-            return IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect();
+            info!("DoH: no HOME_DIR, using default URLs");
+            return (
+                default_doh_urls(),
+                crate::china_dns::default_china_upstreams(),
+            );
         }
     };
     drop(home_dir);
@@ -619,7 +639,10 @@ fn read_doh_urls_from_config() -> Vec<String> {
         Ok(s) => s,
         Err(e) => {
             warn!("DoH: cannot read {}: {}", config_path, e);
-            return IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect();
+            return (
+                default_doh_urls(),
+                crate::china_dns::default_china_upstreams(),
+            );
         }
     };
 
@@ -627,11 +650,15 @@ fn read_doh_urls_from_config() -> Vec<String> {
         Ok(c) => c,
         Err(e) => {
             warn!("DoH: cannot parse config: {}", e);
-            return IP_BASED_DOH_URLS.iter().map(|s| s.to_string()).collect();
+            return (
+                default_doh_urls(),
+                crate::china_dns::default_china_upstreams(),
+            );
         }
     };
 
     let mut urls = Vec::new();
+    let mut china = None;
     if let Some(dns) = config.dns {
         for list in [dns.nameserver, dns.fallback].into_iter().flatten() {
             for entry in list {
@@ -642,6 +669,7 @@ fn read_doh_urls_from_config() -> Vec<String> {
                 }
             }
         }
+        china = dns.china_nameserver.map(parse_china_upstreams);
     }
 
     for fallback in IP_BASED_DOH_URLS {
@@ -651,5 +679,94 @@ fn read_doh_urls_from_config() -> Vec<String> {
         }
     }
 
-    urls
+    // Key absent → use defaults. Empty list (user explicitly disabled) → empty
+    // vec, which `china_dns::split_applies` reads as "skip orchestration".
+    let china_upstreams = china.unwrap_or_else(crate::china_dns::default_china_upstreams);
+    (urls, china_upstreams)
+}
+
+fn parse_china_upstreams(values: Vec<serde_yaml::Value>) -> Vec<std::net::SocketAddr> {
+    let mut out = Vec::with_capacity(values.len());
+    for entry in values {
+        let serde_yaml::Value::String(raw) = entry else {
+            continue;
+        };
+        // Accept "host" or "host:port"; assume UDP/53 when port omitted, matching
+        // how upstream Clash/mihomo treats bare nameserver entries.
+        let with_port = if raw.contains(':') {
+            raw.clone()
+        } else {
+            format!("{}:53", raw)
+        };
+        match with_port.parse::<std::net::SocketAddr>() {
+            Ok(addr) => {
+                if !out.contains(&addr) {
+                    out.push(addr);
+                }
+            }
+            Err(e) => warn!(
+                "china_dns: ignoring malformed dns.china_nameserver entry {:?}: {}",
+                raw, e
+            ),
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// External cache hooks for `china_dns`.
+//
+// `china_dns` shares the same answer cache as the DoH path so that whichever
+// upstream "won" a given (qname, qtype) query — Chinese UDP or trusted DoH —
+// the next identical query within the TTL window short-circuits without
+// re-running orchestration.
+// ---------------------------------------------------------------------------
+
+pub(crate) fn cache_lookup_for_external(query: &[u8]) -> Option<Vec<u8>> {
+    let key = question_section(query)?;
+    let now = Instant::now();
+    let mut cache = cache().lock();
+    let bytes = match cache.get(key) {
+        Some((bytes, expires)) if *expires > now => bytes.clone(),
+        Some(_) => {
+            cache.remove(key);
+            let owned = key.to_vec();
+            drop(cache);
+            doh_cache::remove(&owned);
+            return None;
+        }
+        None => return None,
+    };
+    drop(cache);
+    let mut resp = bytes;
+    patch_txid(&mut resp, query);
+    Some(resp)
+}
+
+pub(crate) fn cache_store_external(query: &[u8], response: &[u8]) {
+    let Some(key) = question_section(query) else {
+        return;
+    };
+    let key = key.to_vec();
+    let ttl = cache_ttl(response);
+    let expires_unix = doh_cache::unix_secs_in(ttl);
+    let mut evicted: Option<Vec<u8>> = None;
+    {
+        let mut cache = cache().lock();
+        if cache.len() >= CACHE_MAX_ENTRIES {
+            if let Some(oldest) = cache
+                .iter()
+                .min_by_key(|(_, (_, e))| *e)
+                .map(|(k, _)| k.clone())
+            {
+                cache.remove(&oldest);
+                evicted = Some(oldest);
+            }
+        }
+        cache.insert(key.clone(), (response.to_vec(), Instant::now() + ttl));
+    }
+    if let Some(e) = evicted {
+        doh_cache::remove(&e);
+    }
+    doh_cache::put(&key, response, expires_unix);
 }

@@ -101,7 +101,10 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
         return Err("tun2socks already running".into());
     }
 
-    let emitter = EgressEmitter { ctx: EmitCtx(ctx), cb };
+    let emitter = EgressEmitter {
+        ctx: EmitCtx(ctx),
+        cb,
+    };
 
     info!("tun2socks starting (direct-callback ingest)");
     // DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` —
@@ -605,7 +608,7 @@ async fn handle_dns_query(
         src_port
     ));
 
-    if let Some(response) = doh_client::resolve_via_doh(&query).await {
+    if let Some(response) = crate::china_dns::resolve(&query).await {
         for (ip, hostname, ttl) in dns_table::parse_dns_response_records(&response) {
             dns_table::dns_table_insert(ip, hostname, ttl);
         }
