@@ -1,0 +1,41 @@
+Build 2026042906 (1.1.5)
+
+新特性
+• Trust-China-DNS 分流解析。对 A / AAAA 查询,隧道现在会同时向中国
+  本地 UDP 解析器(默认 DNSPod 119.29.29.29 + AliDNS 223.5.5.5,可
+  通过 config.yaml 中的 dns.china_nameserver 配置)和原有的可信 DoH
+  上游发起请求,二者并行。如果中国侧响应中存在任意 A / AAAA 记录
+  落在内置 Country.mmdb 的 CN 段内,则采用中国侧答案;否则使用 DoH
+  答案。结果:微博、Bilibili、淘宝等 CN-CDN 域名重新解析到地理上
+  最近的 IP,同时其他域名的查询保持 DoH 隐私性。
+• GeoIP 内存优化。完整的 Country.mmdb(约 8 MB)在 PacketTunnel
+  启动时仅扫描一次,提取 CN 范围到紧凑的 iprange::IpRange<IpNet>,
+  随后释放原始缓冲区。常驻内存比保留整个 mmap 减少约 5 MB,缓解
+  扩展进程的 50 MB jetsam 上限压力。
+
+测试要点
+1. CN 域名解析到 CN IP
+   • 连接隧道。
+   • 浏览器打开 https://www.weibo.com 或 https://www.bilibili.com 。
+   • 确认页面加载速度合理,没有之前 DoH-only 路径产生的香港/新加坡
+     CDN 路由问题。
+
+2. 非 CN 域名仍走可信 DoH
+   • 打开 https://www.google.com 、https://www.youtube.com 。
+   • 确认按代理规则正常路由,与 build 2026042901 相比无连接性回归。
+
+3. PacketTunnel 冷启动
+   • 关闭再开启 VPN 开关。
+   • 确认隧道在通常的 1-2 秒内启动,GeoIP 扫描期间无明显卡顿。
+
+4. 连接 / 断开循环、代理组切换、订阅刷新、设置 YAML 编辑器 ——
+   无新增崩溃或界面卡顿。
+
+已知限制
+• 隧道暂未转发非 DNS 的 UDP 流量。WireGuard 出站不工作。QUIC /
+  HTTP3 会回落到 TCP HTTP/2(通常透明)。
+• 中国侧链路是明文 UDP(按 trust-china-dns 上游设计,不使用 DoT /
+  DoH)。
+
+请通过 TestFlight 反馈或在以下地址提 issue:
+https://github.com/madeye/meow-ios/issues
