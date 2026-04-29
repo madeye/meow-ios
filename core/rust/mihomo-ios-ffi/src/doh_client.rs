@@ -5,6 +5,7 @@
 //! sees the TLS bytes the same way it sees TUN-originated TCP.
 
 use crate::dns_table;
+use crate::doh_cache;
 use crate::engine;
 use crate::logging;
 use bytes::Bytes;
@@ -166,6 +167,15 @@ pub fn init_doh_client() {
         let doh_urls = read_doh_urls_from_config();
         info!("DoH client (in-process dispatch): urls={:?}", doh_urls);
 
+        // Open the persistent answer cache and hydrate the in-memory map from
+        // its unexpired entries. Cold-start now reuses warm DoH answers from
+        // prior PacketTunnel runs instead of re-paying the launch-burst.
+        {
+            let home_dir = crate::HOME_DIR.lock();
+            doh_cache::init(home_dir.as_deref());
+        }
+        hydrate_in_memory_from_disk();
+
         // The DoH path can traverse arbitrary upstream proxies the user
         // configured; matching the previous reqwest behavior, accept any
         // server cert. The DNS payload itself is not a secret and we trust
@@ -185,6 +195,26 @@ pub fn init_doh_client() {
     });
 }
 
+fn hydrate_in_memory_from_disk() {
+    let entries = doh_cache::load_unexpired();
+    if entries.is_empty() {
+        return;
+    }
+    let now = Instant::now();
+    let mut cache = cache().lock();
+    for (k, bytes, expires_unix_secs) in entries {
+        if cache.len() >= CACHE_MAX_ENTRIES {
+            break;
+        }
+        let ttl = doh_cache::expires_in(expires_unix_secs);
+        if ttl.is_zero() {
+            continue;
+        }
+        cache.insert(k, (bytes, now + ttl));
+    }
+    info!("doh cache: hydrated {} entries from disk", cache.len());
+}
+
 pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
     let client = DOH_CLIENT.get()?;
 
@@ -201,6 +231,8 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
                 return Some(resp);
             }
             cache.remove(k);
+            drop(cache);
+            doh_cache::remove(k);
         }
     }
 
@@ -248,20 +280,29 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
     // Cache successful result.
     if let (Some(k), Some(bytes)) = (key.as_ref(), result.as_ref()) {
         let ttl = cache_ttl(bytes);
-        let mut cache = cache().lock();
-        if cache.len() >= CACHE_MAX_ENTRIES {
-            // Evict the entry closest to expiry — cheap O(n) at n≤1024 and
-            // naturally biases toward dropping near-stale entries before fresh
-            // ones.
-            if let Some(oldest) = cache
-                .iter()
-                .min_by_key(|(_, (_, e))| *e)
-                .map(|(k, _)| k.clone())
-            {
-                cache.remove(&oldest);
+        let expires_unix = doh_cache::unix_secs_in(ttl);
+        let mut evicted: Option<Vec<u8>> = None;
+        {
+            let mut cache = cache().lock();
+            if cache.len() >= CACHE_MAX_ENTRIES {
+                // Evict the entry closest to expiry — cheap O(n) at n≤1024 and
+                // naturally biases toward dropping near-stale entries before fresh
+                // ones.
+                if let Some(oldest) = cache
+                    .iter()
+                    .min_by_key(|(_, (_, e))| *e)
+                    .map(|(k, _)| k.clone())
+                {
+                    cache.remove(&oldest);
+                    evicted = Some(oldest);
+                }
             }
+            cache.insert(k.clone(), (bytes.clone(), Instant::now() + ttl));
         }
-        cache.insert(k.clone(), (bytes.clone(), Instant::now() + ttl));
+        if let Some(e) = evicted {
+            doh_cache::remove(&e);
+        }
+        doh_cache::put(k, bytes, expires_unix);
     }
 
     if let Some(guard) = leader_guard {
