@@ -34,7 +34,7 @@ oslog = { version = "0.2", default-features = false, features = ["logger"] }
 # DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` over a
 # `tokio::io::duplex` pair (no loopback listener), so we need hyper + tokio-rustls
 # directly rather than reqwest's pooled client + Proxy machinery.
-hyper = { version = "1", default-features = false, features = ["client", "http1"] }
+hyper = { version = "1", default-features = false, features = ["client", "http1", "http2"] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"

@@ -9,10 +9,10 @@ use crate::engine;
 use crate::logging;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper::client::conn::http1;
-use hyper::header::{ACCEPT, CONTENT_TYPE, HOST};
+use hyper::client::conn::http2;
+use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{Method, Request, Uri};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
 use parking_lot::Mutex;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -25,6 +25,8 @@ use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncRead, AsyncWrite, DuplexStream, ReadBuf};
+use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
 use tokio_rustls::TlsConnector;
 use tracing::{info, warn};
 
@@ -49,6 +51,62 @@ type AnswerCache = Mutex<HashMap<Vec<u8>, CacheEntry>>;
 fn cache() -> &'static AnswerCache {
     static C: OnceLock<AnswerCache> = OnceLock::new();
     C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+// In-flight single-flight: when N identical queries arrive concurrently
+// (the canonical reconnect-burst case), only the first issues a real lookup;
+// the rest subscribe to the leader's broadcast and reuse its result, sparing
+// N-1 mihomo flows + duplex pairs + TLS handshakes.
+type Inflight = Mutex<HashMap<Vec<u8>, broadcast::Sender<Option<Vec<u8>>>>>;
+
+fn inflight() -> &'static Inflight {
+    static I: OnceLock<Inflight> = OnceLock::new();
+    I.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Owns the inflight-map entry for a leader request. On drop without
+/// `complete()` (i.e. the leader future was cancelled), the entry is purged
+/// and `tx` is dropped — followers see `Err(Closed)` from `recv()` and bail.
+struct LeaderGuard {
+    key: Vec<u8>,
+    tx: broadcast::Sender<Option<Vec<u8>>>,
+    completed: bool,
+}
+
+impl LeaderGuard {
+    fn complete(mut self, result: Option<Vec<u8>>) {
+        // Remove first so concurrent callers can't subscribe after we send.
+        inflight().lock().remove(&self.key);
+        let _ = self.tx.send(result);
+        self.completed = true;
+    }
+}
+
+impl Drop for LeaderGuard {
+    fn drop(&mut self) {
+        if !self.completed {
+            inflight().lock().remove(&self.key);
+        }
+    }
+}
+
+/// Aborts a spawned task when this guard drops. Used to tear down the
+/// `handle_tcp` mihomo flow and the hyper connection driver if `send_doh`
+/// returns early (timeout, TLS error, request error) instead of leaving them
+/// detached to finish their own setup before noticing the duplex EOF.
+struct AbortOnDrop(JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn patch_txid(resp: &mut [u8], query: &[u8]) {
+    if resp.len() >= 2 && query.len() >= 2 {
+        resp[0] = query[0];
+        resp[1] = query[1];
+    }
 }
 
 /// Returns the bytes of the question section (qname + qtype + qclass) starting
@@ -112,10 +170,13 @@ pub fn init_doh_client() {
         // configured; matching the previous reqwest behavior, accept any
         // server cert. The DNS payload itself is not a secret and we trust
         // the proxy operator (i.e. the user).
-        let tls_config = ClientConfig::builder()
+        let mut tls_config = ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoCertVerify))
             .with_no_client_auth();
+        // Negotiate HTTP/2 on the DoH connection so a single TLS session
+        // multiplexes burst queries instead of paying handshake-per-query.
+        tls_config.alpn_protocols = vec![b"h2".to_vec()];
 
         DohClient {
             doh_urls,
@@ -128,23 +189,89 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
     let client = DOH_CLIENT.get()?;
 
     let key = question_section(query).map(|q| q.to_vec());
+
+    // Cache check.
     if let Some(ref k) = key {
         let now = Instant::now();
         let mut cache = cache().lock();
         if let Some((bytes, expires)) = cache.get(k) {
             if *expires > now {
                 let mut resp = bytes.clone();
-                if resp.len() >= 2 && query.len() >= 2 {
-                    // Patch txid so caller's transaction matches.
-                    resp[0] = query[0];
-                    resp[1] = query[1];
-                }
+                patch_txid(&mut resp, query);
                 return Some(resp);
             }
             cache.remove(k);
         }
     }
 
+    // Single-flight: either become the leader (issue the lookup, broadcast
+    // the result) or follow an existing leader. Queries with no parseable key
+    // skip dedup and just run.
+    enum Role {
+        Leader(broadcast::Sender<Option<Vec<u8>>>),
+        Follower(broadcast::Receiver<Option<Vec<u8>>>),
+    }
+    let role = key.as_ref().map(|k| {
+        let mut map = inflight().lock();
+        match map.get(k) {
+            Some(tx) => Role::Follower(tx.subscribe()),
+            None => {
+                let (tx, _) = broadcast::channel(1);
+                map.insert(k.clone(), tx.clone());
+                Role::Leader(tx)
+            }
+        }
+    });
+
+    let leader_guard = match role {
+        Some(Role::Follower(mut rx)) => {
+            return match rx.recv().await {
+                Ok(Some(bytes)) => {
+                    let mut resp = bytes;
+                    patch_txid(&mut resp, query);
+                    Some(resp)
+                }
+                // Leader failed (Ok(None)) or was cancelled (Err(_)).
+                _ => None,
+            };
+        }
+        Some(Role::Leader(tx)) => Some(LeaderGuard {
+            key: key.clone().expect("Leader implies key present"),
+            tx,
+            completed: false,
+        }),
+        None => None,
+    };
+
+    let result = run_doh_attempts(client, query).await;
+
+    // Cache successful result.
+    if let (Some(k), Some(bytes)) = (key.as_ref(), result.as_ref()) {
+        let ttl = cache_ttl(bytes);
+        let mut cache = cache().lock();
+        if cache.len() >= CACHE_MAX_ENTRIES {
+            // Evict the entry closest to expiry — cheap O(n) at n≤1024 and
+            // naturally biases toward dropping near-stale entries before fresh
+            // ones.
+            if let Some(oldest) = cache
+                .iter()
+                .min_by_key(|(_, (_, e))| *e)
+                .map(|(k, _)| k.clone())
+            {
+                cache.remove(&oldest);
+            }
+        }
+        cache.insert(k.clone(), (bytes.clone(), Instant::now() + ttl));
+    }
+
+    if let Some(guard) = leader_guard {
+        guard.complete(result.clone());
+    }
+
+    result
+}
+
+async fn run_doh_attempts(client: &DohClient, query: &[u8]) -> Option<Vec<u8>> {
     for url in &client.doh_urls {
         match tokio::time::timeout(
             Duration::from_secs(DOH_TIMEOUT_SECS),
@@ -152,28 +279,16 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
         )
         .await
         {
-            Ok(Ok(bytes)) => {
-                if let Some(k) = key {
-                    let ttl = cache_ttl(&bytes);
-                    let mut cache = cache().lock();
-                    if cache.len() >= CACHE_MAX_ENTRIES {
-                        // Evict the entry closest to expiry — cheap O(n) at n≤1024
-                        // and naturally biases toward dropping near-stale entries
-                        // before fresh ones.
-                        if let Some(oldest) = cache
-                            .iter()
-                            .min_by_key(|(_, (_, e))| *e)
-                            .map(|(k, _)| k.clone())
-                        {
-                            cache.remove(&oldest);
-                        }
-                    }
-                    cache.insert(k, (bytes.clone(), Instant::now() + ttl));
-                }
-                return Some(bytes);
-            }
+            Ok(Ok(bytes)) => return Some(bytes),
             Ok(Err(e)) => warn!("DoH request failed to {}: {}", url, e),
-            Err(_) => warn!("DoH request timed out to {}", url),
+            Err(_) => {
+                // Outer timeout fired — the inflight request future is dropped.
+                // Evict the pooled connection so the next query for this URL
+                // reopens a fresh TLS + h2 session instead of reusing what may
+                // be a stuck mihomo flow behind the timed-out stream.
+                warn!("DoH request timed out to {}", url);
+                evict_pool_entry(url);
+            }
         }
     }
 
@@ -181,22 +296,128 @@ pub async fn resolve_via_doh(query: &[u8]) -> Option<Vec<u8>> {
     None
 }
 
+// HTTP/2 connection pool keyed by DoH URL. Each entry holds the multiplexed
+// `SendRequest` plus abort guards for the spawned mihomo flow and h2 driver,
+// so dropping the entry tears the whole stack down. Burst DNS queries clone
+// the sender and ride as concurrent h2 streams over the single TLS session.
+const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+struct PoolEntry {
+    sender: http2::SendRequest<Full<Bytes>>,
+    last_used: Instant,
+    _flow_guard: AbortOnDrop,
+    _driver_guard: AbortOnDrop,
+}
+
+type Pool = Mutex<HashMap<String, PoolEntry>>;
+
+fn pool() -> &'static Pool {
+    static P: OnceLock<Pool> = OnceLock::new();
+    P.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 async fn send_doh(client: &DohClient, url: &str, query: &[u8]) -> Result<Vec<u8>, anyhow::Error> {
+    // First attempt over a (possibly reused) pooled connection.
+    match try_send(client, url, query).await {
+        Ok(bytes) => Ok(bytes),
+        Err(e) => {
+            // Always evict on failure: the next query for this URL will open a
+            // fresh TLS + h2 session rather than reuse a connection whose
+            // mihomo flow may have stalled.
+            evict_pool_entry(url);
+            // Retry once on connection-layer errors — a pooled sender may have
+            // raced with a server-side close, and a fresh connection should
+            // succeed without escalating to the next URL.
+            if is_conn_error(&e) {
+                try_send(client, url, query).await.inspect_err(|_| {
+                    evict_pool_entry(url);
+                })
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
+async fn try_send(client: &DohClient, url: &str, query: &[u8]) -> Result<Vec<u8>, anyhow::Error> {
     let uri: Uri = url.parse()?;
+    let mut sender = acquire_sender(client, url, &uri).await?;
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(&uri)
+        .header(CONTENT_TYPE, "application/dns-message")
+        .header(ACCEPT, "application/dns-message")
+        .body(Full::new(Bytes::copy_from_slice(query)))?;
+
+    let resp = sender.send_request(req).await?;
+    if !resp.status().is_success() {
+        anyhow::bail!("HTTP {}", resp.status());
+    }
+    let body = resp.into_body().collect().await?.to_bytes();
+    Ok(body.to_vec())
+}
+
+fn is_conn_error(err: &anyhow::Error) -> bool {
+    if let Some(hyper_err) = err.downcast_ref::<hyper::Error>() {
+        return hyper_err.is_closed()
+            || hyper_err.is_canceled()
+            || hyper_err.is_incomplete_message();
+    }
+    false
+}
+
+fn evict_pool_entry(url: &str) {
+    pool().lock().remove(url);
+}
+
+async fn acquire_sender(
+    client: &DohClient,
+    url: &str,
+    uri: &Uri,
+) -> Result<http2::SendRequest<Full<Bytes>>, anyhow::Error> {
+    // Fast path: live, non-stale entry already in the pool.
+    {
+        let mut p = pool().lock();
+        sweep_pool(&mut p);
+        if let Some(entry) = p.get_mut(url) {
+            entry.last_used = Instant::now();
+            return Ok(entry.sender.clone());
+        }
+    }
+
+    // Slow path: open a new connection without holding the pool lock. A
+    // concurrent caller may race us; whichever insert lands second tears down
+    // its own duplicate via the dropped abort guards.
+    let new_entry = open_connection(client, uri).await?;
+    let sender = new_entry.sender.clone();
+
+    let mut p = pool().lock();
+    if let Some(existing) = p.get_mut(url) {
+        if !existing.sender.is_closed() {
+            existing.last_used = Instant::now();
+            return Ok(existing.sender.clone());
+        }
+    }
+    p.insert(url.to_string(), new_entry);
+    Ok(sender)
+}
+
+fn sweep_pool(p: &mut HashMap<String, PoolEntry>) {
+    let now = Instant::now();
+    p.retain(|_, e| !e.sender.is_closed() && now.duration_since(e.last_used) < POOL_IDLE_TIMEOUT);
+}
+
+async fn open_connection(client: &DohClient, uri: &Uri) -> Result<PoolEntry, anyhow::Error> {
     let scheme = uri.scheme_str().unwrap_or("");
     if scheme != "https" {
-        anyhow::bail!("non-https DoH URL: {}", url);
+        anyhow::bail!("non-https DoH URL: {}", uri);
     }
     let host = uri
         .host()
         .ok_or_else(|| anyhow::anyhow!("URL missing host"))?
         .to_string();
     let port = uri.port_u16().unwrap_or(443);
-    let authority = uri
-        .authority()
-        .ok_or_else(|| anyhow::anyhow!("URL missing authority"))?
-        .as_str()
-        .to_string();
 
     let tunnel = engine::tunnel().ok_or_else(|| anyhow::anyhow!("engine not running"))?;
 
@@ -212,43 +433,39 @@ async fn send_doh(client: &DohClient, url: &str, query: &[u8]) -> Result<Vec<u8>
         src_port: 0,
         dst_ip,
         dst_port: port,
-        host: if dst_ip.is_some() { String::new() } else { host.clone() },
+        host: if dst_ip.is_some() {
+            String::new()
+        } else {
+            host.clone()
+        },
         ..Default::default()
     };
 
     let (left, right) = tokio::io::duplex(DUPLEX_BUF_SIZE);
     let proxy_conn: Box<dyn ProxyConn> = Box::new(DuplexConn(right));
     let inner = tunnel.inner().clone();
-    tokio::spawn(async move {
+    let flow_guard = AbortOnDrop(tokio::spawn(async move {
         mihomo_tunnel::tcp::handle_tcp(&inner, proxy_conn, metadata).await;
-    });
+    }));
 
-    let server_name = ServerName::try_from(host.clone())?;
+    let server_name = ServerName::try_from(host)?;
     let tls_stream = TlsConnector::from(client.tls_config.clone())
         .connect(server_name, left)
         .await?;
 
-    let (mut sender, conn) = http1::handshake(TokioIo::new(tls_stream)).await?;
-    tokio::spawn(async move {
+    let (sender, conn) = http2::handshake(TokioExecutor::new(), TokioIo::new(tls_stream)).await?;
+    let driver_guard = AbortOnDrop(tokio::spawn(async move {
         if let Err(e) = conn.await {
             warn!("DoH connection driver error: {}", e);
         }
-    });
+    }));
 
-    let req = Request::builder()
-        .method(Method::POST)
-        .uri(&uri)
-        .header(HOST, authority.as_str())
-        .header(CONTENT_TYPE, "application/dns-message")
-        .header(ACCEPT, "application/dns-message")
-        .body(Full::new(Bytes::copy_from_slice(query)))?;
-
-    let resp = sender.send_request(req).await?;
-    if !resp.status().is_success() {
-        anyhow::bail!("HTTP {}", resp.status());
-    }
-    let body = resp.into_body().collect().await?.to_bytes();
-    Ok(body.to_vec())
+    Ok(PoolEntry {
+        sender,
+        last_used: Instant::now(),
+        _flow_guard: flow_guard,
+        _driver_guard: driver_guard,
+    })
 }
 
 // `ProxyConn` requires the wrapper to be local (orphan rule), so we hand
