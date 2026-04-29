@@ -7,13 +7,9 @@ struct HomeView: View {
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
     @Environment(MihomoAPI.self) private var mihomoAPI
-    @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
-    @State private var groups: [ProxyGroupModel] = []
-    @State private var expandedGroupID: String?
-    @State private var inflightDelay: Set<String> = []
-    @State private var groupsLoadError: String?
+    @State private var groupCount: Int = 0
 
     var body: some View {
         ScrollView {
@@ -23,7 +19,7 @@ struct HomeView: View {
                 }
                 primaryCard
                 trafficRow
-                proxyGroupsSection
+                proxyGroupsRow
                 auxiliaryNavSection
             }
             .padding(16)
@@ -31,7 +27,7 @@ struct HomeView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("home.nav.title")
         .task(id: vpnManager.stage) {
-            await refreshGroupsIfConnected()
+            await refreshGroupCount()
         }
         // The stage-keyed task above fires on the `.connected` edge and races
         // `AppModel.replaySelectedProxies`; the pre-replay fetch caches YAML
@@ -39,9 +35,9 @@ struct HomeView: View {
         // a second task on `replayGeneration` guarantees a re-fetch AFTER the
         // replay pass finishes (success, probe timeout, or no-op alike).
         .task(id: appModel.replayGeneration) {
-            await refreshGroupsIfConnected()
+            await refreshGroupCount()
         }
-        .refreshable { await refreshGroupsIfConnected() }
+        .refreshable { await refreshGroupCount() }
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -150,62 +146,35 @@ struct HomeView: View {
 
     // MARK: - Proxy groups
 
-    private var proxyGroupsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("home.proxyGroups.header")
-                    .font(.caption.smallCaps())
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if let err = groupsLoadError {
-                    Text(err)
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 4)
-
-            if groups.isEmpty {
-                GlassCard {
-                    HStack(spacing: 8) {
-                        Image(systemName: "network.slash")
-                            .foregroundStyle(.secondary)
-                        Text(placeholderKey)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                }
-            } else {
-                ForEach(groups) { group in
-                    ProxyGroupCard(
-                        group: group,
-                        isExpanded: expandedGroupID == group.id,
-                        inflight: inflightDelay,
-                        onToggleExpand: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                expandedGroupID = expandedGroupID == group.id ? nil : group.id
-                            }
-                        },
-                        onSelect: { proxy in
-                            Task { await select(group: group.name, proxy: proxy) }
-                        },
-                        onPing: { proxy in
-                            Task { await ping(proxy: proxy) }
-                        },
-                    )
+    private var proxyGroupsRow: some View {
+        NavigationLink {
+            ProxyGroupsView()
+        } label: {
+            GlassCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "rectangle.stack")
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 24)
+                    Text("home.proxyGroups.header")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text(groupCountText)
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("home.proxyGroups.count")
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
+        .buttonStyle(.plain)
+        .disabled(groupCount == 0)
+        .accessibilityIdentifier("home.nav.proxyGroups")
     }
 
-    private var placeholderKey: LocalizedStringKey {
-        switch vpnManager.stage {
-        case .connected: "home.proxyGroups.placeholder.connected"
-        case .connecting: "home.proxyGroups.placeholder.connecting"
-        default: "home.proxyGroups.placeholder.disconnected"
-        }
+    private var groupCountText: String {
+        groupCount == 0 ? "—" : "\(groupCount)"
     }
 
     // MARK: - Auxiliary nav
@@ -314,165 +283,21 @@ private extension HomeView {
         }
     }
 
-    func refreshGroupsIfConnected() async {
+    func refreshGroupCount() async {
         guard vpnManager.stage == .connected else {
-            groups = []
-            groupsLoadError = nil
+            groupCount = 0
             return
         }
         do {
             let resp = try await mihomoAPI.getProxies()
-            groups = ProxyGroupModel.build(from: resp.proxies)
-            groupsLoadError = nil
+            groupCount = ProxyGroupModel.build(from: resp.proxies).count
         } catch {
-            groupsLoadError = String(
-                localized: "home.error.apiUnavailable",
-                comment: "Inline error shown in Proxy Groups header when mihomo API is not reachable",
-            )
+            groupCount = 0
         }
-    }
-
-    func select(group: String, proxy: String) async {
-        do {
-            try await mihomoAPI.selectProxy(group: group, name: proxy)
-            if let profile = selected.first {
-                profile.selectedProxies[group] = proxy
-                try? modelContext.save()
-            }
-            await refreshGroupsIfConnected()
-        } catch {
-            groupsLoadError = String(
-                localized: "home.error.selectFailed",
-                comment: "Inline error shown in Proxy Groups header when selecting a proxy fails",
-            )
-        }
-    }
-
-    func ping(proxy: String) async {
-        inflightDelay.insert(proxy)
-        _ = try? await mihomoAPI.testDelay(
-            proxy: proxy,
-            url: "http://www.gstatic.com/generate_204",
-        )
-        await refreshGroupsIfConnected()
-        inflightDelay.remove(proxy)
     }
 }
 
 // MARK: - Subviews
-
-private struct ProxyGroupCard: View {
-    let group: ProxyGroupModel
-    let isExpanded: Bool
-    let inflight: Set<String>
-    var onToggleExpand: () -> Void
-    var onSelect: (String) -> Void
-    var onPing: (String) -> Void
-
-    var body: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: isExpanded ? 12 : 0) {
-                Button(action: onToggleExpand) {
-                    HStack(spacing: 10) {
-                        Image(systemName: groupSymbol)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(group.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Text(group.type)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if let now = group.now {
-                            Text(now)
-                                .font(.subheadline)
-                                .foregroundStyle(.tint)
-                                .lineLimit(1)
-                        }
-                        Image(systemName: "chevron.right")
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if isExpanded {
-                    Divider()
-                    VStack(spacing: 8) {
-                        ForEach(group.children) { child in
-                            proxyRow(child)
-                        }
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("home.group.\(group.id.identifierSlug)")
-    }
-
-    private func proxyRow(_ child: ProxyGroupModel.Child) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: child.name == group.now ? "largecircle.fill.circle" : "circle")
-                .foregroundStyle(child.name == group.now ? Color.accentColor : .secondary)
-                .frame(width: 20)
-            Text(child.name)
-                .font(.subheadline)
-                .lineLimit(1)
-            Spacer()
-            DelayBadge(delay: child.delay, isLoading: inflight.contains(child.name))
-                .onTapGesture { onPing(child.name) }
-        }
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
-        .onTapGesture { onSelect(child.name) }
-        .accessibilityIdentifier("home.proxy.\(group.id.identifierSlug).\(child.name.identifierSlug)")
-    }
-
-    private var groupSymbol: String {
-        switch group.type {
-        case "URLTest": "speedometer"
-        case "Fallback": "arrow.uturn.right.circle"
-        case "LoadBalance": "scale.3d"
-        case "Relay": "arrow.triangle.turn.up.right.circle"
-        default: "rectangle.stack"
-        }
-    }
-}
-
-private struct DelayBadge: View {
-    let delay: Int?
-    let isLoading: Bool
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView().controlSize(.mini)
-            } else if let delay, delay > 0 {
-                Text("\(delay) ms")
-                    .font(.caption.monospacedDigit())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(tint(for: delay).opacity(0.18), in: Capsule())
-                    .foregroundStyle(tint(for: delay))
-            } else {
-                Image(systemName: "minus.circle")
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(minWidth: 56, alignment: .trailing)
-    }
-
-    private func tint(for delay: Int) -> Color {
-        switch delay {
-        case ..<200: .green
-        case 200 ..< 500: .yellow
-        default: .red
-        }
-    }
-}
 
 private struct PacketStat: View {
     let systemImage: String
