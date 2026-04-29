@@ -56,6 +56,11 @@ urlencoding = "2"
 # tun2socks
 netstack-smoltcp = "0.2"
 
+# Persistent DoH answer cache (single-writer KV at $HOME_DIR/doh-cache.redb).
+# Pure-Rust, mmap-backed; survives PacketTunnel restarts so cold starts don't
+# repay the burst of fanout queries from launch flows.
+redb = "2"
+
 # Embedded mihomo-rust engine. Pinned to main; revisit once the project tags
 # releases. Each crate is a workspace member of madeye/mihomo-rust.
 mihomo-common = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }

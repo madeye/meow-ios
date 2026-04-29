@@ -16,6 +16,7 @@
 
 mod diagnostics;
 mod dns_table;
+mod doh_cache;
 mod doh_client;
 mod engine;
 mod logging;
