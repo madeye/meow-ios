@@ -14,6 +14,7 @@
 //! short-circuited pre-stack to DoH; everything else flows through netstack's
 //! UDP socket.
 
+mod china_dns;
 mod diagnostics;
 mod dns_table;
 mod doh_cache;

@@ -61,6 +61,17 @@ netstack-smoltcp = "0.2"
 # repay the burst of fanout queries from launch flows.
 redb = "2"
 
+# GeoIP CN check for the trust-china-dns split-horizon path. `maxminddb` is
+# already compiled in transitively via mihomo-rules / mihomo-dns / mihomo-config;
+# this declaration just exposes the same crate to non-test code. `ipnetwork` is
+# the CIDR type `Reader::within` accepts (same crate maxminddb pulls in). The
+# CN ranges land in an `iprange::IpRange<ipnet::IpNet>` — auto-merged via
+# `simplify()`, O(log n) `contains()`, same crate trust-china-dns uses upstream.
+maxminddb = "0.27"
+ipnetwork = "0.21"
+ipnet = "2"
+iprange = "0.6"
+
 # Embedded mihomo-rust engine. Pinned to main; revisit once the project tags
 # releases. Each crate is a workspace member of madeye/mihomo-rust.
 mihomo-common = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
@@ -84,10 +95,8 @@ smoltcp = { git = "https://github.com/madeye/smoltcp", branch = "fix/reject-byte
 cbindgen = "0.28"
 
 [dev-dependencies]
-# xdg_home_dir_tests probes the env-var wire-up via the GeoIP load path;
-# maxminddb version matches the workspace pin mihomo-config resolves.
+# xdg_home_dir_tests probes the env-var wire-up via the GeoIP load path.
 tempfile = "3"
-maxminddb = "0.27"
 
 [profile.release]
 # Shrink binary for the 50MB extension budget. mihomo-rust adds significant
