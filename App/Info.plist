@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.5</string>
+	<string>1.1.6</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,7 +30,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>2026042906</string>
+	<string>2026043001</string>
 	<key>GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED</key>
 	<false/>
 	<key>GOOGLE_ANALYTICS_IDFA_COLLECTION_ENABLED</key>
