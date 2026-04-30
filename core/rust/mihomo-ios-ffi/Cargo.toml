@@ -72,14 +72,15 @@ ipnetwork = "0.21"
 ipnet = "2"
 iprange = "0.6"
 
-# Embedded mihomo-rust engine. Pinned to main; revisit once the project tags
-# releases. Each crate is a workspace member of madeye/mihomo-rust.
-mihomo-common = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
-mihomo-config = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
-mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
-mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
-mihomo-api = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
-mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", branch = "main" }
+# Embedded mihomo-rust engine. Pinned to a release tag; bump deliberately
+# rather than tracking main. Each crate is a workspace member of
+# madeye/mihomo-rust.
+mihomo-common = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.6.0" }
+mihomo-config = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.6.0" }
+mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.6.0" }
+mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.6.0" }
+mihomo-api = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.6.0" }
+mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.6.0" }
 
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
