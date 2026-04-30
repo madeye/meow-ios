@@ -1,0 +1,25 @@
+Build 2026043001 (1.1.6)
+
+新特性
+• 将 mihomo-rust 锁定到 v0.6.0。驱动 PacketTunnel 的 Rust 核心
+  现从打了 tag 的发布版本拉取,不再跟随分支末端,确保 TestFlight
+  上线版本与本地审阅过的代码一致。
+
+相对 build 2026042906 没有功能性变更。trust-china-dns 分流解析器、
+GeoIP 提取的 CN 段、以及 1.1.5 的所有行为均保持不变。
+
+测试要点
+1. 烟雾测试 —— 在 2026042906 之上覆盖安装,确认隧道仍在 1-2 秒
+   内启动,CN 域名解析到 CN IP,非 CN 域名继续走可信 DoH 路径。
+
+2. 连接 / 断开循环、代理组切换、订阅刷新、设置 YAML 编辑器 ——
+   相比 2026042906 无新增崩溃或界面卡顿。
+
+已知限制
+• 隧道暂未转发非 DNS 的 UDP 流量。WireGuard 出站不工作。QUIC /
+  HTTP3 会回落到 TCP HTTP/2(通常透明)。
+• 中国侧 DNS 链路是明文 UDP(按 trust-china-dns 上游设计,不使用
+  DoT / DoH)。
+
+请通过 TestFlight 反馈或在以下地址提 issue:
+https://github.com/madeye/meow-ios/issues

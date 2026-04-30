@@ -1,0 +1,30 @@
+Build 2026043001 (1.1.6)
+
+WHAT'S NEW
+• Pinned mihomo-rust to v0.6.0. The Rust core that powers the
+  PacketTunnel is now sourced from a tagged release rather than a
+  floating branch tip, so what ships in TestFlight matches what was
+  audited locally.
+
+There are no functional changes versus build 2026042906. The
+trust-china-dns split-horizon resolver, GeoIP-extracted CN ranges, and
+all behaviour from 1.1.5 are unchanged.
+
+WHAT TO TEST
+1. Smoke test — install over 2026042906 and confirm the tunnel still
+   comes up within 1-2 s, CN-hosted hostnames resolve to CN IPs, and
+   non-CN hostnames continue to route through the trusted DoH path.
+
+2. Connect / disconnect cycles, proxy group switching, subscription
+   refresh, settings YAML editor — no new crashes or UI hangs vs
+   2026042906.
+
+KNOWN LIMITATIONS
+• Non-DNS UDP traffic is not yet forwarded by the tunnel. WireGuard
+  outbounds will not pass traffic. QUIC / HTTP3 falls back to TCP
+  HTTP/2 (usually transparent).
+• The China-side DNS path is plain UDP (no DoT / DoH on the CN
+  upstreams by design — matches trust-china-dns upstream).
+
+Please send TestFlight feedback or open an issue at:
+https://github.com/madeye/meow-ios/issues
