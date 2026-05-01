@@ -69,13 +69,83 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 // backgrounded app) blow past the 50 MiB NE memory ceiling before any flow
 // completes. Drops at the accept boundary; peers see RST / packet loss for a
 // few hundred ms instead of the whole tunnel dying.
-const TCP_BURST_CAP: usize = 256;
+//
+// `TCP_BURST_CAP` is a hard memory backstop sitting above `TCP_SOFT_CAP`.
+// The soft cap (512) is the one users normally hit: when reached, idle flows
+// (>= TCP_IDLE_SECS without any byte movement) are evicted at accept time
+// and by a periodic sweeper, freeing both their burst-cap permits and the
+// upstream SOCKS5 connection mihomo's relay was holding open. The hard cap
+// only fires if eviction can't free enough room — a real overload.
+const TCP_BURST_CAP: usize = 1024;
+const TCP_SOFT_CAP: usize = 512;
+const TCP_IDLE_SECS: u64 = 90;
+const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 30;
 const UDP_BURST_CAP: usize = 512;
 const DNS_BURST_CAP: usize = 256;
 
 static TCP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 static DNS_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+static TCP_FLOW_ID_SEQ: AtomicU64 = AtomicU64::new(1);
+
+/// Per-active-flow timestamp. The Arc-shared cell lets `IdleTrackingConn`
+/// bump `last_active_ms` on every successful poll without taking the
+/// global flow-table lock; the sweep reader walks the table to compare.
+struct FlowState {
+    last_active_ms: AtomicU64,
+}
+
+/// Registry entry for one in-flight TCP flow. Aborting `abort` drops the
+/// `dispatch_tcp` future, which closes both halves of the relay — the
+/// netstack stream and the upstream SOCKS5 connection mihomo opened — and
+/// returns the burst-cap permit when the held `_permit` is dropped.
+struct FlowRecord {
+    state: Arc<FlowState>,
+    abort: tokio::task::AbortHandle,
+    src: SocketAddr,
+    dst: SocketAddr,
+}
+
+fn tcp_flows() -> &'static dashmap::DashMap<u64, FlowRecord> {
+    static M: OnceLock<dashmap::DashMap<u64, FlowRecord>> = OnceLock::new();
+    M.get_or_init(dashmap::DashMap::new)
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Walk the flow table and abort any flow whose `last_active_ms` is older
+/// than `TCP_IDLE_SECS`. Called at accept time when the soft cap is hit and
+/// from the periodic sweeper. Returns the number of evicted flows.
+fn sweep_idle_tcp_flows() -> usize {
+    let cutoff = now_ms().saturating_sub(TCP_IDLE_SECS * 1000);
+    let mut evicted: Vec<(u64, SocketAddr, SocketAddr)> = Vec::new();
+    tcp_flows().retain(|&id, rec| {
+        if rec.state.last_active_ms.load(Ordering::Relaxed) <= cutoff {
+            rec.abort.abort();
+            evicted.push((id, rec.src, rec.dst));
+            false
+        } else {
+            true
+        }
+    });
+    if !evicted.is_empty() {
+        warn!(
+            "tun2socks: evicted {} idle TCP flows (>{}s)",
+            evicted.len(),
+            TCP_IDLE_SECS
+        );
+        for (id, src, dst) in &evicted {
+            logging::bridge_log(&format!("tun2socks: TCP idle-evict {} {} -> {}", id, src, dst));
+        }
+    }
+    evicted.len()
+}
 
 fn warn_capped(slot: &AtomicU64, msg: &str) {
     let now_ms = SystemTime::now()
@@ -232,6 +302,14 @@ async fn run_tun2socks(
     let tcp_sem_accept = tcp_sem.clone();
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            // Soft cap: reaching 512 active flows triggers an idle sweep
+            // before we commit to admitting the new flow. Eviction frees
+            // burst-cap permits along with the upstream SOCKS5 connections
+            // those flows held, so the subsequent acquire usually succeeds.
+            if ACTIVE_TCP_CONNS.load(Ordering::Relaxed) >= TCP_SOFT_CAP as i64 {
+                sweep_idle_tcp_flows();
+            }
+
             let permit = match tcp_sem_accept.clone().try_acquire_owned() {
                 Ok(p) => p,
                 Err(_) => {
@@ -244,10 +322,44 @@ async fn run_tun2socks(
                 }
             };
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
-            tokio::spawn(async move {
-                let _permit = permit;
-                dispatch_tcp(stream, local_addr, remote_addr).await;
+
+            let flow_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+            let state = Arc::new(FlowState {
+                last_active_ms: AtomicU64::new(now_ms()),
             });
+            let state_for_task = state.clone();
+            let task = tokio::spawn(async move {
+                let _permit = permit;
+                dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
+                tcp_flows().remove(&flow_id);
+            });
+            tcp_flows().insert(
+                flow_id,
+                FlowRecord {
+                    state,
+                    abort: task.abort_handle(),
+                    src: local_addr,
+                    dst: remote_addr,
+                },
+            );
+        }
+    });
+
+    // Periodic idle sweeper: catches flows that have gone idle while no new
+    // accepts are arriving (e.g. background apps with long-lived sockets that
+    // haven't said anything recently). Cancelled at tun2socks shutdown.
+    let idle_sweeper_handle = tokio::spawn(async move {
+        let mut tick =
+            tokio::time::interval(std::time::Duration::from_secs(TCP_IDLE_SWEEP_INTERVAL_SECS));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // First tick fires immediately; skip it so we don't churn at startup.
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            if !TUN2SOCKS_RUNNING.load(Ordering::Relaxed) {
+                break;
+            }
+            sweep_idle_tcp_flows();
         }
     });
 
@@ -333,10 +445,19 @@ async fn run_tun2socks(
     runner_handle.abort();
     stack_handle.abort();
     tcp_accept_handle.abort();
+    idle_sweeper_handle.abort();
     udp_accept_handle.abort();
     udp_writer_handle.abort();
     egress_handle.abort();
     drop(udp_reply_tx);
+
+    // Abort any TCP flows still held in the registry so the burst-cap
+    // semaphore + upstream SOCKS5 connections don't outlive the tunnel.
+    let flows = tcp_flows();
+    for entry in flows.iter() {
+        entry.abort.abort();
+    }
+    flows.clear();
 
     logging::bridge_log("tun2socks: exiting");
     Ok(())
@@ -346,10 +467,16 @@ async fn run_tun2socks(
 // In-process TCP dispatch into mihomo_tunnel
 // ---------------------------------------------------------------------------
 
-async fn dispatch_tcp(stream: NetstackTcpStream, src: SocketAddr, dst: SocketAddr) {
+async fn dispatch_tcp(
+    stream: NetstackTcpStream,
+    src: SocketAddr,
+    dst: SocketAddr,
+    state: Arc<FlowState>,
+) {
     ACTIVE_TCP_CONNS.fetch_add(1, Ordering::Relaxed);
     let Some(tunnel) = crate::engine::tunnel() else {
         logging::bridge_log("tun2socks: engine not running, dropping TCP flow");
+        ACTIVE_TCP_CONNS.fetch_sub(1, Ordering::Relaxed);
         return;
     };
 
@@ -371,7 +498,10 @@ async fn dispatch_tcp(stream: NetstackTcpStream, src: SocketAddr, dst: SocketAdd
         ..Default::default()
     };
 
-    let conn: Box<dyn ProxyConn> = Box::new(NetstackConn(stream));
+    let conn: Box<dyn ProxyConn> = Box::new(IdleTrackingConn {
+        inner: NetstackConn(stream),
+        state,
+    });
     mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata).await;
     ACTIVE_TCP_CONNS.fetch_sub(1, Ordering::Relaxed);
 }
@@ -415,6 +545,67 @@ impl AsyncWrite for NetstackConn {
 impl ProxyConn for NetstackConn {
     fn remote_destination(&self) -> String {
         String::new()
+    }
+}
+
+/// Wraps `NetstackConn` to bump `FlowState::last_active_ms` on every poll
+/// that returned `Ready(Ok(_))`. The stamp covers both directions because
+/// mihomo's relay drives this end's `poll_read` (bytes from the app) and
+/// `poll_write` (bytes from the upstream proxy) on the same wrapper.
+/// Pending / would-block polls are intentionally not counted as activity.
+struct IdleTrackingConn {
+    inner: NetstackConn,
+    state: Arc<FlowState>,
+}
+
+impl IdleTrackingConn {
+    fn touch(&self) {
+        self.state.last_active_ms.store(now_ms(), Ordering::Relaxed);
+    }
+}
+
+impl AsyncRead for IdleTrackingConn {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let before = buf.filled().len();
+        let poll = Pin::new(&mut self.inner).poll_read(cx, buf);
+        if matches!(poll, Poll::Ready(Ok(()))) && buf.filled().len() > before {
+            self.touch();
+        }
+        poll
+    }
+}
+
+impl AsyncWrite for IdleTrackingConn {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let poll = Pin::new(&mut self.inner).poll_write(cx, buf);
+        if let Poll::Ready(Ok(n)) = poll {
+            if n > 0 {
+                self.touch();
+            }
+        }
+        poll
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+impl ProxyConn for IdleTrackingConn {
+    fn remote_destination(&self) -> String {
+        self.inner.remote_destination()
     }
 }
 
@@ -616,5 +807,73 @@ async fn handle_dns_query(
         let _ = reply_tx.try_send(build_udp_packet(
             dst_ip, dst_port, src_ip, src_port, &response,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    fn dummy_addr(port: u16) -> SocketAddr {
+        SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }
+
+    /// Spawns a no-op task purely so we have a real `AbortHandle` to put in
+    /// `FlowRecord`. The test only inspects whether `sweep_idle_tcp_flows`
+    /// removes entries by timestamp; we don't care if abort actually fires.
+    fn dummy_handle() -> tokio::task::AbortHandle {
+        tokio::runtime::Handle::current()
+            .spawn(std::future::pending::<()>())
+            .abort_handle()
+    }
+
+    #[tokio::test]
+    async fn sweep_evicts_only_idle_flows() {
+        let flows = tcp_flows();
+        flows.clear();
+
+        let now = now_ms();
+        let stale_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+        let fresh_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+
+        flows.insert(
+            stale_id,
+            FlowRecord {
+                state: Arc::new(FlowState {
+                    last_active_ms: AtomicU64::new(
+                        now.saturating_sub((TCP_IDLE_SECS + 5) * 1000),
+                    ),
+                }),
+                abort: dummy_handle(),
+                src: dummy_addr(1),
+                dst: dummy_addr(2),
+            },
+        );
+        flows.insert(
+            fresh_id,
+            FlowRecord {
+                state: Arc::new(FlowState {
+                    last_active_ms: AtomicU64::new(now),
+                }),
+                abort: dummy_handle(),
+                src: dummy_addr(3),
+                dst: dummy_addr(4),
+            },
+        );
+
+        let evicted = sweep_idle_tcp_flows();
+        assert_eq!(evicted, 1, "only the stale flow should be swept");
+        assert!(flows.get(&stale_id).is_none(), "stale flow removed");
+        assert!(flows.get(&fresh_id).is_some(), "fresh flow retained");
+
+        flows.clear();
+    }
+
+    #[tokio::test]
+    async fn sweep_with_no_flows_is_a_no_op() {
+        let flows = tcp_flows();
+        flows.clear();
+        assert_eq!(sweep_idle_tcp_flows(), 0);
     }
 }
