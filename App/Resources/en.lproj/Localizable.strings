@@ -121,7 +121,8 @@
 "settings.logLevel.error" = "Error";
 "settings.logLevel.silent" = "Silent";
 "settings.section.dns" = "DNS";
-"settings.field.dohServer" = "DoH Server";
+"settings.field.dnsServers" = "DNS Servers";
+"settings.footer.dnsServers" = "Comma-separated plain-TCP DNS servers (host or host:port). Leave empty to use 1.1.1.1 and 8.8.8.8. Routed through the active proxy.";
 "settings.section.diagnostics" = "Diagnostics";
 "settings.label.diagnostics" = "Diagnostics";
 "settings.section.about" = "About";

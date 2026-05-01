@@ -17,8 +17,8 @@
 mod china_dns;
 mod diagnostics;
 mod dns_table;
+mod dns_client;
 mod doh_cache;
-mod doh_client;
 mod engine;
 mod logging;
 mod subscription;
@@ -367,6 +367,35 @@ pub unsafe extern "C" fn meow_engine_test_dns(
             -1
         }
     }
+}
+
+/// Configure the trusted plain-TCP DNS upstream pool from the iOS Settings
+/// view. `csv` is a comma-/whitespace-separated list of `host` or
+/// `host:port` entries (port defaults to 53); empty / NULL / parse-failed
+/// input falls back to the built-in defaults (1.1.1.1 / 8.8.8.8).
+///
+/// Call this before `meow_tun_start` — the upstream list is read once
+/// inside `init_dns_client`. Writes are still safe at runtime; they take
+/// effect on the next tunnel start.
+///
+/// # Safety
+/// `csv`, if non-NULL, must be a NUL-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn meow_dns_set_upstreams(csv: *const c_char) -> c_int {
+    let input = if csv.is_null() {
+        ""
+    } else {
+        match CStr::from_ptr(csv).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                set_error("dns upstreams not utf-8".into());
+                return -1;
+            }
+        }
+    };
+    let parsed = dns_client::parse_upstreams_csv(input);
+    dns_client::set_user_upstreams(parsed);
+    0
 }
 
 // ---------------------------------------------------------------------------

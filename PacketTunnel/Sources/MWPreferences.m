@@ -1,7 +1,7 @@
 #import "MWPreferences.h"
 
 NSString *const MWPrefKeyMixedPort     = @"com.meow.mixedPort";
-NSString *const MWPrefKeyDohServer     = @"com.meow.dohServer";
+NSString *const MWPrefKeyDnsServers    = @"com.meow.dnsServers";
 NSString *const MWPrefKeyLogLevel      = @"com.meow.logLevel";
 NSString *const MWPrefKeyAllowLan      = @"com.meow.allowLan";
 NSString *const MWPrefKeyIpv6          = @"com.meow.ipv6";
@@ -12,11 +12,11 @@ NSString *const MWPrefKeyPendingIntent = @"com.meow.pendingIntent";
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _mixedPort = 7890;
-        _dohServer = @"";
-        _logLevel  = @"info";
-        _allowLan  = NO;
-        _ipv6      = NO;
+        _mixedPort  = 7890;
+        _dnsServers = @"";
+        _logLevel   = @"info";
+        _allowLan   = NO;
+        _ipv6       = NO;
     }
     return self;
 }
@@ -25,8 +25,8 @@ NSString *const MWPrefKeyPendingIntent = @"com.meow.pendingIntent";
     MWPreferences *p = [[MWPreferences alloc] init];
     if ([defaults objectForKey:MWPrefKeyMixedPort])
         p.mixedPort = [defaults integerForKey:MWPrefKeyMixedPort];
-    NSString *doh = [defaults stringForKey:MWPrefKeyDohServer];
-    p.dohServer = doh ?: @"";
+    NSString *dns = [defaults stringForKey:MWPrefKeyDnsServers];
+    p.dnsServers = dns ?: @"";
     NSString *level = [defaults stringForKey:MWPrefKeyLogLevel];
     p.logLevel = level ?: @"info";
     if ([defaults objectForKey:MWPrefKeyAllowLan])

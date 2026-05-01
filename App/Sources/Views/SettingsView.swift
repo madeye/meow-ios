@@ -28,16 +28,20 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.picker.logLevel")
             }
-            Section("settings.section.dns") {
+            Section {
                 TextField(
-                    "settings.field.dohServer",
-                    text: binding(\.dohServer),
-                    prompt: Text("https://1.1.1.1/dns-query"),
+                    "settings.field.dnsServers",
+                    text: binding(\.dnsServers),
+                    prompt: Text("1.1.1.1, 8.8.8.8"),
                 )
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
-                .accessibilityIdentifier("settings.field.dohServer")
+                .accessibilityIdentifier("settings.field.dnsServers")
+            } header: {
+                Text("settings.section.dns")
+            } footer: {
+                Text("settings.footer.dnsServers")
             }
             Section("settings.section.diagnostics") {
                 NavigationLink {
@@ -83,7 +87,7 @@ struct SettingsView: View {
             .onChange(of: preferences.allowLan) { _, _ in persist() }
             .onChange(of: preferences.ipv6) { _, _ in persist() }
             .onChange(of: preferences.logLevel) { _, _ in persist() }
-            .onChange(of: preferences.dohServer) { _, _ in persist() }
+            .onChange(of: preferences.dnsServers) { _, _ in persist() }
             .task { await pollMemory() }
     }
 
