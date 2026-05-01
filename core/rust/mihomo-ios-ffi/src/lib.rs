@@ -11,8 +11,16 @@
 //!
 //! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
 //! owns a single tokio runtime that both halves share. UDP DNS is
-//! short-circuited pre-stack to DoH; everything else flows through netstack's
-//! UDP socket.
+//! short-circuited pre-stack to a plain-TCP DNS client (still routed through
+//! mihomo's proxy chain); everything else flows through netstack's UDP socket.
+
+// Tests use the system allocator: mimalloc-rust 0.1 probes the stack on every
+// allocation, and `mihomo-config`'s serde_yaml deserialization nests deep
+// enough that the combination blows past any reasonable test-thread stack.
+// Production NE threads don't hit this path cold from a sync test.
+#[cfg(not(test))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod china_dns;
 mod diagnostics;
