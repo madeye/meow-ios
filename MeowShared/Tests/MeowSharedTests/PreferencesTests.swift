@@ -20,12 +20,12 @@ struct PreferencesTests {
         defaults.removePersistentDomain(forName: "preferences-test-rt")
         var prefs = Preferences()
         prefs.mixedPort = 9999
-        prefs.dohServer = "https://dns.example/dns-query"
+        prefs.dnsServers = "1.1.1.1, 8.8.8.8"
         prefs.allowLan = true
         prefs.save(to: defaults)
         let loaded = Preferences.load(from: defaults)
         #expect(loaded.mixedPort == 9999)
-        #expect(loaded.dohServer == "https://dns.example/dns-query")
+        #expect(loaded.dnsServers == "1.1.1.1, 8.8.8.8")
         #expect(loaded.allowLan == true)
     }
 }

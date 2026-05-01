@@ -76,6 +76,11 @@ static os_log_t gLog;
         return NO;
     }
 
+    // Hand the user's Settings-configured DNS upstream list to the Rust
+    // resolver before starting tun2socks. Empty string → engine falls back
+    // to its built-in defaults (1.1.1.1 / 8.8.8.8).
+    meow_dns_set_upstreams(prefs.dnsServers.UTF8String ?: "");
+
     MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
     _writer    = writer;
     _writerCtx = (void *)CFBridgingRetain(writer);
@@ -317,6 +322,8 @@ static os_log_t gLog;
         atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
         return NO;
     }
+
+    meow_dns_set_upstreams(prefs.dnsServers.UTF8String ?: "");
 
     MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
     _writer    = writer;

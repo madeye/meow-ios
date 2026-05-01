@@ -129,6 +129,21 @@ int meow_engine_test_proxy_http(const char *url, int timeout_ms, int *out_status
 int meow_engine_test_dns(const char *host, int timeout_ms, char *out, int out_cap);
 
 /**
+ * Configure the trusted plain-TCP DNS upstream pool from the iOS Settings
+ * view. `csv` is a comma-/whitespace-separated list of `host` or
+ * `host:port` entries (port defaults to 53); empty / NULL / parse-failed
+ * input falls back to the built-in defaults (1.1.1.1 / 8.8.8.8).
+ *
+ * Call this before `meow_tun_start` — the upstream list is read once
+ * inside `init_dns_client`. Writes are still safe at runtime; they take
+ * effect on the next tunnel start.
+ *
+ * # Safety
+ * `csv`, if non-NULL, must be a NUL-terminated UTF-8 C string.
+ */
+int meow_dns_set_upstreams(const char *csv);
+
+/**
  * Patch a Clash YAML config for iOS: strips `dns`, `subscriptions`, `secret`;
  * pins `mixed-port` and `external-controller`; injects `geox-url` when absent.
  * Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl

@@ -6,14 +6,15 @@
 //!
 //! Egress packets (netstack output + DNS replies) are handed back to Swift via
 //! a C callback registered in [`start`]. No file descriptors cross the FFI.
-//! UDP DNS is short-circuited pre-stack to DoH; non-DNS UDP flows through
+//! UDP DNS is short-circuited pre-stack to a plain-TCP DNS client (still
+//! routed through mihomo's proxy chain); non-DNS UDP flows through
 //! netstack's `UdpSocket` into `mihomo_tunnel::udp::handle_udp`, and a
 //! per-NAT-session reader drains proxy replies back through netstack's
 //! `WriteHalf` so the IP packet emitted to Swift is synthesized with
 //! source = external peer.
 
+use crate::dns_client;
 use crate::dns_table;
-use crate::doh_client;
 use crate::logging;
 use futures::{SinkExt, StreamExt};
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
@@ -64,17 +65,17 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
 // Burst caps: defensive backstop against the "bursty-on-flow" leak that lets a
-// reconnect storm (DoH lookups + pent-up connect attempts from every
+// reconnect storm (DNS lookups + pent-up connect attempts from every
 // backgrounded app) blow past the 50 MiB NE memory ceiling before any flow
 // completes. Drops at the accept boundary; peers see RST / packet loss for a
 // few hundred ms instead of the whole tunnel dying.
 const TCP_BURST_CAP: usize = 256;
 const UDP_BURST_CAP: usize = 512;
-const DOH_BURST_CAP: usize = 256;
+const DNS_BURST_CAP: usize = 256;
 
 static TCP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
-static DOH_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+static DNS_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 fn warn_capped(slot: &AtomicU64, msg: &str) {
     let now_ms = SystemTime::now()
@@ -107,10 +108,10 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
     };
 
     info!("tun2socks starting (direct-callback ingest)");
-    // DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` —
-    // same in-process Rust-to-Rust path as netstack TCP flows below — so no
+    // TCP DNS dispatches per-request through `mihomo_tunnel::tcp::handle_tcp`
+    // — same in-process Rust-to-Rust path as netstack TCP flows below — so no
     // loopback port is involved.
-    doh_client::init_doh_client();
+    dns_client::init_dns_client();
 
     let (ingress_tx, ingress_rx) = mpsc::channel::<Vec<u8>>(256);
     *ingress_slot().lock() = Some(ingress_tx);
@@ -191,7 +192,7 @@ async fn run_tun2socks(
 
     let tcp_sem = Arc::new(Semaphore::new(TCP_BURST_CAP));
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
-    let doh_sem = Arc::new(Semaphore::new(DOH_BURST_CAP));
+    let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
 
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
@@ -292,7 +293,7 @@ async fn run_tun2socks(
         }
     });
 
-    let doh_reply_tx = egress_tx.clone();
+    let dns_reply_tx = egress_tx.clone();
     while let Some(ip_data) = ingress_rx.recv().await {
         if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
             break;
@@ -300,17 +301,17 @@ async fn run_tun2socks(
 
         if let Some((src_ip, src_port, dst_ip, dst_port, payload)) = parse_udp_packet(&ip_data) {
             if dst_port == 53 {
-                let permit = match doh_sem.clone().try_acquire_owned() {
+                let permit = match dns_sem.clone().try_acquire_owned() {
                     Ok(p) => p,
                     Err(_) => {
                         warn_capped(
-                            &DOH_CAP_LOG_LAST_MS,
-                            "tun2socks: DoH burst cap reached, dropping query",
+                            &DNS_CAP_LOG_LAST_MS,
+                            "tun2socks: DNS burst cap reached, dropping query",
                         );
                         continue;
                     }
                 };
-                let reply_tx = doh_reply_tx.clone();
+                let reply_tx = dns_reply_tx.clone();
                 let query = payload.to_vec();
                 tokio::spawn(async move {
                     let _permit = permit;
@@ -521,7 +522,7 @@ fn spawn_udp_reply_reader(
 }
 
 // ---------------------------------------------------------------------------
-// UDP helpers (DNS short-circuit to DoH)
+// UDP helpers (DNS short-circuit to TCP DNS)
 // ---------------------------------------------------------------------------
 
 fn parse_udp_packet(ip_data: &[u8]) -> Option<(u32, u16, u32, u16, &[u8])> {
@@ -602,7 +603,7 @@ async fn handle_dns_query(
 ) {
     let name = dns_table::parse_dns_query_name(&query).unwrap_or_default();
     logging::bridge_log(&format!(
-        "DoH: {} from {:?}:{}",
+        "DNS: {} from {:?}:{}",
         name,
         Ipv4Addr::from(src_ip.to_ne_bytes()),
         src_port

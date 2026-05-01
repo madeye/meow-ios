@@ -1,16 +1,17 @@
 //! Split-horizon DNS layer in the spirit of `madeye/trust-china-dns`. For
 //! `A`/`AAAA` queries we race a Chinese plain-UDP resolver against the
-//! existing trusted DoH client, then pick the China answer iff at least one
+//! trusted TCP DNS client, then pick the China answer iff at least one
 //! of its A/AAAA records resolves to a CN IP per the bundled `Country.mmdb`.
 //!
 //! Anything not covered by the heuristic — disabled config, missing GeoIP,
-//! non-A/AAAA qtype — passes straight through to `doh_client::resolve_via_doh`
-//! so behaviour matches the pre-orchestrator path. All chosen answers land in
-//! the same shared cache that `doh_client` already manages, so the orchestration
-//! cost is paid once per (qname, qtype) per TTL window.
+//! non-A/AAAA qtype — passes straight through to
+//! `dns_client::resolve_via_tcp_dns` so behaviour matches the pre-orchestrator
+//! path. All chosen answers land in the same shared cache that `dns_client`
+//! already manages, so the orchestration cost is paid once per (qname, qtype)
+//! per TTL window.
 
+use crate::dns_client;
 use crate::dns_table;
-use crate::doh_client;
 use ipnet::{Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use std::net::{IpAddr, SocketAddr};
@@ -247,31 +248,31 @@ pub fn default_china_upstreams() -> Vec<SocketAddr> {
     ]
 }
 
-/// Top-level resolver replacing `doh_client::resolve_via_doh` at the
+/// Top-level resolver replacing `dns_client::resolve_via_tcp_dns` at the
 /// `tun2socks::handle_dns_query` entry point.
 pub async fn resolve(query: &[u8]) -> Option<Vec<u8>> {
     // Shared cache fast path: prior orchestration outcomes (China-bytes or
-    // DoH-bytes alike) are stored under the same question-section key, so a
-    // single cache lookup at the top covers both branches.
-    if let Some(resp) = doh_client::cache_lookup_for_external(query) {
+    // trusted-bytes alike) are stored under the same question-section key,
+    // so a single cache lookup at the top covers both branches.
+    if let Some(resp) = dns_client::cache_lookup_for_external(query) {
         return Some(resp);
     }
 
     // Skip orchestration when the heuristic is meaningless or disabled.
     if !split_applies(query) {
-        return doh_client::resolve_via_doh(query).await;
+        return dns_client::resolve_via_tcp_dns(query).await;
     }
 
     let china_query = query.to_vec();
     let china_fut = async move { udp_query_race(&china_query).await };
-    let doh_fut = doh_client::resolve_via_doh(query);
+    let trusted_fut = dns_client::resolve_via_tcp_dns(query);
 
     tokio::pin!(china_fut);
-    tokio::pin!(doh_fut);
+    tokio::pin!(trusted_fut);
 
-    // Wait up to CHINA_TIMEOUT for the China response. DoH continues to run
-    // in the background regardless — we'll await it below if China is
-    // not-CN or absent.
+    // Wait up to CHINA_TIMEOUT for the China response. The trusted resolver
+    // continues to run in the background regardless — we'll await it below
+    // if China is not-CN or absent.
     let china_response = tokio::select! {
         biased;
         china = &mut china_fut => china,
@@ -280,21 +281,21 @@ pub async fn resolve(query: &[u8]) -> Option<Vec<u8>> {
 
     if let Some(ref resp) = china_response {
         if response_has_cn_ip(resp) {
-            doh_client::cache_store_external(query, resp);
+            dns_client::cache_store_external(query, resp);
             return Some(resp.clone());
         }
     }
 
-    // China was absent / non-CN: prefer the trusted DoH answer.
-    if let Some(resp) = (&mut doh_fut).await {
+    // China was absent / non-CN: prefer the trusted resolver's answer.
+    if let Some(resp) = (&mut trusted_fut).await {
         return Some(resp);
     }
 
-    // Last-resort fallback: DoH failed but China answered (non-CN). Better
-    // a poisoned-but-resolving record than nothing — matches trust-china-dns
-    // tolerance for partial upstream failures.
+    // Last-resort fallback: trusted resolver failed but China answered
+    // (non-CN). Better a poisoned-but-resolving record than nothing —
+    // matches trust-china-dns tolerance for partial upstream failures.
     if let Some(resp) = china_response {
-        doh_client::cache_store_external(query, &resp);
+        dns_client::cache_store_external(query, &resp);
         return Some(resp);
     }
 
@@ -314,7 +315,8 @@ fn split_applies(query: &[u8]) -> bool {
     }
 
     // Only A / AAAA queries carry IPs in their answer rdata. Everything else
-    // (CNAME, MX, TXT, PTR, HTTPS, SVCB, …) falls through to DoH.
+    // (CNAME, MX, TXT, PTR, HTTPS, SVCB, …) falls through to the trusted
+    // resolver.
     matches!(query_qtype(query), Some(QTYPE_A) | Some(QTYPE_AAAA))
 }
 

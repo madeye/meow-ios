@@ -2,7 +2,7 @@
 name = "mihomo-ios-ffi"
 version = "0.1.0"
 edition = "2021"
-description = "mihomo-rust engine + tun2socks + DoH for meow-ios — C ABI, no Go, no JNI."
+description = "mihomo-rust engine + tun2socks + TCP DNS for meow-ios — C ABI, no Go, no JNI."
 
 [lib]
 crate-type = ["staticlib"]
@@ -30,15 +30,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
-# HTTP / YAML / serialization
-# DoH dispatches per-request through `mihomo_tunnel::tcp::handle_tcp` over a
-# `tokio::io::duplex` pair (no loopback listener), so we need hyper + tokio-rustls
-# directly rather than reqwest's pooled client + Proxy machinery.
-hyper = { version = "1", default-features = false, features = ["client", "http1", "http2"] }
-hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
-http-body-util = "0.1"
-bytes = "1"
-tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+# YAML / serialization. The TCP DNS client dispatches each query through
+# `mihomo_tunnel::tcp::handle_tcp` over a `tokio::io::duplex` pair (no
+# loopback listener) and frames messages with the RFC 1035 length prefix —
+# no HTTP stack required. `rustls` is still declared so `engine::start` can
+# install the ring crypto provider once at process init for any HTTPS the
+# mihomo engine itself opens (subscription fetch, HTTPS outbound, …).
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -56,9 +53,10 @@ urlencoding = "2"
 # tun2socks
 netstack-smoltcp = "0.2"
 
-# Persistent DoH answer cache (single-writer KV at $HOME_DIR/doh-cache.redb).
-# Pure-Rust, mmap-backed; survives PacketTunnel restarts so cold starts don't
-# repay the burst of fanout queries from launch flows.
+# Persistent DNS answer cache (single-writer KV at $HOME_DIR/doh-cache.redb;
+# filename retained for compat with shipped TestFlight builds). Pure-Rust,
+# mmap-backed; survives PacketTunnel restarts so cold starts don't repay the
+# burst of fanout queries from launch flows.
 redb = "2"
 
 # GeoIP CN check for the trust-china-dns split-horizon path. `maxminddb` is

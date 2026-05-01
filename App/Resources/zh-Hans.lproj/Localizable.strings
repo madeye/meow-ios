@@ -125,7 +125,8 @@
 "settings.logLevel.error" = "Error";
 "settings.logLevel.silent" = "Silent";
 "settings.section.dns" = "DNS";
-"settings.field.dohServer" = "DoH Server";
+"settings.field.dnsServers" = "DNS 服务器";
+"settings.footer.dnsServers" = "逗号分隔的纯 TCP DNS 服务器（host 或 host:port）。留空使用 1.1.1.1 和 8.8.8.8。流量经活动代理转发。";
 "settings.section.diagnostics" = "Diagnostics";
 "settings.label.diagnostics" = "Diagnostics";
 "settings.section.about" = "About";
