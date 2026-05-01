@@ -45,6 +45,18 @@ serde_json = "1"
 libc = "0.2"
 anyhow = "1"
 
+# Global allocator. The system allocator is fine for general-purpose Rust
+# workloads but falls over on the tun2socks churn profile: thousands of
+# ~1500 B `Vec<u8>` allocations per second for IP frames, each dropped within
+# milliseconds. mimalloc's thread-local size-class freelists recycle those
+# blocks without a global-lock trip, and its page-purge policy returns
+# memory to the kernel on quiet periods so resident footprint can shrink
+# back under the NE extension's 50 MiB jetsam threshold.
+# `default-features = false` drops mimalloc's `secure` hardening mode — a
+# noticeable perf / binary-size win we don't need in a sandboxed NE process
+# that already has iOS-level mitigations.
+mimalloc = { version = "0.1", default-features = false }
+
 # Subscription parsing (v2rayN URI list → Clash YAML)
 base64 = "0.22"
 url = "2"
