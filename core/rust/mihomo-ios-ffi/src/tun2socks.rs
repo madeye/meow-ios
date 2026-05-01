@@ -70,14 +70,12 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 // completes. Drops at the accept boundary; peers see RST / packet loss for a
 // few hundred ms instead of the whole tunnel dying.
 //
-// `TCP_BURST_CAP` is a hard memory backstop sitting above `TCP_SOFT_CAP`.
-// The soft cap (512) is the one users normally hit: when reached, idle flows
-// (>= TCP_IDLE_SECS without any byte movement) are evicted at accept time
-// and by a periodic sweeper, freeing both their burst-cap permits and the
-// upstream SOCKS5 connection mihomo's relay was holding open. The hard cap
-// only fires if eviction can't free enough room — a real overload.
-const TCP_BURST_CAP: usize = 1024;
-const TCP_SOFT_CAP: usize = 512;
+// `TCP_BURST_CAP` is the hard accept-time ceiling. When `try_acquire_owned`
+// returns `Err`, we run the idle sweeper once to evict flows that haven't
+// moved bytes for `TCP_IDLE_SECS` — eviction drops the held permit + closes
+// the upstream SOCKS5 connection — and retry the acquire. Genuine overload
+// (no idle flows to reclaim) drops the new flow at the listener.
+const TCP_BURST_CAP: usize = 512;
 const TCP_IDLE_SECS: u64 = 90;
 const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 30;
 const UDP_BURST_CAP: usize = 512;
@@ -302,23 +300,25 @@ async fn run_tun2socks(
     let tcp_sem_accept = tcp_sem.clone();
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
-            // Soft cap: reaching 512 active flows triggers an idle sweep
-            // before we commit to admitting the new flow. Eviction frees
-            // burst-cap permits along with the upstream SOCKS5 connections
-            // those flows held, so the subsequent acquire usually succeeds.
-            if ACTIVE_TCP_CONNS.load(Ordering::Relaxed) >= TCP_SOFT_CAP as i64 {
+            // Burst cap: when the semaphore is exhausted, run the idle
+            // sweeper before giving up. Eviction returns held permits +
+            // closes the upstream SOCKS5 connections of stale flows, so a
+            // retry usually succeeds. If the sweep frees nothing (every
+            // flow is genuinely active), drop at the listener.
+            let permit = if let Ok(p) = tcp_sem_accept.clone().try_acquire_owned() {
+                p
+            } else {
                 sweep_idle_tcp_flows();
-            }
-
-            let permit = match tcp_sem_accept.clone().try_acquire_owned() {
-                Ok(p) => p,
-                Err(_) => {
-                    warn_capped(
-                        &TCP_CAP_LOG_LAST_MS,
-                        "tun2socks: TCP burst cap reached, dropping flow",
-                    );
-                    drop(stream);
-                    continue;
+                match tcp_sem_accept.clone().try_acquire_owned() {
+                    Ok(p) => p,
+                    Err(_) => {
+                        warn_capped(
+                            &TCP_CAP_LOG_LAST_MS,
+                            "tun2socks: TCP burst cap reached, dropping flow",
+                        );
+                        drop(stream);
+                        continue;
+                    }
                 }
             };
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
