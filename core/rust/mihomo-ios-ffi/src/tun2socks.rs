@@ -801,12 +801,29 @@ async fn handle_dns_query(
     ));
 
     if let Some(response) = crate::china_dns::resolve(&query).await {
-        for (ip, hostname, ttl) in dns_table::parse_dns_response_records(&response) {
-            dns_table::dns_table_insert(ip, hostname, ttl);
-        }
+        record_dns_response_in_table(&response, crate::china_dns::is_cn_ip);
         let _ = reply_tx.try_send(build_udp_packet(
             dst_ip, dst_port, src_ip, src_port, &response,
         ));
+    }
+}
+
+/// Insert every A/AAAA record from a DNS response into the IP→hostname table,
+/// **except** records whose IP satisfies `is_cn`. CN-routed flows reach
+/// `dispatch_tcp` with the real destination IP and hit the `None` arm of
+/// `dns_table_lookup`, so the proxy engine routes them by IP — which is what
+/// we want for direct China traffic. Skipping the insert also keeps the
+/// table's eviction threshold from being eaten by short-TTL CN records the
+/// engine never needs to recover hostnames for.
+///
+/// The predicate is injected so the filter is unit-testable without having
+/// to initialise the process-wide `CN_IPSET` `OnceLock`.
+fn record_dns_response_in_table(response: &[u8], is_cn: impl Fn(std::net::IpAddr) -> bool) {
+    for (ip, hostname, ttl) in dns_table::parse_dns_response_records(response) {
+        if is_cn(ip) {
+            continue;
+        }
+        dns_table::dns_table_insert(ip, hostname, ttl);
     }
 }
 
@@ -875,5 +892,72 @@ mod tests {
         let flows = tcp_flows();
         flows.clear();
         assert_eq!(sweep_idle_tcp_flows(), 0);
+    }
+
+    /// Builds a minimal A-record DNS response containing the given IPs, all
+    /// pointing at the same qname. Mirrors the fixture in `china_dns::tests`
+    /// so the parsing path is identical to production.
+    fn build_response_a(qname: &str, ips: &[Ipv4Addr]) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&[0xab, 0xcd]); // txid
+        buf.extend_from_slice(&[0x81, 0x80]); // flags: response, RA, RD
+        buf.extend_from_slice(&[0x00, 0x01]); // qdcount=1
+        buf.extend_from_slice(&[0x00, ips.len() as u8]); // ancount
+        buf.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // nscount, arcount
+        for label in qname.split('.') {
+            buf.push(label.len() as u8);
+            buf.extend_from_slice(label.as_bytes());
+        }
+        buf.push(0); // root
+        buf.extend_from_slice(&1u16.to_be_bytes()); // qtype=A
+        buf.extend_from_slice(&1u16.to_be_bytes()); // qclass=IN
+        for ip in ips {
+            buf.extend_from_slice(&[0xc0, 0x0c]); // pointer to qname
+            buf.extend_from_slice(&1u16.to_be_bytes()); // type=A
+            buf.extend_from_slice(&1u16.to_be_bytes()); // class=IN
+            buf.extend_from_slice(&60u32.to_be_bytes()); // ttl
+            buf.extend_from_slice(&4u16.to_be_bytes()); // rdlength
+            buf.extend_from_slice(&ip.octets());
+        }
+        buf
+    }
+
+    #[test]
+    fn record_dns_response_skips_cn_ips() {
+        // Predicate flags 114.114.114.114 as CN, leaves 8.8.8.8 alone. The
+        // CN entry must be absent from the table after recording, the
+        // non-CN entry must be present and round-trippable through
+        // `dns_table_lookup`.
+        let cn = Ipv4Addr::new(114, 114, 114, 114);
+        let non_cn = Ipv4Addr::new(8, 8, 8, 8);
+        let resp = build_response_a("mixed.example.com", &[cn, non_cn]);
+
+        record_dns_response_in_table(&resp, |ip| ip == std::net::IpAddr::V4(cn));
+
+        assert_eq!(
+            dns_table::dns_table_lookup(std::net::IpAddr::V4(cn)),
+            None,
+            "CN IP must not be inserted into the DNS table"
+        );
+        assert_eq!(
+            dns_table::dns_table_lookup(std::net::IpAddr::V4(non_cn)),
+            Some("mixed.example.com".to_string()),
+            "non-CN IP must be inserted with its hostname"
+        );
+    }
+
+    #[test]
+    fn record_dns_response_inserts_all_when_predicate_never_matches() {
+        // Disabled-CN-ipset case: predicate always returns false, so every
+        // record lands in the table just like before this filter existed.
+        let ip = Ipv4Addr::new(203, 0, 113, 7);
+        let resp = build_response_a("nofilter.example.com", &[ip]);
+
+        record_dns_response_in_table(&resp, |_| false);
+
+        assert_eq!(
+            dns_table::dns_table_lookup(std::net::IpAddr::V4(ip)),
+            Some("nofilter.example.com".to_string()),
+        );
     }
 }

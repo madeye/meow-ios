@@ -389,18 +389,25 @@ async fn udp_query_one(addr: SocketAddr, query: &[u8]) -> Result<Vec<u8>, anyhow
     Ok(buf)
 }
 
-/// True iff at least one A/AAAA record in `response` resolves to a CN IP per
-/// the pre-built ipset. Mirrors the trust-china-dns "any-CN-IP wins" semantic:
-/// a single CN record flips the verdict for the whole answer.
-pub(crate) fn response_has_cn_ip(response: &[u8]) -> bool {
+/// True iff `ip` falls inside the pre-built CN ipset. Returns false when the
+/// ipset is missing or empty (GeoIP unavailable) so callers fail open: a
+/// missing oracle must never cause every IP to be treated as CN.
+pub(crate) fn is_cn_ip(ip: IpAddr) -> bool {
     let Some(ipset) = CN_IPSET.get() else {
         return false;
     };
     if ipset.is_empty() {
         return false;
     }
+    ipset.contains(ip)
+}
+
+/// True iff at least one A/AAAA record in `response` resolves to a CN IP per
+/// the pre-built ipset. Mirrors the trust-china-dns "any-CN-IP wins" semantic:
+/// a single CN record flips the verdict for the whole answer.
+pub(crate) fn response_has_cn_ip(response: &[u8]) -> bool {
     for (ip, _name, _ttl) in dns_table::parse_dns_response_records(response) {
-        if ipset.contains(ip) {
+        if is_cn_ip(ip) {
             return true;
         }
     }
