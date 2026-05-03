@@ -407,6 +407,19 @@ pub(crate) fn response_has_cn_ip(response: &[u8]) -> bool {
     false
 }
 
+/// True iff `ip` is in the pre-built CN ipset. Returns `false` when the
+/// ipset is missing or empty (GeoIP unavailable) so callers degrade to a
+/// pass-through and don't accidentally treat every IP as non-CN-special.
+pub(crate) fn is_cn_ip(ip: IpAddr) -> bool {
+    let Some(ipset) = CN_IPSET.get() else {
+        return false;
+    };
+    if ipset.is_empty() {
+        return false;
+    }
+    ipset.contains(ip)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
