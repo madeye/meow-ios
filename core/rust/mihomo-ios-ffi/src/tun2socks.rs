@@ -802,6 +802,13 @@ async fn handle_dns_query(
 
     if let Some(response) = crate::china_dns::resolve(&query).await {
         for (ip, hostname, ttl) in dns_table::parse_dns_response_records(&response) {
+            // Skip CN-IP records: traffic to them takes the direct path and
+            // never hits the SOCKS5 loopback, so the reverse-lookup table
+            // entry would never be consulted — caching it just bloats the
+            // map and risks shadowing a later non-CN answer for the same IP.
+            if crate::china_dns::is_cn_ip(ip) {
+                continue;
+            }
             dns_table::dns_table_insert(ip, hostname, ttl);
         }
         let _ = reply_tx.try_send(build_udp_packet(

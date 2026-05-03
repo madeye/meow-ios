@@ -42,7 +42,7 @@ dns:
   - 1.1.1.1
   nameserver:
   - https://1.1.1.1/dns-query
-  - https://dns.google/dns-query
+  - https://8.8.8.8/dns-query
   fake-ip-range: 198.18.0.1/15
   fake-ip-filter:
   - '*.lan'

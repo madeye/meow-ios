@@ -70,6 +70,13 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
             "mixed-port",
             "tproxy-port",
             "listeners",
+            // Drop the entire `sniffer:` block. iOS routes TCP via the SOCKS5
+            // loopback and relies on the reverse DNS table for hostname
+            // recovery, so SNI/ALPN sniffing inside mihomo is redundant — and
+            // when enabled it rewrites the destination based on the sniffed
+            // hostname, which fights the dns_table mapping. Strip at the FFI
+            // boundary so user subscriptions can't re-enable it.
+            "sniffer",
         ] {
             m.remove(serde_yaml::Value::String(key.to_string()));
         }
@@ -293,6 +300,11 @@ listeners:
   - name: mixed
     type: mixed
     port: 7890
+sniffer:
+  enable: true
+  sniff:
+    TLS:
+      ports: [443]
 mode: rule
 log-level: info
 "#;
@@ -305,6 +317,7 @@ log-level: info
             "mixed-port",
             "tproxy-port",
             "listeners",
+            "sniffer",
         ] {
             assert!(
                 !m.contains_key(serde_yaml::Value::String(k.into())),
