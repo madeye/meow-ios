@@ -97,11 +97,33 @@ struct TrafficView: View {
                     BarMark(x: .value("day", day.date), y: .value("rx", day.rxBytes))
                         .foregroundStyle(by: .value("series", "Download"))
                 }
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel {
+                            if let bytes = value.as(Double.self) {
+                                Text(Self.gigabyteFormatter.string(fromByteCount: Int64(bytes)))
+                            }
+                        }
+                    }
+                }
                 .frame(height: 180)
                 .accessibilityIdentifier("traffic.historyChart")
             }
         }
     }
+
+    /// Forces GB units on the 7-day chart Y-axis. Daily totals run into the
+    /// gigabyte range fast, and ByteCountFormatter's auto mode flips between
+    /// MB / GB across ticks, which makes the bar heights hard to compare.
+    private static let gigabyteFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.allowedUnits = .useGB
+        f.countStyle = .binary
+        f.allowsNonnumericFormatting = false
+        return f
+    }()
 
     private struct RateSample: Identifiable {
         var id: Date {
