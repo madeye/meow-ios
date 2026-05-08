@@ -29,9 +29,11 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Semaphore};
+use tokio::time::timeout;
 use tracing::{info, warn};
 
 use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
@@ -64,33 +66,27 @@ static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
-// Burst caps: defensive backstop against the "bursty-on-flow" leak that lets a
-// reconnect storm (DNS lookups + pent-up connect attempts from every
-// backgrounded app) blow past the 50 MiB NE memory ceiling before any flow
-// completes. Drops at the accept boundary; peers see RST / packet loss for a
-// few hundred ms instead of the whole tunnel dying.
+// TCP flows have no accept-time burst cap: every smoltcp-accepted flow is
+// dispatched. Memory is bounded instead by the 30-second idle sweeper
+// (`TCP_IDLE_SECS`) plus the hourly registry-size watchdog below — the cap
+// was a defensive backstop for an earlier "bursty-on-flow" leak that has
+// since been chased back to its real cause.
 //
-// `TCP_BURST_CAP` is the hard accept-time ceiling. When `try_acquire_owned`
-// returns `Err`, we run the idle sweeper once to evict flows that haven't
-// moved bytes for `TCP_IDLE_SECS` — eviction drops the held permit + closes
-// the upstream SOCKS5 connection — and retry the acquire. Genuine overload
-// (no idle flows to reclaim) drops the new flow at the listener.
-const TCP_BURST_CAP: usize = 512;
+// UDP and DNS keep their accept-time burst caps because their listeners
+// don't have an equivalent registry / idle-sweeper to bound growth.
 const TCP_IDLE_SECS: u64 = 90;
 const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 30;
 const UDP_BURST_CAP: usize = 512;
 const DNS_BURST_CAP: usize = 256;
 
-// Hourly watchdog: belt-and-suspenders backstop on top of `TCP_BURST_CAP`.
-// Once an hour, if the live flow registry has somehow grown past
-// `TCP_HOURLY_WATCHDOG_THRESHOLD` (e.g. a leaked permit, a future cap raise,
-// or a runaway reconnect storm slipping past the semaphore), abort *every*
-// flow in the table. Aggressive, but the alternative is sitting at jetsam
-// risk for another 59 minutes.
+// Hourly watchdog: belt-and-suspenders backstop on the live `tcp_flows()`
+// registry. Once an hour, if the registry exceeds
+// `TCP_HOURLY_WATCHDOG_THRESHOLD` (e.g. a runaway reconnect storm or a leaked
+// abort handle) abort *every* flow in the table. Aggressive, but the
+// alternative is sitting at jetsam risk for another 59 minutes.
 const TCP_HOURLY_WATCHDOG_INTERVAL_SECS: u64 = 3600;
 const TCP_HOURLY_WATCHDOG_THRESHOLD: usize = 1024;
 
-static TCP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 static DNS_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
@@ -105,8 +101,8 @@ struct FlowState {
 
 /// Registry entry for one in-flight TCP flow. Aborting `abort` drops the
 /// `dispatch_tcp` future, which closes both halves of the relay — the
-/// netstack stream and the upstream SOCKS5 connection mihomo opened — and
-/// returns the burst-cap permit when the held `_permit` is dropped.
+/// netstack stream and the upstream SOCKS5 connection mihomo opened (or, on
+/// the CN-IP-direct path, the direct `TcpStream`).
 struct FlowRecord {
     state: Arc<FlowState>,
     abort: tokio::task::AbortHandle,
@@ -127,8 +123,8 @@ fn now_ms() -> u64 {
 }
 
 /// Walk the flow table and abort any flow whose `last_active_ms` is older
-/// than `TCP_IDLE_SECS`. Called at accept time when the soft cap is hit and
-/// from the periodic sweeper. Returns the number of evicted flows.
+/// than `TCP_IDLE_SECS`. Called from the periodic sweeper. Returns the
+/// number of evicted flows.
 fn sweep_idle_tcp_flows() -> usize {
     let cutoff = now_ms().saturating_sub(TCP_IDLE_SECS * 1000);
     let mut evicted: Vec<(u64, SocketAddr, SocketAddr)> = Vec::new();
@@ -159,9 +155,8 @@ fn sweep_idle_tcp_flows() -> usize {
 
 /// Abort every flow in the registry. Same `abort()` semantics as the idle
 /// sweeper — dropping the `dispatch_tcp` future closes both halves of the
-/// relay and releases the held burst-cap permit. Returns the number of
-/// flows closed. Used by the hourly watchdog when the live count exceeds
-/// `TCP_HOURLY_WATCHDOG_THRESHOLD`.
+/// relay. Returns the number of flows closed. Used by the hourly watchdog
+/// when the live count exceeds `TCP_HOURLY_WATCHDOG_THRESHOLD`.
 fn close_all_tcp_flows() -> usize {
     let flows = tcp_flows();
     let mut closed: Vec<(u64, SocketAddr, SocketAddr)> = Vec::with_capacity(flows.len());
@@ -298,7 +293,6 @@ async fn run_tun2socks(
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
-    let tcp_sem = Arc::new(Semaphore::new(TCP_BURST_CAP));
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
     let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
 
@@ -337,30 +331,8 @@ async fn run_tun2socks(
         }
     });
 
-    let tcp_sem_accept = tcp_sem.clone();
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
-            // Burst cap: when the semaphore is exhausted, run the idle
-            // sweeper before giving up. Eviction returns held permits +
-            // closes the upstream SOCKS5 connections of stale flows, so a
-            // retry usually succeeds. If the sweep frees nothing (every
-            // flow is genuinely active), drop at the listener.
-            let permit = if let Ok(p) = tcp_sem_accept.clone().try_acquire_owned() {
-                p
-            } else {
-                sweep_idle_tcp_flows();
-                match tcp_sem_accept.clone().try_acquire_owned() {
-                    Ok(p) => p,
-                    Err(_) => {
-                        warn_capped(
-                            &TCP_CAP_LOG_LAST_MS,
-                            "tun2socks: TCP burst cap reached, dropping flow",
-                        );
-                        drop(stream);
-                        continue;
-                    }
-                }
-            };
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
 
             let flow_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
@@ -369,7 +341,6 @@ async fn run_tun2socks(
             });
             let state_for_task = state.clone();
             let task = tokio::spawn(async move {
-                let _permit = permit;
                 dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
                 tcp_flows().remove(&flow_id);
             });
@@ -519,8 +490,8 @@ async fn run_tun2socks(
     egress_handle.abort();
     drop(udp_reply_tx);
 
-    // Abort any TCP flows still held in the registry so the burst-cap
-    // semaphore + upstream SOCKS5 connections don't outlive the tunnel.
+    // Abort any TCP flows still held in the registry so the upstream
+    // SOCKS5 / direct TCP connections don't outlive the tunnel.
     let flows = tcp_flows();
     for entry in flows.iter() {
         entry.abort.abort();
@@ -541,8 +512,7 @@ async fn run_tun2socks(
 /// sweeper, the hourly watchdog, or the tunnel-shutdown loop calls
 /// `FlowRecord::abort.abort()`. Without the guard, every aborted flow
 /// leaked +1 on the counter, which is what users saw as a "1k+ active
-/// connections" reading after hours of normal sweeper activity even
-/// though the live `tcp_flows()` registry was bounded at `TCP_BURST_CAP`.
+/// connections" reading after hours of normal sweeper activity.
 struct ActiveTcpGuard;
 
 impl ActiveTcpGuard {
@@ -577,6 +547,55 @@ async fn dispatch_tcp(
         None => (String::new(), Some(dst.ip())),
     };
 
+    // CN-IP fast bypass: when the destination is a real IP (not a fake-IP) and
+    // the bundled GeoIP marks it as CN, dial directly from the PacketTunnel
+    // process and relay end-to-end without touching mihomo's rule engine /
+    // outbound chain. iOS NetworkExtension excludes the tunnel's own sockets
+    // from the TUN, so a plain `TcpStream::connect` hits the underlying
+    // physical interface. Falls back to the mihomo path on connect failure
+    // (e.g. cellular roaming where the CN IP isn't reachable direct).
+    if let Some(ip) = dst_ip {
+        if crate::china_dns::is_cn_ip(ip) {
+            match dispatch_tcp_direct(stream, dst, state.clone()).await {
+                Ok(stream_back) => {
+                    // Direct relay finished cleanly — nothing left to do.
+                    drop(stream_back);
+                    return;
+                }
+                Err((stream_back, err)) => {
+                    logging::bridge_log(&format!(
+                        "tun2socks: CN-IP direct dial to {} failed ({}); falling back to mihomo",
+                        dst, err
+                    ));
+                    // Resume the original mihomo path with the unconsumed
+                    // netstack stream.
+                    return dispatch_tcp_via_mihomo(
+                        stream_back,
+                        src,
+                        dst,
+                        state,
+                        tunnel,
+                        host,
+                        dst_ip,
+                    )
+                    .await;
+                }
+            }
+        }
+    }
+
+    dispatch_tcp_via_mihomo(stream, src, dst, state, tunnel, host, dst_ip).await;
+}
+
+async fn dispatch_tcp_via_mihomo(
+    stream: NetstackTcpStream,
+    src: SocketAddr,
+    dst: SocketAddr,
+    state: Arc<FlowState>,
+    tunnel: mihomo_tunnel::Tunnel,
+    host: String,
+    dst_ip: Option<std::net::IpAddr>,
+) {
     let metadata = Metadata {
         network: Network::Tcp,
         conn_type: ConnType::Inner,
@@ -588,11 +607,89 @@ async fn dispatch_tcp(
         ..Default::default()
     };
 
-    let conn: Box<dyn ProxyConn> = Box::new(IdleTrackingConn {
+    let conn: Box<dyn ProxyConn> = Box::new(IdleTracking {
         inner: NetstackConn(stream),
         state,
     });
     mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata).await;
+}
+
+/// Connect timeout for the CN-IP direct bypass dial. Short enough that a
+/// fallback to mihomo still feels responsive; long enough to absorb a
+/// roaming-network handover blip.
+const CN_DIRECT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// CN-IP direct relay: connect to `dst` from the PacketTunnel process and
+/// shuffle bytes between the netstack TCP stream and the direct upstream.
+///
+/// **Timeout coverage** (in order of who fires first):
+///  1. *Connect:* `timeout(CN_DIRECT_CONNECT_TIMEOUT, ...)` wraps the dial.
+///     On timeout the inner `TcpStream::connect` future is dropped, which
+///     cancels the in-progress SYN at the kernel — no half-open socket leaks.
+///  2. *Relay-time idle:* both halves are `IdleTracking<T>`, so every
+///     successful poll in either direction bumps the shared
+///     `FlowState::last_active_ms`. The 30-second `sweep_idle_tcp_flows`
+///     evicts after 90 s of zero progress by aborting the spawn handle in
+///     `tcp_flows()`, which drops *this* future and therefore both inner
+///     streams (kernel `close()` on each).
+///  3. *Hourly watchdog:* if the registry ever exceeds 1024 live flows,
+///     `close_all_tcp_flows()` aborts every entry — direct flows included.
+///
+/// **Leak coverage:**
+///  - `tcp_flows().remove(&flow_id)` runs after `dispatch_tcp` returns,
+///    so the registry doesn't grow on the natural-EOF path. On abort the
+///    sweeper / watchdog `retain()` removes the entry instead.
+///  - `IdleTracking<T>` has no `Drop` impl, so dropping the wrappers drops
+///    `inner` synchronously. `tokio::net::TcpStream`'s `Drop` closes the
+///    socket; same for `NetstackTcpStream` (RAII in netstack-smoltcp).
+///  - `Arc<FlowState>` clones are released when both wrappers drop;
+///    registry-side `Arc` is released via `flows.remove(&flow_id)` — no
+///    cycle, refcount goes to zero.
+///
+/// On connect failure returns the untouched netstack stream so the caller
+/// can fall back to the mihomo path without dropping any user bytes.
+async fn dispatch_tcp_direct(
+    stream: NetstackTcpStream,
+    dst: SocketAddr,
+    state: Arc<FlowState>,
+) -> Result<NetstackTcpStream, (NetstackTcpStream, io::Error)> {
+    let direct = match timeout(CN_DIRECT_CONNECT_TIMEOUT, TcpStream::connect(dst)).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err((stream, e)),
+        // `timeout` elapsed: the inner connect future was dropped here, which
+        // cancels the kernel-side SYN — no half-open FD survives.
+        Err(_) => {
+            return Err((
+                stream,
+                io::Error::new(io::ErrorKind::TimedOut, "direct connect timeout"),
+            ));
+        }
+    };
+    let _ = direct.set_nodelay(true);
+
+    logging::bridge_log(&format!("tun2socks: CN-IP direct dial -> {}", dst));
+
+    let mut inbound = IdleTracking {
+        inner: stream,
+        state: state.clone(),
+    };
+    let mut outbound = IdleTracking {
+        inner: direct,
+        state,
+    };
+    // `copy_bidirectional` returns when either side EOFs, errors, or both
+    // halves shut down cleanly. We intentionally drop its byte-count return:
+    // this path doesn't feed mihomo's stats and the idle sweeper only cares
+    // about activity, not volume. Pathological no-progress flows are reaped
+    // by `sweep_idle_tcp_flows` via the `IdleTracking` last-active stamp →
+    // `tcp_flows()` abort handle → this future being dropped → both inner
+    // sockets dropped. No additional outer timeout is needed.
+    let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+    // `outbound` (and its `TcpStream`) drops here — kernel `close()` on the
+    // direct upstream socket. Returning `inbound.inner` hands the netstack
+    // stream back to the caller; the rest of `inbound` (just the
+    // `Arc<FlowState>`) drops at end of scope.
+    Ok(inbound.inner)
 }
 
 // ---------------------------------------------------------------------------
@@ -637,23 +734,29 @@ impl ProxyConn for NetstackConn {
     }
 }
 
-/// Wraps `NetstackConn` to bump `FlowState::last_active_ms` on every poll
-/// that returned `Ready(Ok(_))`. The stamp covers both directions because
-/// mihomo's relay drives this end's `poll_read` (bytes from the app) and
-/// `poll_write` (bytes from the upstream proxy) on the same wrapper.
+/// Wraps an `AsyncRead + AsyncWrite` to bump `FlowState::last_active_ms` on
+/// every poll that returned `Ready(Ok(_))`. The stamp covers both directions
+/// because the relay drives this end's `poll_read` (bytes from the app) and
+/// `poll_write` (bytes from the upstream peer) on the same wrapper.
 /// Pending / would-block polls are intentionally not counted as activity.
-struct IdleTrackingConn {
-    inner: NetstackConn,
+///
+/// Generic over the inner stream so the same idle-tracking semantics apply
+/// to both the mihomo path (`IdleTracking<NetstackConn>`, served as a
+/// `Box<dyn ProxyConn>` to `mihomo_tunnel::tcp::handle_tcp`) and the CN-IP
+/// direct bypass (`IdleTracking<NetstackTcpStream>` and
+/// `IdleTracking<tokio::net::TcpStream>` driven by `copy_bidirectional`).
+struct IdleTracking<T> {
+    inner: T,
     state: Arc<FlowState>,
 }
 
-impl IdleTrackingConn {
+impl<T> IdleTracking<T> {
     fn touch(&self) {
         self.state.last_active_ms.store(now_ms(), Ordering::Relaxed);
     }
 }
 
-impl AsyncRead for IdleTrackingConn {
+impl<T: AsyncRead + Unpin> AsyncRead for IdleTracking<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -668,7 +771,7 @@ impl AsyncRead for IdleTrackingConn {
     }
 }
 
-impl AsyncWrite for IdleTrackingConn {
+impl<T: AsyncWrite + Unpin> AsyncWrite for IdleTracking<T> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -692,7 +795,10 @@ impl AsyncWrite for IdleTrackingConn {
     }
 }
 
-impl ProxyConn for IdleTrackingConn {
+// `ProxyConn` only matters on the mihomo path (the trait is consumed by
+// `mihomo_tunnel::tcp::handle_tcp`); scope the impl to the netstack flavor so
+// the CN-IP-direct wrapper doesn't have to invent a `remote_destination()`.
+impl ProxyConn for IdleTracking<NetstackConn> {
     fn remote_destination(&self) -> String {
         self.inner.remote_destination()
     }
