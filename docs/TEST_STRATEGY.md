@@ -93,7 +93,7 @@ Full exported surface per PRD §2.4. All exports return `int` status codes and w
 | Subject | Inputs |
 |---------|--------|
 | `SubscriptionParser.detectFormat(_:)` | Clash YAML, v2rayN base64 nodelist, mixed/unknown → enum |
-| `SubscriptionParser.parseClash(_:)` | Fixture YAML with SS/Trojan/VLESS/WG/TUIC/Hysteria2 nodes, proxy-groups, rules — assert counts and names |
+| `SubscriptionParser.parseClash(_:)` | Fixture YAML with SS / Trojan / VLESS nodes (the protocol set shipped by mihomo-rust v0.6.1), proxy-groups, rules — assert counts and names |
 | `SubscriptionParser.parseClash(_:)` | Clash YAML missing `proxies:` → error; malformed indentation → error |
 | `NodelistConverter.convert(_:)` | Base64(ss://...) nodelist → Clash YAML via FFI; assert resulting YAML has expected node count |
 | `YamlPatcher.applyMixedPort(_:port:)` | Strips `subscriptions:` block; prepends/replaces `mixed-port:` |
@@ -260,18 +260,18 @@ All five must pass before a release candidate is accepted. A single failure bloc
 
 ### 6.3 Protocol Matrix
 
-Each protocol gets its own YAML fixture and is validated by checks 3–5 above. Protocols in scope for MVP:
+Each protocol gets its own YAML fixture and is validated by checks 3–5 above. Protocols in scope for MVP — limited to the outbound implementations shipped by mihomo-rust v0.6.1:
 
 | Protocol | Fixture | Notes |
 |----------|---------|-------|
 | Shadowsocks (aes-256-gcm) | `fixtures/ss.yaml` | Baseline, must work |
 | Shadowsocks (chacha20-ietf-poly1305) | `fixtures/ss-chacha.yaml` | |
 | Trojan (with real cert) | `fixtures/trojan.yaml` | Trojan-go test server required |
-| VLESS | `fixtures/vless.yaml` | Reality/TLS |
-| VMess | `fixtures/vmess.yaml` | WS + TLS variant |
-| WireGuard | `fixtures/wg.yaml` | Bundled kernel vs userspace |
-| Hysteria2 | `fixtures/hy2.yaml` | UDP-based |
-| TUIC | `fixtures/tuic.yaml` | UDP QUIC |
+| VLESS (TLS) | `fixtures/vless-tls.yaml` | Plain VLESS over TLS |
+| VLESS (XTLS-Vision) | `fixtures/vless-vision.yaml` | XTLS-Vision splice path |
+| VLESS (WS / gRPC) | `fixtures/vless-ws.yaml` | WebSocket and gRPC transports |
+
+Out of scope (not shipped by mihomo-rust v0.6.1): VMess, WireGuard, TUIC, Hysteria 2.
 
 Test pass criterion per protocol: all 5 connectivity checks pass, and the mihomo-rust engine reports at least one successful connection via its REST controller `GET /connections` (127.0.0.1:9090 in-extension).
 
@@ -352,7 +352,8 @@ The 14 MB target leaves a 1 MB cushion below the ~15 MB jetsam threshold. There 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
 | TCP throughput via SS proxy on WiFi | ≥ 100 Mbps | `iperf3` through proxy to a local server |
-| TCP throughput via WireGuard | ≥ 150 Mbps | Same setup |
+| TCP throughput via Trojan (TLS) | ≥ 80 Mbps | Same setup |
+| TCP throughput via VLESS (XTLS-Vision) | ≥ 120 Mbps | Same setup |
 | TCP round-trip latency penalty vs direct | < 20 ms median on same LAN | Compare `ping` (direct) vs TCP SYN-ACK timing through proxy |
 
 ### 8.6 UI Responsiveness
@@ -615,7 +616,7 @@ On `main`:
 | Risk (from PRD §8) | Test Mitigation | Priority |
 |---------------------|-----------------|----------|
 | Extension memory limit (iOS NE cap ≈ 15 MB) | CI fails build if `MihomoCore.xcframework` > 8 MB stripped; manual pre-release smoke (T2.8) fails if resident > 14 MB sustained or any sample ≥ 15 MB per §8.1 | P0 |
-| mihomo-rust protocol parity gaps vs. Go mihomo | Protocol matrix §6.3 exercises SS/Trojan/VLESS/VMess/WG/Hy2/TUIC through real test servers; missing/broken protocol = ship-blocker for that protocol | P0 |
+| mihomo-rust protocol parity gaps vs. Go mihomo | Protocol matrix §6.3 exercises every outbound shipped by mihomo-rust v0.6.1 (SS / Trojan / VLESS variants) through real test servers; missing/broken protocol = ship-blocker for that protocol. Out-of-scope outbounds (VMess, WireGuard, TUIC, Hysteria 2) are deferred — not advertised, not tested. | P0 |
 | Apple review rejection | Static scan for ATS / privacy violations; manual pre-submission checklist | P0 |
 | NetworkExtension sandbox file I/O | Integration tests §4.1 exercise only App Group paths; any direct path triggers test failure | P1 |
 | TUN fd bridging (Option A vs B) | §4.2 covers chosen path; decision recorded in ADR before M1 closes | P0 |
@@ -631,7 +632,7 @@ On `main`:
 All must be true before App Store submission:
 
 - [ ] All acceptance criteria §10 pass on iPhone 14 (minimum device) and iPhone 16 Pro
-- [ ] All 5 network checks §6.2 pass for SS, Trojan, VLESS, VMess, and WireGuard protocols (walked manually on the developer's physical iPhone per T2.8)
+- [ ] All 5 network checks §6.2 pass for the protocols shipped by mihomo-rust v0.6.1 — SS, Trojan, and VLESS (TLS / XTLS-Vision / WS) — walked manually on the developer's physical iPhone per T2.8
 - [ ] Performance benchmarks §8 meet targets on iPhone 14, **including the 15 MB extension memory ceiling (§8.1)**
 - [ ] Security checklist §9 is 100% complete
 - [ ] Zero known P0/P1 bugs

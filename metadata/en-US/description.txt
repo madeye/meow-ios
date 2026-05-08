@@ -10,7 +10,7 @@ WHAT IT DOES
 • On-device packet tunnel — no external server handles your traffic
 
 SUPPORTED PROTOCOLS
-Shadowsocks, Trojan, VLESS, WireGuard, TUIC, Hysteria2, and other protocols supported by the Mihomo core.
+Shadowsocks, Trojan, and VLESS outbounds (with TLS, WebSocket, gRPC, H2 and HTTPUpgrade transports). HTTP and SOCKS5 outbounds are also supported for upstream proxies.
 
 PRIVACY
 Your subscription URLs, proxy credentials, configurations, and tunneled traffic stay on your device and are never transmitted by meow. The packet tunnel runs locally inside the Network Extension sandbox.

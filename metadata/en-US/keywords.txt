@@ -1,1 +1,1 @@
-clash,mihomo,proxy,vpn,shadowsocks,trojan,vless,wireguard,tuic,hysteria,yaml,tunnel
+clash,mihomo,proxy,vpn,shadowsocks,trojan,vless,xtls,yaml,tunnel

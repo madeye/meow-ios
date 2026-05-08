@@ -160,14 +160,14 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
   - Traffic counters increment
   - Debug Diagnostics Panel (`MEOW_DEBUG=1` launch arg) shows all 5 checks as `PASS`
 - **Owner:** user (per v1.4 directive — no automated harness reproduces this)
-- **Note:** WireGuard/QUIC tests are deferred (non-DNS UDP not wired until T2.9)
+- **Note:** QUIC / non-DNS UDP tests are deferred (non-DNS UDP not wired until T2.9)
 - **Depends on:** T2.3, T2.5, T2.6, T2.7
 
 #### T2.9 — Non-DNS UDP Path (Backlog)  ⚑ **POST-M1.5 / MVP GAP**
 - Wire netstack-smoltcp UDP socket surface → `mihomo_tunnel::udp::handle_udp()`
 - **Prerequisite gate:** check mihomo-rust upstream for UDP reverse-pump API maturity; confirm `mihomo_tunnel::udp::handle_udp` signature is stable before starting
 - Also verify netstack-smoltcp UDP socket surface (bind, recv_from, send_to async API)
-- Fixes: WireGuard tunnels (currently broken), QUIC/HTTP3 (currently degrades to TCP HTTP/2), UDP-only apps
+- Fixes: QUIC/HTTP3 (currently degrades to TCP HTTP/2) and UDP-only apps. (WireGuard outbounds are not shipped in mihomo-rust v0.6.1 and are out of scope for this task.)
 - **Decision (v1.3):** Known limitation for M0→M1; disclose in release notes; patch in M1 (Milestone 5). TCP + DoH covers ~99% of user-observable iOS traffic; QUIC-heavy sites degrade gracefully.
 - **Depends on:** T1.2, upstream mihomo-rust UDP API stability
 - **Target milestone:** M5 (Weeks 9–10)

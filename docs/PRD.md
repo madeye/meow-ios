@@ -16,7 +16,7 @@
 
 ### 1.1 What is meow-ios?
 
-meow-ios is a native iOS VPN/proxy client that ports the Android "meow" app to Apple platforms. It provides a full-featured proxy management experience — supporting Clash-protocol subscriptions, multi-protocol proxy servers (Shadowsocks, Trojan, VLESS, WireGuard, TUIC, Hysteria2, and more), rule-based traffic routing, and DNS-over-HTTPS — wrapped in a modern iOS 26 Liquid Glass UI.
+meow-ios is a native iOS VPN/proxy client that ports the Android "meow" app to Apple platforms. It provides a full-featured proxy management experience — Clash-protocol subscriptions, Shadowsocks / Trojan / VLESS outbounds (the protocol set shipped by mihomo-rust v0.6.1), rule-based traffic routing, and DNS-over-HTTPS — wrapped in a modern iOS 26 Liquid Glass UI.
 
 ### 1.2 Target Audience
 
@@ -88,7 +88,7 @@ netstack-smoltcp (Rust tun2socks)
       ↓  UDP:53       →  DoH client  (short-circuit, in-process)
       ↓  UDP non-DNS  →  ⚠ NOT YET FORWARDED (see §3.3 and §8)
 mihomo-rust engine  ←→  REST API (127.0.0.1:9090 inside extension)
-      ↓  upstream proxy protocol (SS/Trojan/VLESS/WireGuard/TUIC/Hysteria2/etc.)
+      ↓  upstream proxy protocol (SS / Trojan / VLESS — see §8 protocol coverage)
 Remote proxy server
 ```
 
@@ -192,7 +192,7 @@ This avoids XPC complexity while remaining within Apple's sandbox restrictions.
 
 | Feature | Notes |
 |---------|-------|
-| Non-DNS UDP forwarding | mihomo-rust UDP reverse-pump not yet wired for netstack-smoltcp integration. Tracked as T2.9. Breaks WireGuard, QUIC/HTTP3 when UDP path is taken. See §3.3 and §8. |
+| Non-DNS UDP forwarding | mihomo-rust UDP reverse-pump not yet wired for netstack-smoltcp integration. Tracked as T2.9. Forces QUIC/HTTP3 to fall back to TCP HTTP/2 and breaks UDP-only apps. See §3.3 and §8. |
 | Per-app routing | iOS NEPacketTunnelProvider does not support per-app allow/deny lists. Post-MVP: explore NEAppRule (MDM only) or DNS-based workaround. |
 | Widget (traffic display) | WidgetKit extension showing current traffic rates |
 | Siri shortcuts | "Start VPN" shortcut via AppIntents |
@@ -204,7 +204,7 @@ This avoids XPC complexity while remaining within Apple's sandbox restrictions.
 
 | Limitation | User-visible impact | Workaround / Timeline |
 |-----------|--------------------|-----------------------|
-| **Non-DNS UDP not forwarded** | WireGuard tunnels will not pass traffic. QUIC/HTTP3 connections (YouTube, Google, Cloudflare sites) degrade to TCP HTTP/2 (typically transparent to user). UDP-only apps break silently. | Disclosed in M0 release notes. Patched in M1 (T2.9). TCP + DoH covers ~99% of observable iOS traffic. |
+| **Non-DNS UDP not forwarded** | QUIC/HTTP3 connections (YouTube, Google, Cloudflare sites) degrade to TCP HTTP/2 (typically transparent to user). UDP-only apps break silently. | Disclosed in M0 release notes. Patched in M1 (T2.9). TCP + DoH covers ~99% of observable iOS traffic. |
 
 ---
 
@@ -610,7 +610,7 @@ Both app target and PacketTunnel extension must share:
 - PacketTunnelProvider can load config.yaml, start mihomo-rust engine, start tun2socks
 - TCP traffic flows end-to-end through extension on device
 - DoH DNS working (UDP:53 short-circuit)
-- **Known limitation at M1:** non-DNS UDP not forwarded (WireGuard/QUIC degraded); disclosed in release notes
+- **Known limitation at M1:** non-DNS UDP not forwarded (QUIC/HTTP3 degraded to TCP); disclosed in release notes
 
 ### Milestone 1.5: Manual Smoke Passes (End of Week 3)
 - T2.6 (Debug Diagnostics Panel) complete; all 5 checks rendering on device with `MEOW_DEBUG=1`
@@ -658,8 +658,8 @@ Both app target and PacketTunnel extension must share:
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | Network Extension memory limit | High | Critical | **Budget (TEST_STRATEGY v1.2):** Extension resident ≤ 14 MB PASS / ≥ 15 MB hard-fail; MihomoCore.xcframework stripped ≤ 8 MB. Both enforced as CI gates (T1.4 size check; T6.4 runtime measure). Rust release profile: `lto = "fat"`, `opt-level = "z"`, `strip = "symbols"`. Profile with Instruments Memory Graph in M1. |
-| **Non-DNS UDP not forwarded (M0/M1 gap)** | **Confirmed** | **Medium** | **WireGuard tunnels break; QUIC/HTTP3 degrades to TCP HTTP/2 (usually transparent). Disclosed in M0 release notes. Patched in M1 via T2.9 (wire netstack-smoltcp UDP → `mihomo_tunnel::udp::handle_udp`). Prerequisite: upstream mihomo-rust UDP API maturity check.** |
-| mihomo-rust protocol coverage gaps | Medium | Medium | Audit SS/Trojan/VLESS/WireGuard/TUIC/Hysteria2 support before M1 sign-off; gaps → implement, vendor, or defer |
+| **Non-DNS UDP not forwarded (M0/M1 gap)** | **Confirmed** | **Medium** | **QUIC/HTTP3 degrades to TCP HTTP/2 (usually transparent); UDP-only apps break silently. Disclosed in M0 release notes. Patched in M1 via T2.9 (wire netstack-smoltcp UDP → `mihomo_tunnel::udp::handle_udp`). Prerequisite: upstream mihomo-rust UDP API maturity check.** |
+| mihomo-rust protocol coverage | Resolved | Low | Audit complete: mihomo-rust v0.6.1 ships SS / Trojan / VLESS outbounds (plus HTTP / SOCKS5 / Direct / Reject). VMess, WireGuard, TUIC, Hysteria 2 are out of scope for M1 — defer or upstream-contribute post-M1. |
 | Rust binary size with all mihomo-rust crates | Medium | Medium | Use `cargo bloat`; enable LTO + `opt-level = "z"`; disable unused feature flags; CI hard-fails if xcframework > 8 MB |
 | tun2socks in-process Tokio channel coupling | Medium | High | T1.2 prototype before Phase 2; fallback to SOCKS5 loopback (127.0.0.1:7890) if coupling is too complex |
 | Apple review rejection for VPN apps | Medium | High | Ensure app description clearly states legitimate use; include privacy policy; avoid keywords that trigger review flags |

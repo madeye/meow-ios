@@ -10,7 +10,7 @@ meow 是 Android 版 "meow" 客户端的原生 iOS 版本——将完整的 Miho
 • 设备内数据包隧道——没有外部服务器处理你的流量
 
 支持的协议
-Shadowsocks、Trojan、VLESS、WireGuard、TUIC、Hysteria2，以及 Mihomo 内核支持的其他协议。
+Shadowsocks、Trojan、VLESS 出站协议（支持 TLS、WebSocket、gRPC、H2 与 HTTPUpgrade 传输层）。同时支持 HTTP 与 SOCKS5 上游代理。
 
 隐私
 你的订阅地址、代理凭证、配置和经隧道转发的流量都保留在本机，meow 不会上传这些数据。数据包隧道在 Network Extension 沙盒中本地运行。
