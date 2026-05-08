@@ -192,7 +192,12 @@ static os_log_t gLog;
             int32_t code = (int32_t)meow_proxy_select(
                 [group UTF8String], [name UTF8String]);
             NSMutableDictionary *response = [NSMutableDictionary dictionary];
-            response[@"success"] = @(code == 0);
+            // `@(code == 0)` boxes the comparison result as a plain
+            // NSNumber (int 0/1), which NSJSONSerialization emits as `1`
+            // — and Swift's auto-Codable Bool decoder rejects integers,
+            // so the IPC response fails to decode app-side. `@YES`/`@NO`
+            // box as __NSCFBoolean, which serializes as `true`/`false`.
+            response[@"success"] = (code == 0) ? @YES : @NO;
             response[@"code"]    = @(code);
             if (code != 0) {
                 const char *err = meow_core_last_error();

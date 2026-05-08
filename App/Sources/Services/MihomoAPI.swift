@@ -79,7 +79,17 @@ final class MihomoAPI: @unchecked Sendable {
                         let decoded = try ProxyControlIPC.decodeResponse(data)
                         cont.resume(returning: decoded)
                     } catch {
-                        cont.resume(throwing: error)
+                        // Bubble up enough to identify what the extension
+                        // actually returned: bytes-length and a UTF-8
+                        // preview (truncated). The most common shapes are
+                        // empty Data (old extension binary still running
+                        // post-update — disconnect/reconnect to reload),
+                        // or a non-JSON status line.
+                        let bytes = data.count
+                        let preview = String(data: data.prefix(120), encoding: .utf8) ?? "<non-utf8>"
+                        cont.resume(throwing: MihomoAPIError.proxyControl(
+                            reason: "IPC reply not decodable (\(bytes) B): \(preview)",
+                        ))
                     }
                 }
             } catch {

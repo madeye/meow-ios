@@ -102,11 +102,33 @@ private extension ProxyGroupsView {
             }
             await refresh()
         } catch {
-            loadError = String(
+            // Surface the underlying reason — `MihomoAPIError.proxyControl`
+            // carries the sanitized message from `meow_core_last_error`
+            // (e.g. "engine not running", "'<name>' is not a member of
+            // '<group>'", "'<group>' is not a select-type group"), and
+            // HTTP-fallback failures carry a status code. Hiding it
+            // behind a generic localized string makes "select failed"
+            // un-debuggable from the device UI alone.
+            let prefix = String(
                 localized: "home.error.selectFailed",
                 comment: "Inline error shown in Proxy Groups header when selecting a proxy fails",
             )
+            loadError = "\(prefix): \(Self.describe(error))"
         }
+    }
+
+    /// Compact, user-facing description of the API error. The reasons
+    /// are already sanitized at the FFI boundary, so they're safe to
+    /// show verbatim.
+    private static func describe(_ error: any Error) -> String {
+        if let api = error as? MihomoAPIError {
+            switch api {
+            case let .proxyControl(reason): return reason
+            case let .http(status): return "HTTP \(status)"
+            case .malformed: return "malformed response"
+            }
+        }
+        return error.localizedDescription
     }
 
     func ping(proxy: String) async {
