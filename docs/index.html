@@ -19,123 +19,373 @@
     />
     <meta property="og:url" content="https://madeye.github.io/meow-ios/" />
     <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:video" content="https://madeye.github.io/meow-ios/meow-intro.mp4" />
+    <meta property="og:video:type" content="video/mp4" />
+    <meta property="og:video:width" content="1920" />
+    <meta property="og:video:height" content="1080" />
+    <meta name="twitter:card" content="summary_large_image" />
 
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='28'%3E%F0%9F%90%B1%3C/text%3E%3C/svg%3E" />
 
     <style>
       :root {
-        --fg: #1a1a1a;
-        --fg-muted: #555;
+        --fg: #0e1320;
+        --fg-muted: #5a6373;
+        --fg-subtle: #8a93a3;
         --bg: #ffffff;
         --bg-alt: #f5f6f8;
-        --border: #e3e5e8;
+        --bg-card: #ffffff;
+        --border: #e6e8ec;
+        --border-strong: #d2d6dd;
         --accent: #0070f5;
+        --accent-strong: #0058c7;
         --accent-fg: #ffffff;
+        --accent-cyan: #07a8d6;
+        --accent-purple: #8b3ad6;
+        --accent-green: #1ea64a;
         --code-bg: #f0f1f4;
+        --hero-glow: radial-gradient(
+          ellipse 1100px 540px at 50% -10%,
+          rgba(10, 132, 255, 0.14),
+          transparent 60%
+        );
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --fg: #f1f1f1;
-          --fg-muted: #a8a8a8;
-          --bg: #0e1014;
-          --bg-alt: #15181d;
-          --border: #2a2e35;
+          --fg: #f1f3f7;
+          --fg-muted: #a8b0bf;
+          --fg-subtle: #6b7384;
+          --bg: #06101f;
+          --bg-alt: #0f1a2c;
+          --bg-card: #0f1a2c;
+          --border: #1c2840;
+          --border-strong: #2a3856;
           --accent: #0a84ff;
+          --accent-strong: #399cff;
           --accent-fg: #ffffff;
-          --code-bg: #1c2026;
+          --accent-cyan: #5ac8fa;
+          --accent-purple: #bf5af2;
+          --accent-green: #30d158;
+          --code-bg: #14213a;
+          --hero-glow: radial-gradient(
+            ellipse 1300px 700px at 50% -10%,
+            rgba(10, 132, 255, 0.28),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse 900px 600px at 80% 20%,
+            rgba(90, 200, 250, 0.12),
+            transparent 60%
+          );
         }
       }
       * { box-sizing: border-box; }
-      html { -webkit-text-size-adjust: 100%; }
+      html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-          Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
+          "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         font-size: 17px;
         line-height: 1.55;
         color: var(--fg);
         background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .stage {
+        position: relative;
+        background-image: var(--hero-glow);
+        background-repeat: no-repeat;
+        background-size: 100% auto;
       }
       main {
-        max-width: 720px;
+        max-width: 760px;
         margin: 0 auto;
         padding: 56px 24px 96px;
+        position: relative;
+      }
+
+      /* ---------- Header / Hero ---------- */
+      header {
+        text-align: center;
+        margin-bottom: 36px;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+        padding: 6px 14px;
+        border-radius: 999px;
+        margin-bottom: 20px;
+      }
+      .eyebrow .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--accent-green);
+        box-shadow: 0 0 8px var(--accent-green);
       }
       header h1 {
-        font-size: 2.6rem;
-        font-weight: 700;
-        margin: 0 0 8px;
-        letter-spacing: -0.02em;
+        font-size: clamp(3.2rem, 8vw, 5rem);
+        font-weight: 800;
+        margin: 0 0 14px;
+        letter-spacing: -0.04em;
+        line-height: 0.95;
+        background: linear-gradient(
+          180deg,
+          var(--fg) 0%,
+          color-mix(in srgb, var(--accent) 80%, var(--fg)) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
       header p.tagline {
         color: var(--fg-muted);
-        font-size: 1.1rem;
-        margin: 0 0 36px;
+        font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+        max-width: 580px;
+        margin: 0 auto 32px;
+        line-height: 1.5;
+      }
+
+      /* ---------- Video hero ---------- */
+      .video-hero {
+        position: relative;
+        margin: 0 0 32px;
+        border-radius: 18px;
+        overflow: hidden;
+        background: #06101f;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.06),
+          0 24px 60px -16px rgba(10, 60, 140, 0.28);
+        border: 1px solid var(--border);
+      }
+      @media (prefers-color-scheme: dark) {
+        .video-hero {
+          box-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.5),
+            0 30px 70px -10px rgba(0, 0, 0, 0.6);
+          border-color: var(--border-strong);
+        }
+      }
+      @media (min-width: 980px) {
+        .video-hero { margin-left: -100px; margin-right: -100px; }
+      }
+      .video-hero video {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16 / 9;
+        background: #06101f;
+      }
+
+      /* ---------- CTA row ---------- */
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: center;
+        margin: 0 0 18px;
       }
       .cta {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        background: var(--accent);
+        background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
         color: var(--accent-fg);
         text-decoration: none;
         padding: 14px 22px;
         border-radius: 12px;
         font-weight: 600;
         font-size: 1.05rem;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 112, 245, 0.18);
-        transition: transform 0.12s ease, box-shadow 0.12s ease;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.18),
+          0 1px 2px rgba(0, 0, 0, 0.06),
+          0 8px 24px -6px rgba(10, 132, 255, 0.45);
+        transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
       }
       .cta:hover {
         transform: translateY(-1px);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 20px rgba(0, 112, 245, 0.25);
+        filter: brightness(1.03);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.22),
+          0 1px 2px rgba(0, 0, 0, 0.06),
+          0 12px 32px -6px rgba(10, 132, 255, 0.55);
       }
       .cta:active { transform: translateY(0); }
-      .cta-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        align-items: center;
-        margin: 0 0 28px;
-      }
-      .cta-alt {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--accent);
-        text-decoration: none;
-        padding: 13px 18px;
-        border: 1px solid var(--accent);
-        border-radius: 12px;
-        font-weight: 600;
-      }
-      .cta-alt:hover { background: var(--bg-alt); text-decoration: none; }
+      .cta-alt,
       .cta-secondary {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        color: var(--fg);
         text-decoration: none;
         padding: 13px 18px;
-        border: 1px solid var(--border);
         border-radius: 12px;
+        font-weight: 600;
+        transition: background 0.12s ease, border-color 0.12s ease;
+      }
+      .cta-alt {
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+        background: color-mix(in srgb, var(--accent) 5%, transparent);
+      }
+      .cta-alt:hover {
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        border-color: var(--accent);
+        text-decoration: none;
+      }
+      .cta-secondary {
+        color: var(--fg);
+        border: 1px solid var(--border-strong);
+        background: var(--bg-card);
         font-weight: 500;
       }
       .cta-secondary:hover { background: var(--bg-alt); }
+      .cta svg, .cta-alt svg, .cta-secondary svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }
+
       .req {
         color: var(--fg-muted);
         font-size: 0.95rem;
-        margin: 0 0 48px;
+        text-align: center;
+        max-width: 600px;
+        margin: 0 auto 16px;
       }
+      .req-detail {
+        color: var(--fg-subtle);
+        font-size: 0.88rem;
+        text-align: center;
+        max-width: 640px;
+        margin: 0 auto 56px;
+        line-height: 1.55;
+      }
+      .req-detail strong { color: var(--fg-muted); font-weight: 600; }
+
+      /* ---------- Section headers ---------- */
       h2 {
-        font-size: 1.4rem;
-        font-weight: 650;
-        margin: 48px 0 16px;
-        letter-spacing: -0.01em;
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin: 56px 0 8px;
+        letter-spacing: -0.015em;
+        text-align: center;
       }
-      ul { padding-left: 1.3em; }
-      li { margin: 6px 0; }
+      .section-sub {
+        color: var(--fg-muted);
+        text-align: center;
+        margin: 0 auto 28px;
+        max-width: 540px;
+        font-size: 1rem;
+      }
+
+      /* ---------- Feature grid ---------- */
+      .features {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+        margin: 0 0 24px;
+      }
+      @media (max-width: 600px) {
+        .features { grid-template-columns: 1fr; }
+      }
+      .feature {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 22px;
+        transition: border-color 0.12s ease, transform 0.12s ease;
+      }
+      .feature:hover {
+        border-color: var(--border-strong);
+        transform: translateY(-1px);
+      }
+      .feature .glyph {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 14px;
+      }
+      .feature.f-cyan .glyph { background: color-mix(in srgb, var(--accent-cyan) 14%, transparent); color: var(--accent-cyan); }
+      .feature.f-purple .glyph { background: color-mix(in srgb, var(--accent-purple) 14%, transparent); color: var(--accent-purple); }
+      .feature.f-green .glyph { background: color-mix(in srgb, var(--accent-green) 14%, transparent); color: var(--accent-green); }
+      .feature .glyph svg { width: 20px; height: 20px; }
+      .feature h3 {
+        font-size: 1.05rem;
+        font-weight: 650;
+        margin: 0 0 6px;
+        letter-spacing: -0.005em;
+      }
+      .feature p {
+        margin: 0;
+        color: var(--fg-muted);
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      /* ---------- Protocols ---------- */
+      .protocols {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        padding: 0;
+        list-style: none;
+        margin: 0 0 8px;
+      }
+      .protocols li {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 0.92rem;
+        color: var(--fg-muted);
+        font-weight: 500;
+      }
+
+      /* ---------- Callout / Privacy / Open source ---------- */
+      .panel {
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px 22px;
+        margin: 0 0 16px;
+      }
+      .panel.accent {
+        border-left: 3px solid var(--accent);
+      }
+      .panel.warn {
+        border-left: 3px solid var(--accent-purple);
+      }
+      .panel p { margin: 0; }
+      .panel p + p { margin-top: 8px; }
+      .panel .label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+        margin-bottom: 8px;
+      }
+      .panel .label.accent-c { color: var(--accent); }
+      .panel .label.warn-c { color: var(--accent-purple); }
+
+      /* ---------- Misc ---------- */
       code {
         font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
         font-size: 0.9em;
@@ -145,129 +395,197 @@
       }
       a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .protocols {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 12px 0 0;
-        padding: 0;
-        list-style: none;
-      }
-      .protocols li {
-        background: var(--bg-alt);
-        border: 1px solid var(--border);
-        padding: 5px 12px;
-        border-radius: 999px;
-        font-size: 0.92rem;
-        color: var(--fg-muted);
-        margin: 0;
-      }
-      .callout {
-        background: var(--bg-alt);
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--accent);
-        padding: 14px 18px;
-        border-radius: 10px;
-        margin: 24px 0;
-        font-size: 0.96rem;
-        color: var(--fg-muted);
-      }
+
       footer {
-        margin-top: 64px;
-        padding-top: 24px;
+        margin-top: 72px;
+        padding-top: 28px;
         border-top: 1px solid var(--border);
         font-size: 0.9rem;
         color: var(--fg-muted);
+        text-align: center;
+        line-height: 1.7;
       }
-      footer a { color: var(--fg-muted); }
+      footer a { color: var(--fg-muted); text-decoration: underline; text-decoration-color: var(--border-strong); }
+      footer a:hover { color: var(--fg); text-decoration-color: var(--fg-muted); }
+      footer .built {
+        display: block;
+        font-size: 0.82rem;
+        color: var(--fg-subtle);
+        margin-top: 6px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+        html { scroll-behavior: auto; }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>meow</h1>
-        <p class="tagline">
-          A native iOS Mihomo proxy client. Clash-style YAML subscriptions,
-          rule-based routing, DoH, and a Liquid Glass UI on iOS 26.
-        </p>
+    <div class="stage">
+      <main>
+        <header>
+          <span class="eyebrow"><span class="dot"></span>Public beta · iOS 26</span>
+          <h1>meow</h1>
+          <p class="tagline">
+            A native iOS Mihomo proxy client. Clash-style YAML subscriptions,
+            rule-based routing, DNS over HTTPS, and a Liquid Glass UI.
+          </p>
+        </header>
+
+        <div class="video-hero" aria-label="meow-ios feature overview">
+          <video
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="metadata"
+            width="1920"
+            height="1080"
+          >
+            <source src="meow-intro.mp4" type="video/mp4" />
+            Your browser does not support embedded video. Watch on
+            <a href="meow-intro.mp4">meow-intro.mp4</a>.
+          </video>
+        </div>
 
         <div class="cta-row">
-          <a class="cta" href="https://testflight.apple.com/join/nnDAn7ZH"
-            >Join the TestFlight public beta →</a
-          >
-          <a class="cta-alt" href="https://appdistribution.firebase.dev/i/85546f1795ab613a"
-            >Firebase Ad Hoc (direct install)</a
-          >
-          <a class="cta-secondary" href="https://github.com/madeye/meow-ios"
-            >View on GitHub</a
-          >
+          <a class="cta" href="https://testflight.apple.com/join/nnDAn7ZH">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12-1.14.461-2.31 1.177-3.08.804-.84 2.142-1.46 2.987-1.57zM21.5 17.236c-.554 1.286-.82 1.86-1.532 2.998-.992 1.585-2.394 3.56-4.13 3.575-1.546.014-1.945-1.005-4.043-.99-2.099.014-2.541 1.005-4.087.99-1.737-.015-3.063-1.81-4.054-3.395C.866 15.927 1.176 11.7 2.927 9.43 4.158 7.83 6.075 6.89 7.876 6.89c1.83 0 2.98.99 4.498.99 1.475 0 2.371-.991 4.485-.991 1.6 0 3.296.873 4.503 2.382-3.957 2.165-3.318 7.821.138 7.965z"/>
+            </svg>
+            Join the public beta
+          </a>
+          <a class="cta-alt" href="https://appdistribution.firebase.dev/i/85546f1795ab613a">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3.89 15.27 6.24 0l3.16 5.93-2.65 4.93Zm.04 1.78L12 22.51l8.23-5.47-2.31-1.45L12 19.65l-5.93-3.99-2.14 1.39Zm14.39-2.83-3.4-13.7-3.43 6.43L20.6 17.5l-2.28-3.28Zm-9.66-7.65 2.95 5.49 2.96-5.55-2.96-5.55Z"/>
+            </svg>
+            Firebase Ad Hoc
+          </a>
+          <a class="cta-secondary" href="https://github.com/madeye/meow-ios">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.69-3.87-1.36-3.87-1.36-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.27-5.24-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17.91-.26 1.89-.39 2.86-.39.97 0 1.95.13 2.86.39 2.19-1.48 3.15-1.17 3.15-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56C20.21 21.39 23.5 17.07 23.5 12 23.5 5.65 18.35.5 12 .5Z"/>
+            </svg>
+            GitHub
+          </a>
         </div>
         <p class="req">
-          Requires iOS 26 or later (iPhone and iPad). Bring your own Mihomo /
-          Clash subscription — meow does not provide proxy servers.
+          Requires iOS 26 or later · Bring your own Mihomo / Clash subscription
         </p>
-        <p class="req">
-          <strong>TestFlight</strong> is the recommended channel for most
-          users — install Apple's TestFlight app, tap the link, done.
-          <strong>Firebase Ad Hoc</strong> is a smaller-batch alternative that
-          installs the app directly through Safari (no TestFlight app, no
-          90-day rebuild for installed devices); it requires a one-time
-          device registration step and is capped at ~100 active devices.
+        <p class="req-detail">
+          <strong>TestFlight</strong> is the recommended channel — install Apple's
+          TestFlight app, tap the link, done. <strong>Firebase Ad Hoc</strong>
+          installs directly through Safari (no TestFlight app, no 90-day rebuild
+          for installed devices); it requires a one-time device registration and
+          is capped at ~100 active devices.
         </p>
-      </header>
 
-      <h2>What it does</h2>
-      <ul>
-        <li>Clash-protocol YAML subscriptions, with auto-refresh and a built-in YAML editor.</li>
-        <li>Rule-based traffic routing (domain, IP, GeoIP, GeoSITE).</li>
-        <li>DNS over HTTPS resolution.</li>
-        <li>Per-app proxy groups, latency tests, selector switching.</li>
-        <li>On-device packet tunnel — no external server handles your traffic.</li>
-      </ul>
+        <h2>What it does</h2>
+        <p class="section-sub">
+          Built on the same Mihomo Rust core that powers desktop Clash clients —
+          packaged for iOS with a system-wide packet tunnel.
+        </p>
 
-      <h2>Supported protocols</h2>
-      <ul class="protocols">
-        <li>Shadowsocks</li>
-        <li>Trojan</li>
-        <li>VLESS</li>
-        <li>WireGuard</li>
-        <li>TUIC</li>
-        <li>Hysteria2</li>
-      </ul>
+        <div class="features">
+          <div class="feature f-purple">
+            <div class="glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 9.4 8 10 4.5-.6 8-5 8-10V6l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <h3>Mihomo proxy engine</h3>
+            <p>
+              The same Mihomo core that powers desktop Clash clients —
+              Shadowsocks, Trojan, and VLESS outbounds — running in-process
+              via a Rust FFI core.
+            </p>
+          </div>
+          <div class="feature">
+            <div class="glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/><path d="M18 11h3"/><path d="M21 8v6"/></svg>
+            </div>
+            <h3>System-wide packet tunnel</h3>
+            <p>
+              NetworkExtension provider tunnels every app — no SOCKS proxy
+              configuration, no per-app setup. Traffic stays on-device.
+            </p>
+          </div>
+          <div class="feature f-green">
+            <div class="glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h6l3-7 3 14 3-7h3"/></svg>
+            </div>
+            <h3>Smart split routing</h3>
+            <p>
+              Built-in CN-IP TCP bypass plus rule-based routing on domain, IP,
+              GeoIP and GeoSITE — automatic, zero rule maintenance.
+            </p>
+          </div>
+          <div class="feature f-cyan">
+            <div class="glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10"/><path d="M9 21V4"/><path d="M15 21v-9"/><path d="M21 21V7"/></svg>
+            </div>
+            <h3>Traffic insights</h3>
+            <p>
+              Live throughput, per-day usage chart, and per-app proxy groups
+              with latency tests and one-tap selector switching.
+            </p>
+          </div>
+        </div>
 
-      <h2>Privacy</h2>
-      <p>
-        meow does not collect, transmit, or share usage data. Subscription URLs,
-        configurations, and traffic stay on your device. The packet tunnel runs
-        locally inside the Network Extension sandbox; the only network traffic
-        is the proxy traffic you configure yourself. See the
-        <a href="https://github.com/madeye/meow-ios/blob/main/PRIVACY.md"
-          >privacy policy</a
-        >.
-      </p>
+        <h2>Supported protocols</h2>
+        <p class="section-sub">All the major Mihomo outbounds, fully native.</p>
+        <ul class="protocols">
+          <li>Shadowsocks</li>
+          <li>Trojan</li>
+          <li>VLESS</li>
+        </ul>
 
-      <h2>Public beta</h2>
-      <div class="callout">
-        Some features are still under active development. Known limitation: the
-        tunnel does not yet forward non-DNS UDP traffic — WireGuard outbounds
-        will not pass traffic, and QUIC / HTTP3 falls back to TCP HTTP/2.
-        Please report issues via
-        <a href="https://github.com/madeye/meow-ios/issues">GitHub Issues</a>
-        or the in-app TestFlight feedback button.
-      </div>
+        <h2>Privacy</h2>
+        <div class="panel accent">
+          <span class="label accent-c">On-device only</span>
+          <p>
+            meow does not collect, transmit, or share usage data. Subscription
+            URLs, configurations, and traffic stay on your device. The packet
+            tunnel runs locally inside the Network Extension sandbox; the only
+            network traffic is the proxy traffic you configure yourself. See
+            the
+            <a href="https://github.com/madeye/meow-ios/blob/main/PRIVACY.md"
+              >privacy policy</a
+            >.
+          </p>
+        </div>
 
-      <h2>Open source</h2>
-      <p>
-        meow-ios is open source under the
-        <a href="https://github.com/madeye/meow-ios/blob/main/LICENSE">MIT license</a>.
-        Source, issue tracker, and release notes live at
-        <a href="https://github.com/madeye/meow-ios">github.com/madeye/meow-ios</a>.
-      </p>
+        <h2>Public beta</h2>
+        <div class="panel warn">
+          <span class="label warn-c">Known limitation</span>
+          <p>
+            Some features are still under active development. The tunnel does
+            not yet forward non-DNS UDP traffic — QUIC / HTTP3 falls back to
+            TCP HTTP/2 on most sites.
+          </p>
+          <p>
+            Please report issues via
+            <a href="https://github.com/madeye/meow-ios/issues">GitHub Issues</a>
+            or the in-app TestFlight feedback button.
+          </p>
+        </div>
 
-      <footer>
-        Sibling project:
-        <a href="https://github.com/madeye/meow">madeye/meow</a> (Android, Flutter UI).
-      </footer>
-    </main>
+        <h2>Open source</h2>
+        <p class="section-sub" style="margin-bottom: 0;">
+          meow-ios is open source under the
+          <a href="https://github.com/madeye/meow-ios/blob/main/LICENSE">MIT license</a>.
+          Source, issue tracker, and release notes live at
+          <a href="https://github.com/madeye/meow-ios">github.com/madeye/meow-ios</a>.
+        </p>
+
+        <footer>
+          Sibling project:
+          <a href="https://github.com/madeye/meow">madeye/meow</a> (Android, Flutter UI).
+          <span class="built">
+            Built with mihomo-rust · SwiftUI · NetworkExtension · iOS 26 Liquid Glass.
+          </span>
+        </footer>
+      </main>
+    </div>
   </body>
 </html>
