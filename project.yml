@@ -133,6 +133,7 @@ targets:
         product: MeowModels
       - package: MeowShared
         product: MeowIPC
+      - package: Yams
     settings:
       base:
         BUNDLE_LOADER: $(TEST_HOST)

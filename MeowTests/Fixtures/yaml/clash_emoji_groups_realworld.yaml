@@ -1,0 +1,373 @@
+
+#---------------------------------------------------#
+## 上次更新于：2026-05-08 04:18:06
+#---------------------------------------------------#
+
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: info
+external-controller: "127.0.0.1:9090"
+dns:
+  enable: true
+  ipv6: false
+  proxy-server-nameserver: [https://doh.pub/dns-query, https://dns.alidns.com/dns-query, tls://223.5.5.5]
+  default-nameserver: [223.5.5.5, 119.29.29.29]
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  use-hosts: true
+  nameserver: 
+    [
+      "https://doh.pub/dns-query",
+      "https://dns.alidns.com/dns-query",
+      "223.5.5.5",
+      "119.29.29.29",
+    ]
+  fake-ip-filter: ['*.lan', '*.localdomain', '*.example', '*.invalid', '*.localhost', '*.test', '*.local', '*.home.arpa', 'time.*.com', 'time.*.gov', 'time.*.edu.cn', 'time.*.apple.com', 'time1.*.com', 'time2.*.com', 'time3.*.com', 'time4.*.com', 'time5.*.com', 'time6.*.com', 'time7.*.com', 'ntp.*.com', 'ntp1.*.com', 'ntp2.*.com', 'ntp3.*.com', 'ntp4.*.com', 'ntp5.*.com', 'ntp6.*.com', 'ntp7.*.com', '*.time.edu.cn', '*.ntp.org.cn', +.pool.ntp.org, time1.cloud.tencent.com, music.163.com, '*.music.163.com', '*.126.net', musicapi.taihe.com, music.taihe.com, songsearch.kugou.com, trackercdn.kugou.com, '*.kuwo.cn', api-jooxtt.sanook.com, api.joox.com, joox.com, y.qq.com, '*.y.qq.com', streamoc.music.tc.qq.com, mobileoc.music.tc.qq.com, isure.stream.qqmusic.qq.com, dl.stream.qqmusic.qq.com, aqqmusic.tc.qq.com, amobile.music.tc.qq.com, '*.xiami.com', '*.music.migu.cn', music.migu.cn, +.msftconnecttest.com, +.msftncsi.com, msftconnecttest.com, msftncsi.com, localhost.ptlogin2.qq.com, localhost.sec.qq.com, +.srv.nintendo.net, +.stun.playstation.net, 'xbox.*.microsoft.com', xnotify.xboxlive.com, +.ipv6.microsoft.com, +.battlenet.com.cn, +.wotgame.cn, +.wggames.cn, +.wowsgame.cn, +.wargaming.net, proxy.golang.org, 'stun.*.*', 'stun.*.*.*', '+.stun.*.*', '+.stun.*.*.*', '+.stun.*.*.*.*', heartbeat.belkin.com, '*.linksys.com', '*.linksyssmartwifi.com', '*.router.asus.com', mesu.apple.com, swscan.apple.com, swquery.apple.com, swdownload.apple.com, swcdn.apple.com, swdist.apple.com, lens.l.google.com, stun.l.google.com, '*.square-enix.com', '*.finalfantasyxiv.com', '*.ffxiv.com', '*.ff14.sdo.com', ff.dorado.sdo.com, '*.mcdn.bilivideo.cn', +.media.dssott.com, +.pvp.net]
+proxies:
+  -
+    name: '🇭🇰 套餐到期日期：2027-01-06'
+    type: trojan
+    server: 192.0.2.10
+    port: 4005
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇭🇰 套餐重置日期：2026-05-12'
+    type: trojan
+    server: 192.0.2.10
+    port: 4005
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇭🇰 订阅获取时间：2026-05-08 16:18'
+    type: trojan
+    server: 192.0.2.10
+    port: 4005
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇭🇰 香港 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4005
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇭🇰 香港 02'
+    type: trojan
+    server: 192.0.2.10
+    port: 4006
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇭🇰 香港 03'
+    type: trojan
+    server: 192.0.2.10
+    port: 4007
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇨🇳 台湾 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4003
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇨🇳 台湾 02'
+    type: trojan
+    server: 192.0.2.10
+    port: 4004
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇨🇳 台湾 03'
+    type: trojan
+    server: 192.0.2.10
+    port: 4027
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇸🇬 新加坡 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4000
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇸🇬 新加坡 02'
+    type: trojan
+    server: 192.0.2.10
+    port: 4008
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇸🇬 新加坡 03'
+    type: trojan
+    server: 192.0.2.10
+    port: 4012
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇯🇵 日本 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4002
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇯🇵 日本 02'
+    type: trojan
+    server: 192.0.2.10
+    port: 4010
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇯🇵 日本 03'
+    type: trojan
+    server: 192.0.2.10
+    port: 4029
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇺🇲 美国 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4001
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇺🇲 美国 02'
+    type: trojan
+    server: 192.0.2.10
+    port: 4011
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇺🇲 美国 03'
+    type: trojan
+    server: 192.0.2.10
+    port: 4009
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇷🇺 俄罗斯 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4059
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇨🇦 加拿大 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4065
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇮🇩 印尼 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4058
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇮🇳 印度 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4057
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇹🇷 土耳其 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4055
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇧🇷 巴西 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4062
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇩🇪 德国 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4064
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇹🇭 泰国 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4060
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇦🇺 澳大利亚 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4063
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇬🇧 英国 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4053
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇳🇱 荷兰 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4061
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇵🇭 菲律宾 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4056
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇰🇷 韩国 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4052
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+  -
+    name: '🇲🇾 马来西亚 01'
+    type: trojan
+    server: 192.0.2.10
+    port: 4054
+    password: TROJAN_TEST_PASSWORD
+    sni: example.com
+    skip-cert-verify: true
+    udp: true
+proxy-groups:
+  -
+    name: '🚀 节点选择'
+    type: select
+    proxies:
+      - '🇭🇰 套餐到期日期：2027-01-06'
+      - '🇭🇰 套餐重置日期：2026-05-12'
+      - '🇭🇰 订阅获取时间：2026-05-08 16:18'
+      - '🇭🇰 香港 01'
+      - '🇭🇰 香港 02'
+      - '🇭🇰 香港 03'
+      - '🇨🇳 台湾 01'
+      - '🇨🇳 台湾 02'
+      - '🇨🇳 台湾 03'
+      - '🇸🇬 新加坡 01'
+      - '🇸🇬 新加坡 02'
+      - '🇸🇬 新加坡 03'
+      - '🇯🇵 日本 01'
+      - '🇯🇵 日本 02'
+      - '🇯🇵 日本 03'
+      - '🇺🇲 美国 01'
+      - '🇺🇲 美国 02'
+      - '🇺🇲 美国 03'
+      - '🇷🇺 俄罗斯 01'
+      - '🇨🇦 加拿大 01'
+      - '🇮🇩 印尼 01'
+      - '🇮🇳 印度 01'
+      - '🇹🇷 土耳其 01'
+      - '🇧🇷 巴西 01'
+      - '🇩🇪 德国 01'
+      - '🇹🇭 泰国 01'
+      - '🇦🇺 澳大利亚 01'
+      - '🇬🇧 英国 01'
+      - '🇳🇱 荷兰 01'
+      - '🇵🇭 菲律宾 01'
+      - '🇰🇷 韩国 01'
+      - '🇲🇾 马来西亚 01'
+      - DIRECT
+  -
+    name: '🎯 全球直连'
+    type: select
+    proxies:
+      - DIRECT
+      - '🚀 节点选择'
+  -
+    name: '🐟 漏网之鱼'
+    type: select
+    proxies:
+      - '🚀 节点选择'
+      - DIRECT
+
+rules:
+  - DOMAIN-SUFFIX,localhost,DIRECT
+  - DOMAIN-SUFFIX,cn,🎯 全球直连
+  - GEOIP,LAN,DIRECT
+  - GEOIP,CN,🎯 全球直连
+  - MATCH,🚀 节点选择
