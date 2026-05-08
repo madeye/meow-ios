@@ -369,6 +369,64 @@ pub unsafe extern "C" fn meow_engine_test_dns(
     }
 }
 
+/// Select a member proxy inside a `type: select` group, in-process —
+/// the same mutation that `PUT /proxies/{group}` performs against the
+/// REST API, but without the loopback hop. `group` and `name` are
+/// matched against the upstream `SelectorGroup` byte-for-byte: no
+/// Unicode normalization, no percent-decoding, no whitespace folding.
+/// Emoji + CJK + space names therefore round-trip verbatim from YAML
+/// to selector lookup, eliminating a class of bugs the URL-encoded
+/// path is sensitive to.
+///
+/// Return codes:
+/// * `0`  — selection applied.
+/// * `-1` — argument is null or not valid UTF-8.
+/// * `-2` — engine is not running.
+/// * `-3` — group not found, or the named proxy is not a select group.
+/// * `-4` — `name` is not a member of the selector.
+///
+/// On non-zero returns, `meow_core_last_error` carries a sanitized
+/// reason suitable for surfacing in the UI.
+///
+/// # Safety
+/// `group` and `name` must each be a NUL-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn meow_proxy_select(
+    group: *const c_char,
+    name: *const c_char,
+) -> c_int {
+    let Some(group_name) = cstr_to_str(group) else {
+        set_error("group is null or not utf-8".into());
+        return -1;
+    };
+    let Some(target) = cstr_to_str(name) else {
+        set_error("name is null or not utf-8".into());
+        return -1;
+    };
+    let Some(tunnel) = engine::tunnel() else {
+        set_error("engine not running".into());
+        return -2;
+    };
+    let proxies = tunnel.proxies();
+    let Some(proxy) = proxies.get(group_name) else {
+        set_error(format!("proxy group not found: {group_name}"));
+        return -3;
+    };
+    let Some(selector) = proxy
+        .as_any()
+        .and_then(|a| a.downcast_ref::<mihomo_proxy::SelectorGroup>())
+    else {
+        set_error(format!("'{group_name}' is not a select-type group"));
+        return -3;
+    };
+    if selector.select(target) {
+        0
+    } else {
+        set_error(format!("'{target}' is not a member of '{group_name}'"));
+        -4
+    }
+}
+
 /// Configure the trusted plain-TCP DNS upstream pool from the iOS Settings
 /// view. `csv` is a comma-/whitespace-separated list of `host` or
 /// `host:port` entries (port defaults to 53); empty / NULL / parse-failed

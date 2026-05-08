@@ -5,13 +5,15 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWDiagnosticsRunner.h"
+#import "mihomo_core.h"
 #import <os/log.h>
 #import <mach/mach.h>
 @import Network;
 
-static const uint8_t kDiagTagCanned = 0x01;
-static const uint8_t kDiagTagUser   = 0x02;
-static const uint8_t kDiagTagMemory = 0x03;
+static const uint8_t kDiagTagCanned     = 0x01;
+static const uint8_t kDiagTagUser       = 0x02;
+static const uint8_t kDiagTagMemory     = 0x03;
+static const uint8_t kProxyTagSelect    = 0x04;
 
 static os_log_t gLog;
 
@@ -148,6 +150,61 @@ static os_log_t gLog;
         if (!request) { if (completionHandler) completionHandler(nil); return; }
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             NSDictionary *response = [MWDiagnosticsRunner runUserRequest:request];
+            NSData *data = [NSJSONSerialization dataWithJSONObject:response options:0 error:nil]
+                           ?: [NSData data];
+            if (completionHandler) completionHandler(data);
+        });
+        return;
+    }
+
+    // Proxy control (0x04 + JSON):
+    //
+    //   { "select": { "group": "🚀 …", "name": "🇭🇰 01" } }
+    //
+    // Replaces `PUT http://127.0.0.1:9090/proxies/{group}` with a direct
+    // call into the in-process selector — no loopback hop, no URL
+    // percent-encoding step that breaks emoji / CJK / space-bearing
+    // group names.
+    if (messageData.length >= 2 &&
+        ((const uint8_t *)messageData.bytes)[0] == kProxyTagSelect) {
+        NSData *body = [messageData subdataWithRange:NSMakeRange(1, messageData.length - 1)];
+        NSDictionary *request = [NSJSONSerialization JSONObjectWithData:body options:0 error:nil];
+        if (![request isKindOfClass:[NSDictionary class]]) {
+            if (completionHandler) completionHandler(nil);
+            return;
+        }
+        NSDictionary *select = request[@"select"];
+        if (![select isKindOfClass:[NSDictionary class]]) {
+            if (completionHandler) completionHandler(nil);
+            return;
+        }
+        NSString *group = select[@"group"];
+        NSString *name  = select[@"name"];
+        if (![group isKindOfClass:[NSString class]] ||
+            ![name  isKindOfClass:[NSString class]]) {
+            if (completionHandler) completionHandler(nil);
+            return;
+        }
+        // The FFI is non-blocking (a parking_lot RwLock write inside
+        // SelectorGroup) but we still hop off the main queue so the
+        // tag-dispatch path stays uniform with the diagnostics handlers.
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            int32_t code = (int32_t)meow_proxy_select(
+                [group UTF8String], [name UTF8String]);
+            NSMutableDictionary *response = [NSMutableDictionary dictionary];
+            response[@"success"] = @(code == 0);
+            response[@"code"]    = @(code);
+            if (code != 0) {
+                const char *err = meow_core_last_error();
+                if (err && *err) {
+                    response[@"errorReason"] = [NSString stringWithUTF8String:err];
+                }
+                os_log_error(gLog, "proxy_select(%{public}@, %{public}@) → %d",
+                             group, name, code);
+            } else {
+                os_log_info(gLog, "proxy_select(%{public}@, %{public}@) → ok",
+                            group, name);
+            }
             NSData *data = [NSJSONSerialization dataWithJSONObject:response options:0 error:nil]
                            ?: [NSData data];
             if (completionHandler) completionHandler(data);

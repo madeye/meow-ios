@@ -129,6 +129,31 @@ int meow_engine_test_proxy_http(const char *url, int timeout_ms, int *out_status
 int meow_engine_test_dns(const char *host, int timeout_ms, char *out, int out_cap);
 
 /**
+ * Select a member proxy inside a `type: select` group, in-process —
+ * the same mutation that `PUT /proxies/{group}` performs against the
+ * REST API, but without the loopback hop. `group` and `name` are
+ * matched against the upstream `SelectorGroup` byte-for-byte: no
+ * Unicode normalization, no percent-decoding, no whitespace folding.
+ * Emoji + CJK + space names therefore round-trip verbatim from YAML
+ * to selector lookup, eliminating a class of bugs the URL-encoded
+ * path is sensitive to.
+ *
+ * Return codes:
+ * * `0`  — selection applied.
+ * * `-1` — argument is null or not valid UTF-8.
+ * * `-2` — engine is not running.
+ * * `-3` — group not found, or the named proxy is not a select group.
+ * * `-4` — `name` is not a member of the selector.
+ *
+ * On non-zero returns, `meow_core_last_error` carries a sanitized
+ * reason suitable for surfacing in the UI.
+ *
+ * # Safety
+ * `group` and `name` must each be a NUL-terminated UTF-8 C string.
+ */
+int meow_proxy_select(const char *group, const char *name);
+
+/**
  * Configure the trusted plain-TCP DNS upstream pool from the iOS Settings
  * view. `csv` is a comma-/whitespace-separated list of `host` or
  * `host:port` entries (port defaults to 53); empty / NULL / parse-failed
