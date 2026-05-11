@@ -7,11 +7,12 @@
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS lives entirely in `crate::fake_ip_dns` (bound on
-//! `cfg.dns.listen_addr` by `engine::start`); clients reach it through the
-//! NEDNSSettings server entry, not through the TUN. Anything addressed to
-//! port 53 *inside* the TUN payload is therefore garbage from the network's
-//! standpoint and gets dropped pre-stack — see the ingress loop below.
+//! DNS lives in `crate::fake_ip_dns::handle_query`, invoked inline from the
+//! ingress loop below. NEDNSSettings advertises a TUN-subnet address as the
+//! system resolver, so every UDP DNS query arrives as an in-TUN IP packet;
+//! we intercept it pre-stack, run it through the handler, and inject the
+//! reply back into the egress channel with src/dst + ports swapped. No UDP
+//! listener socket exists — there's nothing for one to listen on.
 //!
 //! TCP/UDP destination IPs come back as fake-IPs from the
 //! `crate::fake_ip` pool; both `dispatch_tcp` and `dispatch_udp` reverse
@@ -327,13 +328,16 @@ async fn run_tun2socks(
 
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
-            // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it for
-            // large replies) inside the TUN is intentionally unsupported —
-            // clients should go through `cfg.dns.listen_addr` directly. Drop
-            // the netstack stream so the kernel sees the TCP session close.
+            // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it
+            // when a UDP reply was truncated) inside the TUN is
+            // intentionally unsupported — iOS's stub resolver only falls
+            // back to TCP/53 for very large replies, and our fake-IP A/AAAA
+            // responses are tiny. Drop the stream so the kernel sees the
+            // TCP session close; the client retries on UDP, which the
+            // ingress loop intercepts.
             if remote_addr.port() == 53 {
                 trace!(
-                    "tun2socks: dropping in-TUN TCP/53 flow {} -> {} (fake-IP mode: DNS via fake_ip_dns at listen_addr)",
+                    "tun2socks: dropping in-TUN TCP/53 flow {} -> {} (UDP/53 intercept handles DNS)",
                     local_addr, remote_addr
                 );
                 drop(stream);
@@ -454,19 +458,36 @@ async fn run_tun2socks(
             break;
         }
 
-        // Fake-IP mode: DNS is served by `crate::fake_ip_dns` on
-        // `cfg.dns.listen_addr` (NEDNSSettings routes the system stub
-        // resolver there directly — it never sees the TUN). Any port-53
-        // traffic that still ends up inside the TUN payload is either a
-        // mis-configured client or a probe; drop it silently rather than
-        // round-tripping through the stack only for mihomo to NXDOMAIN.
-        if let Some((_, _, _, dst_port, _)) = parse_udp_packet(&ip_data) {
-            if dst_port == 53 {
-                trace!(
-                    "tun2socks: dropping in-TUN UDP/53 packet (fake-IP mode: DNS via fake_ip_dns at listen_addr)"
-                );
-                continue;
-            }
+        // Fake-IP mode: NEDNSSettings advertises a TUN-subnet IP
+        // (172.19.0.2) as the system DNS server, so every UDP DNS query
+        // arrives here as an in-TUN IP packet. Hand it to
+        // `fake_ip_dns::handle_query`, swap src/dst + ports on the reply,
+        // and inject the response packet straight into the egress channel
+        // — never let it touch the smoltcp stack (the destination IP isn't
+        // a real host on the inside, and we'd just create an orphan
+        // session).
+        if parse_udp_packet(&ip_data).is_some_and(|(_, _, _, dst_port, _)| dst_port == 53) {
+            let request = ip_data.clone();
+            let egress = egress_tx.clone();
+            tokio::spawn(async move {
+                let Some(resolver) = crate::fake_ip_dns::resolver() else {
+                    trace!("tun2socks: UDP/53 query dropped — resolver not yet published");
+                    return;
+                };
+                let Some((_, _, _, _, payload)) = parse_udp_packet(&request) else {
+                    return;
+                };
+                let Some(response_payload) =
+                    crate::fake_ip_dns::handle_query(payload, &resolver).await
+                else {
+                    return;
+                };
+                let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
+                    return;
+                };
+                let _ = egress.send(reply_pkt).await;
+            });
+            continue;
         }
 
         match stack_ingress_tx.try_send(ip_data) {
@@ -801,6 +822,63 @@ fn spawn_udp_reply_reader(
 // (UDP/53) so it can be dropped pre-stack. See ingress loop in `run_tun2socks`.
 // ---------------------------------------------------------------------------
 
+/// Build a UDP-over-IPv4 reply for a captured DNS query: swap src/dst
+/// addresses + ports, drop in `reply_payload`, leave the UDP checksum at 0
+/// (legal for IPv4, per RFC 768) and recompute the IPv4 header checksum.
+/// Returns `None` if the input isn't a parseable IPv4/UDP packet.
+fn build_udp_reply(orig_ip_data: &[u8], reply_payload: &[u8]) -> Option<Vec<u8>> {
+    if orig_ip_data.len() < 28 || (orig_ip_data[0] >> 4) != 4 || orig_ip_data[9] != 17 {
+        return None;
+    }
+    let ihl = (orig_ip_data[0] & 0x0F) as usize * 4;
+    if ihl < 20 || orig_ip_data.len() < ihl + 8 {
+        return None;
+    }
+    // Drop any IPv4 options on the reply (no client needs them on a DNS
+    // response). Fixed 20-byte header + 8-byte UDP header + payload.
+    let total_len = 20u16
+        .checked_add(8)
+        .and_then(|n| n.checked_add(u16::try_from(reply_payload.len()).ok()?))?;
+    let udp_len = 8u16.checked_add(u16::try_from(reply_payload.len()).ok()?)?;
+
+    let mut pkt = Vec::with_capacity(usize::from(total_len));
+    pkt.push(0x45); // version=4, IHL=5
+    pkt.push(0x00); // DSCP/ECN
+    pkt.extend_from_slice(&total_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]); // identification (0 is fine for stateless replies)
+    pkt.extend_from_slice(&[0x40, 0x00]); // flags=DF, fragment offset=0
+    pkt.push(64); // TTL
+    pkt.push(17); // protocol = UDP
+    pkt.extend_from_slice(&[0, 0]); // checksum placeholder, filled in below
+    pkt.extend_from_slice(&orig_ip_data[16..20]); // new src IP = original dst
+    pkt.extend_from_slice(&orig_ip_data[12..16]); // new dst IP = original src
+
+    // IPv4 header checksum over the just-written 20 bytes.
+    let cksum = ipv4_header_checksum(&pkt[0..20]);
+    pkt[10..12].copy_from_slice(&cksum.to_be_bytes());
+
+    // UDP header — swap ports, length, checksum=0.
+    pkt.extend_from_slice(&orig_ip_data[ihl + 2..ihl + 4]); // new src port = original dst port (53)
+    pkt.extend_from_slice(&orig_ip_data[ihl..ihl + 2]); // new dst port = original src port
+    pkt.extend_from_slice(&udp_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]); // UDP checksum = 0 (RFC 768, legal on IPv4)
+    pkt.extend_from_slice(reply_payload);
+    Some(pkt)
+}
+
+/// One's-complement sum over a 20-byte IPv4 header. Caller has already
+/// zeroed the checksum field at bytes 10..12.
+fn ipv4_header_checksum(header: &[u8]) -> u16 {
+    let mut sum: u32 = 0;
+    for chunk in header.chunks_exact(2) {
+        sum += u32::from(u16::from_be_bytes([chunk[0], chunk[1]]));
+    }
+    while sum > 0xFFFF {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    !(sum as u16)
+}
+
 fn parse_udp_packet(ip_data: &[u8]) -> Option<(u32, u16, u32, u16, &[u8])> {
     if ip_data.len() < 28 {
         return None;
@@ -833,6 +911,62 @@ mod tests {
     use super::*;
     use std::net::Ipv4Addr;
     use std::sync::Mutex as StdMutex;
+
+    /// Hand-built IPv4 + UDP packet: src 10.0.0.7:54321 → dst 172.19.0.2:53,
+    /// payload "QQQQ". 20-byte IPv4 header + 8-byte UDP header + 4-byte
+    /// payload = 32 bytes total. Used by the build_udp_reply tests below.
+    fn synthetic_dns_query_packet() -> Vec<u8> {
+        let mut pkt = Vec::new();
+        // IPv4 header
+        pkt.extend_from_slice(&[
+            0x45, 0x00, 0x00, 0x20, 0x12, 0x34, 0x40, 0x00, 0x40, 0x11, 0x00, 0x00, 10, 0, 0, 7,
+            172, 19, 0, 2,
+        ]);
+        // UDP header: src port 54321, dst port 53, length 12, checksum 0
+        pkt.extend_from_slice(&[0xD4, 0x31, 0x00, 0x35, 0x00, 0x0C, 0x00, 0x00]);
+        // payload
+        pkt.extend_from_slice(b"QQQQ");
+        pkt
+    }
+
+    #[test]
+    fn build_udp_reply_swaps_addresses_and_ports() {
+        let req = synthetic_dns_query_packet();
+        let reply = build_udp_reply(&req, b"OK").expect("reply built");
+        // Total length = 20 + 8 + 2 = 30
+        assert_eq!(u16::from_be_bytes([reply[2], reply[3]]), 30);
+        assert_eq!(reply[9], 17, "protocol stays UDP");
+        // src IP = original dst, dst IP = original src
+        assert_eq!(&reply[12..16], &[172, 19, 0, 2]);
+        assert_eq!(&reply[16..20], &[10, 0, 0, 7]);
+        // src port = original dst (53), dst port = original src (54321)
+        assert_eq!(&reply[20..22], &[0x00, 0x35]);
+        assert_eq!(&reply[22..24], &[0xD4, 0x31]);
+        // UDP length = 8 + 2
+        assert_eq!(u16::from_be_bytes([reply[24], reply[25]]), 10);
+        assert_eq!(&reply[28..30], b"OK");
+    }
+
+    #[test]
+    fn build_udp_reply_ipv4_checksum_is_valid() {
+        let req = synthetic_dns_query_packet();
+        let reply = build_udp_reply(&req, b"OK").expect("reply built");
+        // A correct IPv4 header sums to 0xFFFF in one's-complement, so the
+        // verifier returns 0 (i.e. our recomputed checksum is itself
+        // unchanged when fed back through `ipv4_header_checksum`).
+        let mut header = reply[0..20].to_vec();
+        let stored = u16::from_be_bytes([header[10], header[11]]);
+        header[10] = 0;
+        header[11] = 0;
+        assert_eq!(ipv4_header_checksum(&header), stored);
+    }
+
+    #[test]
+    fn build_udp_reply_rejects_non_udp_input() {
+        let mut pkt = synthetic_dns_query_packet();
+        pkt[9] = 6; // protocol = TCP
+        assert!(build_udp_reply(&pkt, b"x").is_none());
+    }
 
     /// All tests in this module mutate the process-wide `tcp_flows()`
     /// registry. Default `cargo test` parallelism races them; serialize

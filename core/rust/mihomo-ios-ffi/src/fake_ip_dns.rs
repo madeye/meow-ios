@@ -1,19 +1,28 @@
-//! Fake-IP-aware DNS server. Replaces the in-FFI DoH / china-DNS / dns_table
-//! stack: every A query is answered with a synthetic IP from
+//! Fake-IP-aware DNS query handler. Replaces the in-FFI DoH / china-DNS /
+//! dns_table stack: every A query is answered with a synthetic IP from
 //! [`crate::fake_ip`], every AAAA query gets an empty NOERROR (suppress IPv6
 //! so the client falls back to the A record we just synthesized), and any
-//! other RR type is delegated to the embedded `mihomo_dns::DnsServer`
-//! handler — which itself goes through the engine's resolver / cache.
+//! other RR type is delegated to `mihomo_dns::DnsServer::handle_query` —
+//! which itself goes through the engine's resolver / cache.
 //!
 //! Routing:
 //!
 //! ```text
-//!   Client (NEDNSSettings) ──► run() loop on listen_addr
-//!                                  │
-//!                                  ├─ A    ─► pool().alloc(host)  ─► synth A reply (TTL 60s)
-//!                                  ├─ AAAA ─► empty NOERROR
-//!                                  └─ rest ─► mihomo_dns::DnsServer::handle_query
+//!   Client (NEDNSSettings @ 172.19.0.2:53) ──► TUN ──► tun2socks UDP/53 intercept
+//!                                                          │
+//!                                                          └─► handle_query(data, resolver)
+//!                                                                    │
+//!                                                                    ├─ A    ─► pool().alloc(host)  ─► synth A reply (TTL 60s)
+//!                                                                    ├─ AAAA ─► empty NOERROR
+//!                                                                    └─ rest ─► mihomo_dns::DnsServer::handle_query
 //! ```
+//!
+//! No UDP socket is bound: the iOS `NEDNSSettings` server entry is itself an
+//! in-TUN address, so queries arrive as raw IP packets in `tun2socks`'s
+//! ingress loop, get parsed, run through [`handle_query`], and the response
+//! is re-injected into the TUN egress with src/dst + ports swapped. Binding a
+//! separate listener would have nothing to listen to — packets to
+//! `cfg.dns.listen_addr` from outside the TUN never reach the extension.
 //!
 //! The TTL is intentionally short (60s) so clients revisit the pool while
 //! the sliding-TTL entry is still live — keeps reverse-lookup hits warm for
@@ -24,50 +33,34 @@ use hickory_proto::op::{Message, MessageType, OpCode, ResponseCode};
 use hickory_proto::rr::rdata::A;
 use hickory_proto::rr::{DNSClass, Name, RData, Record, RecordType};
 use mihomo_dns::{DnsServer, Resolver};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
-use tokio::net::UdpSocket;
-use tracing::{debug, trace, warn};
+use std::net::{IpAddr, Ipv4Addr};
+use std::sync::{Arc, OnceLock};
+use tracing::{debug, trace};
 
-/// Maximum DNS-over-UDP datagram we'll accept (RFC 6891 EDNS0 sane cap).
-const DNS_BUF_SIZE: usize = 4096;
+/// Process-global resolver handle published by `engine::start` so the TUN
+/// UDP/53 intercept can call into [`handle_query`] without threading the
+/// `Arc<Resolver>` through tun2socks startup. Set-once; subsequent calls are
+/// silent no-ops (engine restart re-uses the same resolver instance).
+static RESOLVER: OnceLock<Arc<Resolver>> = OnceLock::new();
 
-/// Bind `listen` and serve DNS forever. Non-A/AAAA queries are delegated to
-/// `mihomo_dns::DnsServer::handle_query(&data, &resolver)` — that helper is
-/// pure (no socket binding) and returns the response bytes directly, so we
-/// don't need a loopback hop.
-pub async fn run(listen: SocketAddr, resolver: Arc<Resolver>) -> std::io::Result<()> {
-    let socket = Arc::new(UdpSocket::bind(listen).await?);
-    tracing::info!("fake-IP DNS server listening on {}", listen);
+/// Publish the engine's resolver. Idempotent — only the first call takes
+/// effect, but that's fine because the resolver Arc is cheap to clone and
+/// engine restarts hand back the same configuration.
+pub fn set_resolver(resolver: Arc<Resolver>) {
+    let _ = RESOLVER.set(resolver);
+}
 
-    let mut buf = vec![0u8; DNS_BUF_SIZE];
-    loop {
-        let (len, src) = match socket.recv_from(&mut buf).await {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("fake-ip-dns: recv error: {}", e);
-                continue;
-            }
-        };
-        let data = buf[..len].to_vec();
-        let socket_clone = socket.clone();
-        let resolver = resolver.clone();
-        tokio::spawn(async move {
-            let response = match handle_query(&data, &resolver).await {
-                Some(bytes) => bytes,
-                None => return,
-            };
-            if let Err(e) = socket_clone.send_to(&response, src).await {
-                debug!("fake-ip-dns: send error to {}: {}", src, e);
-            }
-        });
-    }
+/// Returns the published resolver, if any. tun2socks UDP/53 path uses this
+/// to gate handling: queries that arrive before `engine::start` has finished
+/// publishing are dropped (no way to answer them correctly).
+pub fn resolver() -> Option<Arc<Resolver>> {
+    RESOLVER.get().cloned()
 }
 
 /// Parse `data`, decide the routing, and produce a response packet. Returns
 /// `None` when the query is unparseable or the routing yielded no answer
 /// worth sending (e.g. mihomo's handler errored).
-async fn handle_query(data: &[u8], resolver: &Resolver) -> Option<Vec<u8>> {
+pub async fn handle_query(data: &[u8], resolver: &Resolver) -> Option<Vec<u8>> {
     let msg = match Message::from_vec(data) {
         Ok(m) => m,
         Err(e) => {

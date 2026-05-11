@@ -31,7 +31,6 @@ struct EngineState {
     stats: Arc<Statistics>,
     tunnel: Tunnel,
     api_task: Option<JoinHandle<()>>,
-    dns_task: Option<JoinHandle<()>>,
 }
 
 fn slot() -> &'static Mutex<Option<EngineState>> {
@@ -199,20 +198,16 @@ pub fn start(config_path: &str) -> Result<()> {
     let listeners = cfg.listeners.named.clone();
     let log_tx = log_broadcast_tx().clone();
 
-    let dns_task = cfg.dns.listen_addr.map(|addr| {
-        // Initialize the fake-IP pool once per process. `init_pool` is a
-        // no-op on the second call, so a `start → stop → start` cycle is
-        // safe — the pool's mappings outlive the engine on purpose to keep
-        // long-lived flows from being stranded when the engine restarts.
-        let _ =
-            crate::fake_ip::init_pool(crate::fake_ip::DEFAULT_CIDR, crate::fake_ip::DEFAULT_TTL);
-        let resolver = cfg.dns.resolver.clone();
-        crate::get_runtime().spawn(async move {
-            if let Err(e) = crate::fake_ip_dns::run(addr, resolver).await {
-                error!("fake-IP DNS server error: {}", e);
-            }
-        })
-    });
+    // Initialize the fake-IP pool once per process. `init_pool` is a
+    // no-op on the second call, so a `start → stop → start` cycle is safe —
+    // the pool's mappings outlive the engine on purpose to keep long-lived
+    // flows from being stranded when the engine restarts.
+    let _ = crate::fake_ip::init_pool(crate::fake_ip::DEFAULT_CIDR, crate::fake_ip::DEFAULT_TTL);
+    // Publish the resolver so tun2socks's UDP/53 intercept can answer DNS
+    // queries that arrive inside the TUN (NEDNSSettings advertises a
+    // TUN-subnet IP as the system resolver, so every DNS packet shows up as
+    // an in-TUN UDP datagram — there's no separate listening socket).
+    crate::fake_ip_dns::set_resolver(cfg.dns.resolver.clone());
 
     let api_task = cfg.api.external_controller.map(|addr| {
         let api_server = ApiServer::new(
@@ -239,7 +234,6 @@ pub fn start(config_path: &str) -> Result<()> {
         stats,
         tunnel,
         api_task,
-        dns_task,
     });
     Ok(())
 }
@@ -260,10 +254,8 @@ pub fn stop() {
         h.abort();
         let _ = runtime.block_on(h);
     }
-    if let Some(h) = state.dns_task {
-        h.abort();
-        let _ = runtime.block_on(h);
-    }
+    // DNS no longer owns a background task — handle_query runs inline on the
+    // tun2socks UDP/53 intercept path, so there's nothing to abort here.
     info!("mihomo-rust engine stopped");
 }
 
