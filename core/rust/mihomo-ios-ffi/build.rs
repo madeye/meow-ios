@@ -17,7 +17,9 @@ fn main() {
     let config = cbindgen::Config::from_file(PathBuf::from(&crate_dir).join("cbindgen.toml"))
         .unwrap_or_default();
 
-    let out = PathBuf::from(&crate_dir).join("include").join("mihomo_core.h");
+    let out = PathBuf::from(&crate_dir)
+        .join("include")
+        .join("mihomo_core.h");
     std::fs::create_dir_all(out.parent().unwrap()).ok();
 
     if let Ok(bindings) = cbindgen::Builder::new()

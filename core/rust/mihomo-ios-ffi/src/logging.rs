@@ -19,8 +19,9 @@ pub fn init_os_logger() {
         // unified logging and can be viewed via `log stream` on macOS or the
         // Console app while a device is attached.
         let subsystem = "io.github.madeye.meow.PacketTunnel";
-        if let Err(e) =
-            oslog::OsLogger::new(subsystem).level_filter(log::LevelFilter::Debug).init()
+        if let Err(e) = oslog::OsLogger::new(subsystem)
+            .level_filter(log::LevelFilter::Debug)
+            .init()
         {
             eprintln!("oslog init failed: {}", e);
         }

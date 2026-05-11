@@ -14,7 +14,6 @@ use dashmap::DashMap;
 use mihomo_api::log_stream::{LogBroadcastLayer, LogMessage};
 use mihomo_api::ApiServer;
 use mihomo_config::{load_config, load_config_from_str, Config};
-use mihomo_dns::DnsServer;
 use mihomo_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
@@ -70,12 +69,14 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
             "mixed-port",
             "tproxy-port",
             "listeners",
-            // Drop the entire `sniffer:` block. iOS routes TCP via the SOCKS5
-            // loopback and relies on the reverse DNS table for hostname
-            // recovery, so SNI/ALPN sniffing inside mihomo is redundant — and
-            // when enabled it rewrites the destination based on the sniffed
-            // hostname, which fights the dns_table mapping. Strip at the FFI
-            // boundary so user subscriptions can't re-enable it.
+            // Drop the entire `sniffer:` block. tun2socks pre-populates
+            // `metadata.host` from the fake-IP pool's reverse lookup before
+            // dispatching into `mihomo_tunnel`, so SNI/ALPN sniffing inside
+            // mihomo is redundant — and when enabled it would overwrite the
+            // pool-derived hostname based on whatever the sniffer parses out
+            // of the first TLS / HTTP record, which is a regression versus
+            // the authoritative qname captured at DNS-allocation time. Strip
+            // at the FFI boundary so user subscriptions can't re-enable it.
             "sniffer",
         ] {
             m.remove(serde_yaml::Value::String(key.to_string()));
@@ -199,11 +200,16 @@ pub fn start(config_path: &str) -> Result<()> {
     let log_tx = log_broadcast_tx().clone();
 
     let dns_task = cfg.dns.listen_addr.map(|addr| {
+        // Initialize the fake-IP pool once per process. `init_pool` is a
+        // no-op on the second call, so a `start → stop → start` cycle is
+        // safe — the pool's mappings outlive the engine on purpose to keep
+        // long-lived flows from being stranded when the engine restarts.
+        let _ =
+            crate::fake_ip::init_pool(crate::fake_ip::DEFAULT_CIDR, crate::fake_ip::DEFAULT_TTL);
         let resolver = cfg.dns.resolver.clone();
         crate::get_runtime().spawn(async move {
-            let dns_server = DnsServer::new(resolver, addr);
-            if let Err(e) = dns_server.run().await {
-                error!("DNS server error: {}", e);
+            if let Err(e) = crate::fake_ip_dns::run(addr, resolver).await {
+                error!("fake-IP DNS server error: {}", e);
             }
         })
     });

@@ -84,10 +84,11 @@ static const NSTimeInterval kRestartCooldownS = 60.0;
         return NO;
     }
 
-    // Hand the user's Settings-configured DNS upstream list to the Rust
-    // resolver before starting tun2socks. Empty string → engine falls back
-    // to its built-in defaults (1.1.1.1 / 8.8.8.8).
-    meow_dns_set_upstreams(prefs.dnsServers.UTF8String ?: "");
+    // DNS upstream selection now lives entirely in the embedded mihomo
+    // engine's `dns:` block — fake-IP NAT mode means a Settings-configured
+    // resolver list at this boundary would have no effect (the synthesized
+    // A records never leave the FFI). `prefs.dnsServers` is retained as a
+    // preference for future use but no longer wired into the Rust side.
 
     MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
     _writer    = writer;
@@ -352,7 +353,8 @@ static const NSTimeInterval kRestartCooldownS = 60.0;
         return NO;
     }
 
-    meow_dns_set_upstreams(prefs.dnsServers.UTF8String ?: "");
+    // See first-start branch: DNS upstream config now lives inside the
+    // mihomo engine, not at the FFI boundary.
 
     MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
     _writer    = writer;

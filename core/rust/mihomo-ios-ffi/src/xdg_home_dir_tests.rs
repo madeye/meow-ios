@@ -41,11 +41,7 @@ fn set_home_dir_wires_xdg_config_home_into_geoip_load_path() {
     std::fs::write(mihomo_dir.join("Country.mmdb"), FIXTURE_MMDB)
         .expect("stage fixture Country.mmdb");
 
-    let tmp_path = tmp
-        .path()
-        .to_str()
-        .expect("tmp path is utf-8")
-        .to_owned();
+    let tmp_path = tmp.path().to_str().expect("tmp path is utf-8").to_owned();
     let dir_cstr = CString::new(tmp_path.as_str()).expect("tmp path has no NUL");
     unsafe { meow_core_set_home_dir(dir_cstr.as_ptr()) };
 
@@ -60,10 +56,7 @@ fn set_home_dir_wires_xdg_config_home_into_geoip_load_path() {
     //     mihomo-config to read `default_geoip_path()` = `$XDG_CONFIG_HOME/mihomo/Country.mmdb`.
     let yaml_cstr = CString::new(YAML_WITH_GEOIP_RULE).unwrap();
     let rc = unsafe {
-        meow_engine_validate_config(
-            yaml_cstr.as_ptr(),
-            YAML_WITH_GEOIP_RULE.len() as c_int,
-        )
+        meow_engine_validate_config(yaml_cstr.as_ptr(), YAML_WITH_GEOIP_RULE.len() as c_int)
     };
     if rc != 0 {
         let err_ptr = meow_core_last_error();
@@ -98,10 +91,7 @@ fn set_home_dir_wires_xdg_config_home_into_geoip_load_path() {
         .decode()
         .expect("decode Country record")
         .expect("214.78.120.1 has a documented entry in the fixture");
-    let iso = record
-        .country
-        .iso_code
-        .expect("country iso_code present");
+    let iso = record.country.iso_code.expect("country iso_code present");
     assert_eq!(
         iso, "US",
         "214.78.120.1 should resolve to US per MaxMind's documented test data"

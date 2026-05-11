@@ -10,16 +10,19 @@
 //!                                          rules / proxies / DNS / REST API
 //!
 //! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
-//! owns a single tokio runtime that both halves share. UDP DNS is
-//! short-circuited pre-stack to a plain-TCP DNS client (still routed through
-//! mihomo's proxy chain); everything else flows through netstack's UDP socket.
+//! owns a single tokio runtime that both halves share. DNS runs in fake-IP
+//! NAT mode: `fake_ip_dns` answers A queries with synthetic IPs from the
+//! `fake_ip` pool (AAAA → empty NOERROR; other RR types delegate to
+//! `mihomo_dns::DnsServer::handle_query`). The tun2socks dispatch path
+//! reverses each fake IP back to its hostname through the pool before
+//! handing the flow to `mihomo_tunnel`, so the real resolution happens
+//! inside the engine's outbound chain. The crate no longer ships a DoH
+//! cache, china-DNS split-horizon, or in-FFI TCP-DNS client.
 
-mod china_dns;
 mod diagnostics;
-mod dns_table;
-mod dns_client;
-mod doh_cache;
 mod engine;
+mod fake_ip;
+mod fake_ip_dns;
 mod logging;
 mod subscription;
 mod tun2socks;
@@ -113,7 +116,9 @@ pub extern "C" fn meow_core_init() {
 /// `dir` must point to a NUL-terminated UTF-8 string or be NULL.
 #[no_mangle]
 pub unsafe extern "C" fn meow_core_set_home_dir(dir: *const c_char) {
-    let parsed = cstr_to_str(dir).map(str::to_owned).filter(|s| !s.is_empty());
+    let parsed = cstr_to_str(dir)
+        .map(str::to_owned)
+        .filter(|s| !s.is_empty());
     logging::bridge_log(&format!("meow_core_set_home_dir: {:?}", parsed));
     if let Some(ref d) = parsed {
         // SAFETY: `std::env::set_var` is safe in edition 2021 (the unsafe-by-default
@@ -391,10 +396,7 @@ pub unsafe extern "C" fn meow_engine_test_dns(
 /// # Safety
 /// `group` and `name` must each be a NUL-terminated UTF-8 C string.
 #[no_mangle]
-pub unsafe extern "C" fn meow_proxy_select(
-    group: *const c_char,
-    name: *const c_char,
-) -> c_int {
+pub unsafe extern "C" fn meow_proxy_select(group: *const c_char, name: *const c_char) -> c_int {
     let Some(group_name) = cstr_to_str(group) else {
         set_error("group is null or not utf-8".into());
         return -1;
@@ -425,35 +427,6 @@ pub unsafe extern "C" fn meow_proxy_select(
         set_error(format!("'{target}' is not a member of '{group_name}'"));
         -4
     }
-}
-
-/// Configure the trusted plain-TCP DNS upstream pool from the iOS Settings
-/// view. `csv` is a comma-/whitespace-separated list of `host` or
-/// `host:port` entries (port defaults to 53); empty / NULL / parse-failed
-/// input falls back to the built-in defaults (1.1.1.1 / 8.8.8.8).
-///
-/// Call this before `meow_tun_start` — the upstream list is read once
-/// inside `init_dns_client`. Writes are still safe at runtime; they take
-/// effect on the next tunnel start.
-///
-/// # Safety
-/// `csv`, if non-NULL, must be a NUL-terminated UTF-8 C string.
-#[no_mangle]
-pub unsafe extern "C" fn meow_dns_set_upstreams(csv: *const c_char) -> c_int {
-    let input = if csv.is_null() {
-        ""
-    } else {
-        match CStr::from_ptr(csv).to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                set_error("dns upstreams not utf-8".into());
-                return -1;
-            }
-        }
-    };
-    let parsed = dns_client::parse_upstreams_csv(input);
-    dns_client::set_user_upstreams(parsed);
-    0
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +471,11 @@ pub unsafe extern "C" fn meow_patch_config(
         root.remove(serde_yaml::Value::String(key.to_string()));
     }
 
-    let port = if mixed_port > 0 { mixed_port as i64 } else { 7890 };
+    let port = if mixed_port > 0 {
+        mixed_port as i64
+    } else {
+        7890
+    };
     root.insert(
         serde_yaml::Value::String("mixed-port".into()),
         serde_yaml::Value::Number(port.into()),
@@ -512,9 +489,18 @@ pub unsafe extern "C" fn meow_patch_config(
     if !root.contains_key(&geox_key) {
         let mut geox = serde_yaml::Mapping::new();
         for (k, v) in [
-            ("geoip",    "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"),
-            ("mmdb",     "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"),
-            ("geosite",  "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"),
+            (
+                "geoip",
+                "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
+            ),
+            (
+                "mmdb",
+                "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
+            ),
+            (
+                "geosite",
+                "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
+            ),
         ] {
             geox.insert(
                 serde_yaml::Value::String(k.into()),

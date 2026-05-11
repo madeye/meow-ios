@@ -30,12 +30,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
-# YAML / serialization. The TCP DNS client dispatches each query through
-# `mihomo_tunnel::tcp::handle_tcp` over a `tokio::io::duplex` pair (no
-# loopback listener) and frames messages with the RFC 1035 length prefix —
-# no HTTP stack required. `rustls` is still declared so `engine::start` can
-# install the ring crypto provider once at process init for any HTTPS the
-# mihomo engine itself opens (subscription fetch, HTTPS outbound, …).
+# `rustls` is declared so `engine::start` can install the ring crypto
+# provider once at process init for any HTTPS the mihomo engine itself
+# opens (subscription fetch, HTTPS outbound, …). Fake-IP DNS doesn't
+# terminate TLS, so this is the only direct rustls consumer.
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -53,22 +51,11 @@ urlencoding = "2"
 # tun2socks
 netstack-smoltcp = "0.2"
 
-# Persistent DNS answer cache (single-writer KV at $HOME_DIR/doh-cache.redb;
-# filename retained for compat with shipped TestFlight builds). Pure-Rust,
-# mmap-backed; survives PacketTunnel restarts so cold starts don't repay the
-# burst of fanout queries from launch flows.
-redb = "2"
-
-# GeoIP CN check for the trust-china-dns split-horizon path. `maxminddb` is
-# already compiled in transitively via mihomo-rules / mihomo-dns / mihomo-config;
-# this declaration just exposes the same crate to non-test code. `ipnetwork` is
-# the CIDR type `Reader::within` accepts (same crate maxminddb pulls in). The
-# CN ranges land in an `iprange::IpRange<ipnet::IpNet>` — auto-merged via
-# `simplify()`, O(log n) `contains()`, same crate trust-china-dns uses upstream.
-maxminddb = "0.27"
-ipnetwork = "0.21"
-ipnet = "2"
-iprange = "0.6"
+# Fake-IP DNS server: DNS message parse/serialize. Already pulled in
+# transitively through `mihomo-dns`'s `hickory-resolver`, but we declare
+# it explicitly so the import surface in `src/fake_ip_dns.rs` is pinned
+# alongside the lockfile entry.
+hickory-proto = "0.25"
 
 # Embedded mihomo-rust engine. Pinned to a release tag; bump deliberately
 # rather than tracking main. Each crate is a workspace member of
@@ -95,7 +82,10 @@ cbindgen = "0.28"
 
 [dev-dependencies]
 # xdg_home_dir_tests probes the env-var wire-up via the GeoIP load path.
+# `maxminddb` was previously a top-level dependency for the now-removed
+# china-DNS split-horizon module; it stays as dev-only to keep that test.
 tempfile = "3"
+maxminddb = "0.27"
 
 [profile.release]
 # Shrink binary for the 50MB extension budget. mihomo-rust adds significant

@@ -25,8 +25,8 @@ pub fn convert(body: &[u8]) -> Result<String> {
         .trim();
 
     if looks_like_clash_yaml(text) {
-        let _: serde_yaml::Value = serde_yaml::from_str(text)
-            .map_err(|e| anyhow!("invalid Clash YAML: {}", e))?;
+        let _: serde_yaml::Value =
+            serde_yaml::from_str(text).map_err(|e| anyhow!("invalid Clash YAML: {}", e))?;
         return Ok(text.to_string());
     }
 
@@ -89,7 +89,10 @@ fn parse_uri(raw: &str) -> Option<Value> {
     } else if let Some(rest) = raw.strip_prefix("vmess://") {
         parse_vmess(rest)
     } else {
-        warn!("unsupported proxy URI scheme: {}", raw.split_once("://").map(|(s, _)| s).unwrap_or(raw));
+        warn!(
+            "unsupported proxy URI scheme: {}",
+            raw.split_once("://").map(|(s, _)| s).unwrap_or(raw)
+        );
         None
     }
 }
@@ -105,7 +108,10 @@ fn parse_ss(rest: &str) -> Option<Value> {
     let (method, password) = if url.username().is_empty() {
         return None;
     } else if url.password().is_some() {
-        (url.username().to_string(), url.password().unwrap().to_string())
+        (
+            url.username().to_string(),
+            url.password().unwrap().to_string(),
+        )
     } else {
         // Userinfo is base64(method:password).
         let bytes = STANDARD_NO_PAD
@@ -117,7 +123,11 @@ fn parse_ss(rest: &str) -> Option<Value> {
     };
 
     let mut m = Mapping::new();
-    m.insert("name".into(), name.unwrap_or_else(|| default_name("ss", &host, port)).into());
+    m.insert(
+        "name".into(),
+        name.unwrap_or_else(|| default_name("ss", &host, port))
+            .into(),
+    );
     m.insert("type".into(), "ss".into());
     m.insert("server".into(), host.into());
     m.insert("port".into(), (port as u64).into());
@@ -138,7 +148,11 @@ fn parse_generic(kind: &str, rest: &str) -> Option<Value> {
     }
 
     let mut m = Mapping::new();
-    m.insert("name".into(), name.unwrap_or_else(|| default_name(kind, &host, port)).into());
+    m.insert(
+        "name".into(),
+        name.unwrap_or_else(|| default_name(kind, &host, port))
+            .into(),
+    );
     m.insert("type".into(), kind.into());
     m.insert("server".into(), host.into());
     m.insert("port".into(), (port as u64).into());
@@ -192,7 +206,10 @@ fn parse_vmess(rest: &str) -> Option<Value> {
     m.insert("server".into(), host.into());
     m.insert("port".into(), port.into());
     m.insert("uuid".into(), uuid.into());
-    if let Some(aid) = obj.get("aid").and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok())) {
+    if let Some(aid) = obj
+        .get("aid")
+        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok()))
+    {
         m.insert("alterId".into(), aid.into());
     }
     if let Some(cipher) = obj.get("scy").and_then(|v| v.as_str()) {
@@ -206,7 +223,14 @@ fn parse_vmess(rest: &str) -> Option<Value> {
 
 fn split_fragment(s: &str) -> (&str, Option<String>) {
     match s.split_once('#') {
-        Some((body, frag)) => (body, Some(urlencoding::decode(frag).map(|c| c.into_owned()).unwrap_or_else(|_| frag.to_string()))),
+        Some((body, frag)) => (
+            body,
+            Some(
+                urlencoding::decode(frag)
+                    .map(|c| c.into_owned())
+                    .unwrap_or_else(|_| frag.to_string()),
+            ),
+        ),
         None => (s, None),
     }
 }

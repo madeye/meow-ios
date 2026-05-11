@@ -4,17 +4,20 @@
 //! `mihomo_tunnel::{tcp,udp}::handle_*` — no SOCKS5 loopback, no cross-process
 //! hop.
 //!
-//! Egress packets (netstack output + DNS replies) are handed back to Swift via
-//! a C callback registered in [`start`]. No file descriptors cross the FFI.
-//! UDP DNS is short-circuited pre-stack to a plain-TCP DNS client (still
-//! routed through mihomo's proxy chain); non-DNS UDP flows through
-//! netstack's `UdpSocket` into `mihomo_tunnel::udp::handle_udp`, and a
-//! per-NAT-session reader drains proxy replies back through netstack's
-//! `WriteHalf` so the IP packet emitted to Swift is synthesized with
-//! source = external peer.
+//! Egress packets (netstack output) are handed back to Swift via a C
+//! callback registered in [`start`]. No file descriptors cross the FFI.
+//!
+//! DNS lives entirely in `crate::fake_ip_dns` (bound on
+//! `cfg.dns.listen_addr` by `engine::start`); clients reach it through the
+//! NEDNSSettings server entry, not through the TUN. Anything addressed to
+//! port 53 *inside* the TUN payload is therefore garbage from the network's
+//! standpoint and gets dropped pre-stack — see the ingress loop below.
+//!
+//! TCP/UDP destination IPs come back as fake-IPs from the
+//! `crate::fake_ip` pool; both `dispatch_tcp` and `dispatch_udp` reverse
+//! them to hostnames before populating `metadata.host`, so mihomo's
+//! rule/proxy chain sees the original qname rather than the synthetic IP.
 
-use crate::dns_client;
-use crate::dns_table;
 use crate::logging;
 use futures::{SinkExt, StreamExt};
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
@@ -23,18 +26,16 @@ use mihomo_tunnel::udp::UdpSession;
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::os::raw::c_void;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Semaphore};
-use tokio::time::timeout;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
 
@@ -77,7 +78,6 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 const TCP_IDLE_SECS: u64 = 90;
 const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 30;
 const UDP_BURST_CAP: usize = 512;
-const DNS_BURST_CAP: usize = 256;
 
 // Hourly watchdog: belt-and-suspenders backstop on the live `tcp_flows()`
 // registry. Once an hour, if the registry exceeds
@@ -88,7 +88,6 @@ const TCP_HOURLY_WATCHDOG_INTERVAL_SECS: u64 = 3600;
 const TCP_HOURLY_WATCHDOG_THRESHOLD: usize = 1024;
 
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
-static DNS_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 static TCP_FLOW_ID_SEQ: AtomicU64 = AtomicU64::new(1);
 
@@ -211,10 +210,6 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
     };
 
     info!("tun2socks starting (direct-callback ingest)");
-    // TCP DNS dispatches per-request through `mihomo_tunnel::tcp::handle_tcp`
-    // — same in-process Rust-to-Rust path as netstack TCP flows below — so no
-    // loopback port is involved.
-    dns_client::init_dns_client();
 
     let (ingress_tx, ingress_rx) = mpsc::channel::<Vec<u8>>(256);
     *ingress_slot().lock() = Some(ingress_tx);
@@ -294,7 +289,6 @@ async fn run_tun2socks(
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
-    let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
 
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
@@ -333,6 +327,18 @@ async fn run_tun2socks(
 
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it for
+            // large replies) inside the TUN is intentionally unsupported —
+            // clients should go through `cfg.dns.listen_addr` directly. Drop
+            // the netstack stream so the kernel sees the TCP session close.
+            if remote_addr.port() == 53 {
+                trace!(
+                    "tun2socks: dropping in-TUN TCP/53 flow {} -> {} (fake-IP mode: DNS via fake_ip_dns at listen_addr)",
+                    local_addr, remote_addr
+                );
+                drop(stream);
+                continue;
+            }
             logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
 
             let flow_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
@@ -443,30 +449,22 @@ async fn run_tun2socks(
         }
     });
 
-    let dns_reply_tx = egress_tx.clone();
     while let Some(ip_data) = ingress_rx.recv().await {
         if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
             break;
         }
 
-        if let Some((src_ip, src_port, dst_ip, dst_port, payload)) = parse_udp_packet(&ip_data) {
+        // Fake-IP mode: DNS is served by `crate::fake_ip_dns` on
+        // `cfg.dns.listen_addr` (NEDNSSettings routes the system stub
+        // resolver there directly — it never sees the TUN). Any port-53
+        // traffic that still ends up inside the TUN payload is either a
+        // mis-configured client or a probe; drop it silently rather than
+        // round-tripping through the stack only for mihomo to NXDOMAIN.
+        if let Some((_, _, _, dst_port, _)) = parse_udp_packet(&ip_data) {
             if dst_port == 53 {
-                let permit = match dns_sem.clone().try_acquire_owned() {
-                    Ok(p) => p,
-                    Err(_) => {
-                        warn_capped(
-                            &DNS_CAP_LOG_LAST_MS,
-                            "tun2socks: DNS burst cap reached, dropping query",
-                        );
-                        continue;
-                    }
-                };
-                let reply_tx = dns_reply_tx.clone();
-                let query = payload.to_vec();
-                tokio::spawn(async move {
-                    let _permit = permit;
-                    handle_dns_query(src_ip, src_port, dst_ip, dst_port, query, reply_tx).await;
-                });
+                trace!(
+                    "tun2socks: dropping in-TUN UDP/53 packet (fake-IP mode: DNS via fake_ip_dns at listen_addr)"
+                );
                 continue;
             }
         }
@@ -540,49 +538,14 @@ async fn dispatch_tcp(
         return;
     };
 
-    let (host, dst_ip) = match dns_table::dns_table_lookup(dst.ip()) {
-        // `fake-ip` / `redir-host` scenarios: the netstack receives a synthetic
-        // destination IP and we recover the real hostname from the DNS cache.
+    // Reverse the fake-IP back to the hostname captured at DNS-allocation
+    // time. A miss means the flow is targeting a literal IP the client
+    // dialed directly (no DNS round trip) — let mihomo's rule engine see
+    // the real `dst_ip` and route by IP rules.
+    let (host, dst_ip) = match crate::fake_ip::pool().reverse_lookup(dst.ip()) {
         Some(hostname) => (hostname, None),
         None => (String::new(), Some(dst.ip())),
     };
-
-    // CN-IP fast bypass: when the destination is a real IP (not a fake-IP) and
-    // the bundled GeoIP marks it as CN, dial directly from the PacketTunnel
-    // process and relay end-to-end without touching mihomo's rule engine /
-    // outbound chain. iOS NetworkExtension excludes the tunnel's own sockets
-    // from the TUN, so a plain `TcpStream::connect` hits the underlying
-    // physical interface. Falls back to the mihomo path on connect failure
-    // (e.g. cellular roaming where the CN IP isn't reachable direct).
-    if let Some(ip) = dst_ip {
-        if crate::china_dns::is_cn_ip(ip) {
-            match dispatch_tcp_direct(stream, dst, state.clone()).await {
-                Ok(stream_back) => {
-                    // Direct relay finished cleanly — nothing left to do.
-                    drop(stream_back);
-                    return;
-                }
-                Err((stream_back, err)) => {
-                    logging::bridge_log(&format!(
-                        "tun2socks: CN-IP direct dial to {} failed ({}); falling back to mihomo",
-                        dst, err
-                    ));
-                    // Resume the original mihomo path with the unconsumed
-                    // netstack stream.
-                    return dispatch_tcp_via_mihomo(
-                        stream_back,
-                        src,
-                        dst,
-                        state,
-                        tunnel,
-                        host,
-                        dst_ip,
-                    )
-                    .await;
-                }
-            }
-        }
-    }
 
     dispatch_tcp_via_mihomo(stream, src, dst, state, tunnel, host, dst_ip).await;
 }
@@ -612,84 +575,6 @@ async fn dispatch_tcp_via_mihomo(
         state,
     });
     mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata).await;
-}
-
-/// Connect timeout for the CN-IP direct bypass dial. Short enough that a
-/// fallback to mihomo still feels responsive; long enough to absorb a
-/// roaming-network handover blip.
-const CN_DIRECT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// CN-IP direct relay: connect to `dst` from the PacketTunnel process and
-/// shuffle bytes between the netstack TCP stream and the direct upstream.
-///
-/// **Timeout coverage** (in order of who fires first):
-///  1. *Connect:* `timeout(CN_DIRECT_CONNECT_TIMEOUT, ...)` wraps the dial.
-///     On timeout the inner `TcpStream::connect` future is dropped, which
-///     cancels the in-progress SYN at the kernel — no half-open socket leaks.
-///  2. *Relay-time idle:* both halves are `IdleTracking<T>`, so every
-///     successful poll in either direction bumps the shared
-///     `FlowState::last_active_ms`. The 30-second `sweep_idle_tcp_flows`
-///     evicts after 90 s of zero progress by aborting the spawn handle in
-///     `tcp_flows()`, which drops *this* future and therefore both inner
-///     streams (kernel `close()` on each).
-///  3. *Hourly watchdog:* if the registry ever exceeds 1024 live flows,
-///     `close_all_tcp_flows()` aborts every entry — direct flows included.
-///
-/// **Leak coverage:**
-///  - `tcp_flows().remove(&flow_id)` runs after `dispatch_tcp` returns,
-///    so the registry doesn't grow on the natural-EOF path. On abort the
-///    sweeper / watchdog `retain()` removes the entry instead.
-///  - `IdleTracking<T>` has no `Drop` impl, so dropping the wrappers drops
-///    `inner` synchronously. `tokio::net::TcpStream`'s `Drop` closes the
-///    socket; same for `NetstackTcpStream` (RAII in netstack-smoltcp).
-///  - `Arc<FlowState>` clones are released when both wrappers drop;
-///    registry-side `Arc` is released via `flows.remove(&flow_id)` — no
-///    cycle, refcount goes to zero.
-///
-/// On connect failure returns the untouched netstack stream so the caller
-/// can fall back to the mihomo path without dropping any user bytes.
-async fn dispatch_tcp_direct(
-    stream: NetstackTcpStream,
-    dst: SocketAddr,
-    state: Arc<FlowState>,
-) -> Result<NetstackTcpStream, (NetstackTcpStream, io::Error)> {
-    let direct = match timeout(CN_DIRECT_CONNECT_TIMEOUT, TcpStream::connect(dst)).await {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err((stream, e)),
-        // `timeout` elapsed: the inner connect future was dropped here, which
-        // cancels the kernel-side SYN — no half-open FD survives.
-        Err(_) => {
-            return Err((
-                stream,
-                io::Error::new(io::ErrorKind::TimedOut, "direct connect timeout"),
-            ));
-        }
-    };
-    let _ = direct.set_nodelay(true);
-
-    logging::bridge_log(&format!("tun2socks: CN-IP direct dial -> {}", dst));
-
-    let mut inbound = IdleTracking {
-        inner: stream,
-        state: state.clone(),
-    };
-    let mut outbound = IdleTracking {
-        inner: direct,
-        state,
-    };
-    // `copy_bidirectional` returns when either side EOFs, errors, or both
-    // halves shut down cleanly. We intentionally drop its byte-count return:
-    // this path doesn't feed mihomo's stats and the idle sweeper only cares
-    // about activity, not volume. Pathological no-progress flows are reaped
-    // by `sweep_idle_tcp_flows` via the `IdleTracking` last-active stamp →
-    // `tcp_flows()` abort handle → this future being dropped → both inner
-    // sockets dropped. No additional outer timeout is needed.
-    let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
-    // `outbound` (and its `TcpStream`) drops here — kernel `close()` on the
-    // direct upstream socket. Returning `inbound.inner` hands the netstack
-    // stream back to the caller; the rest of `inbound` (just the
-    // `Arc<FlowState>`) drops at end of scope.
-    Ok(inbound.inner)
 }
 
 // ---------------------------------------------------------------------------
@@ -740,11 +625,12 @@ impl ProxyConn for NetstackConn {
 /// `poll_write` (bytes from the upstream peer) on the same wrapper.
 /// Pending / would-block polls are intentionally not counted as activity.
 ///
-/// Generic over the inner stream so the same idle-tracking semantics apply
-/// to both the mihomo path (`IdleTracking<NetstackConn>`, served as a
-/// `Box<dyn ProxyConn>` to `mihomo_tunnel::tcp::handle_tcp`) and the CN-IP
-/// direct bypass (`IdleTracking<NetstackTcpStream>` and
-/// `IdleTracking<tokio::net::TcpStream>` driven by `copy_bidirectional`).
+/// Generic over the inner stream so the idle-tracking semantics apply to
+/// the mihomo path (`IdleTracking<NetstackConn>`, served as a
+/// `Box<dyn ProxyConn>` to `mihomo_tunnel::tcp::handle_tcp`). The CN-IP
+/// direct-bypass relay that used the same wrapper over a raw
+/// `tokio::net::TcpStream` was removed when DNS moved to fake-IP mode —
+/// every TCP flow now goes through `dispatch_tcp_via_mihomo`.
 struct IdleTracking<T> {
     inner: T,
     state: Arc<FlowState>,
@@ -826,7 +712,9 @@ async fn dispatch_udp(
         return;
     };
 
-    let (host, dst_ip) = match dns_table::dns_table_lookup(dst.ip()) {
+    // Same fake-IP reverse as the TCP path: hand mihomo the hostname when
+    // we have one, otherwise let the engine route on the literal IP.
+    let (host, dst_ip) = match crate::fake_ip::pool().reverse_lookup(dst.ip()) {
         Some(hostname) => (hostname, None),
         None => (String::new(), Some(dst.ip())),
     };
@@ -845,9 +733,10 @@ async fn dispatch_udp(
     // ADR-0008 post-Direction-A NAT key: (src SocketAddr, resolved dst
     // SocketAddr). mihomo-tunnel calls `pre_resolve` internally before
     // inserting into `nat_table`; we must match its output exactly or the
-    // subsequent `nat_table.get(&key)` misses. Calling `pre_resolve` here
-    // (same method handle_udp would call) guarantees parity for fake-ip /
-    // host-mode flows — it's idempotent once `dst_ip` is populated.
+    // subsequent `nat_table.get(&key)` misses. `host` was already populated
+    // above from the fake-IP pool reverse-lookup, so `pre_resolve` just
+    // resolves it through the engine resolver and fills `dst_ip` — same
+    // call mihomo would make internally, kept idempotent on second invoke.
     tunnel.inner().pre_resolve(&mut metadata).await;
     let Some(resolved_ip) = metadata.dst_ip else {
         // Resolution failed — handle_udp will also bail, nothing to dispatch.
@@ -908,7 +797,8 @@ fn spawn_udp_reply_reader(
 }
 
 // ---------------------------------------------------------------------------
-// UDP helpers (DNS short-circuit to TCP DNS)
+// UDP helpers — minimal IPv4/UDP parser used to identify in-TUN DNS traffic
+// (UDP/53) so it can be dropped pre-stack. See ingress loop in `run_tun2socks`.
 // ---------------------------------------------------------------------------
 
 fn parse_udp_packet(ip_data: &[u8]) -> Option<(u32, u16, u32, u16, &[u8])> {
@@ -936,80 +826,6 @@ fn parse_udp_packet(ip_data: &[u8]) -> Option<(u32, u16, u32, u16, &[u8])> {
         return None;
     }
     Some((src_ip, src_port, dst_ip, dst_port, &ip_data[start..end]))
-}
-
-fn build_udp_packet(
-    src_ip: u32,
-    src_port: u16,
-    dst_ip: u32,
-    dst_port: u16,
-    payload: &[u8],
-) -> Vec<u8> {
-    let udp_len = 8 + payload.len();
-    let total_len = 20 + udp_len;
-    let mut p = vec![0u8; total_len];
-    p[0] = 0x45;
-    p[2..4].copy_from_slice(&(total_len as u16).to_be_bytes());
-    p[6] = 0x40;
-    p[8] = 64;
-    p[9] = 17;
-    p[12..16].copy_from_slice(&src_ip.to_ne_bytes());
-    p[16..20].copy_from_slice(&dst_ip.to_ne_bytes());
-    let ck = ip_checksum(&p[..20]);
-    p[10..12].copy_from_slice(&ck.to_be_bytes());
-    p[20..22].copy_from_slice(&src_port.to_be_bytes());
-    p[22..24].copy_from_slice(&dst_port.to_be_bytes());
-    p[24..26].copy_from_slice(&(udp_len as u16).to_be_bytes());
-    p[28..].copy_from_slice(payload);
-    p
-}
-
-fn ip_checksum(h: &[u8]) -> u16 {
-    let mut s: u32 = 0;
-    for i in (0..h.len()).step_by(2) {
-        s += if i + 1 < h.len() {
-            (h[i] as u32) << 8 | h[i + 1] as u32
-        } else {
-            (h[i] as u32) << 8
-        };
-    }
-    while s >> 16 != 0 {
-        s = (s & 0xFFFF) + (s >> 16);
-    }
-    !s as u16
-}
-
-async fn handle_dns_query(
-    src_ip: u32,
-    src_port: u16,
-    dst_ip: u32,
-    dst_port: u16,
-    query: Vec<u8>,
-    reply_tx: mpsc::Sender<Vec<u8>>,
-) {
-    let name = dns_table::parse_dns_query_name(&query).unwrap_or_default();
-    logging::bridge_log(&format!(
-        "DNS: {} from {:?}:{}",
-        name,
-        Ipv4Addr::from(src_ip.to_ne_bytes()),
-        src_port
-    ));
-
-    if let Some(response) = crate::china_dns::resolve(&query).await {
-        for (ip, hostname, ttl) in dns_table::parse_dns_response_records(&response) {
-            // Skip CN-IP records: traffic to them takes the direct path and
-            // never hits the SOCKS5 loopback, so the reverse-lookup table
-            // entry would never be consulted — caching it just bloats the
-            // map and risks shadowing a later non-CN answer for the same IP.
-            if crate::china_dns::is_cn_ip(ip) {
-                continue;
-            }
-            dns_table::dns_table_insert(ip, hostname, ttl);
-        }
-        let _ = reply_tx.try_send(build_udp_packet(
-            dst_ip, dst_port, src_ip, src_port, &response,
-        ));
-    }
 }
 
 #[cfg(test)]

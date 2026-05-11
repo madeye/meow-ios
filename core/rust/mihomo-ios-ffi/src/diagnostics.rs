@@ -11,7 +11,9 @@ pub async fn test_direct_tcp(host: &str, port: u16, to: Duration) -> Result<Dura
     let target = format!("{}:{}", host, port);
     let start = Instant::now();
     let addrs: Vec<SocketAddr> = target.to_socket_addrs()?.collect();
-    let addr = addrs.first().ok_or_else(|| anyhow!("no addresses for {}", host))?;
+    let addr = addrs
+        .first()
+        .ok_or_else(|| anyhow!("no addresses for {}", host))?;
     timeout(to, TcpStream::connect(addr))
         .await
         .map_err(|_| anyhow!("connect timed out after {:?}", to))??;
