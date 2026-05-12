@@ -1,0 +1,61 @@
+Build 2026051201 (1.2.0)
+
+WHAT'S NEW
+• Fake-IP DNS replaces the previous split-horizon DoH / china-DNS /
+  dns_table stack. The PacketTunnel now answers every A query with a
+  synthetic IP from a private pool (28.0.0.0/8), suppresses AAAA, and
+  routes the original hostname through the embedded mihomo resolver
+  via mihomo's own dns: configuration. TCP/UDP flows reverse the fake
+  IP back to the qname captured at allocation time, so mihomo sees
+  the real hostname (not a sniffed SNI) when matching domain rules.
+
+• Bumped mihomo-rust to v0.7.0. Brings in upstream bug fixes; the
+  shipped outbound set (Shadowsocks / Trojan / VLESS / Direct /
+  Reject + selector & url-test groups) is unchanged.
+
+• Proxy group selector is now driven via an in-process NE app-message
+  channel instead of a REST round-trip. Picking a node in the UI is
+  noticeably faster and no longer surfaces transient HTTP errors.
+
+• Internal cleanup: removed orphan "DNS servers" settings field (the
+  setting had no effect after the fake-IP migration), gated verbose
+  diagnostic HTTP logging to debug builds only, downgraded the
+  500 ms traffic-pump heartbeat from .error to .debug so crash logs
+  don't drown in routine telemetry.
+
+WHAT TO TEST
+1. DNS smoke test (the biggest change in this build):
+   - Open Safari, hit several first-load sites (e.g. github.com,
+     news.ycombinator.com, baidu.com, taobao.com). All should resolve
+     and load.
+   - Open an app with embedded webviews (WeChat moments, Twitter).
+     IPv6-preferring apps in particular — they should fall back to
+     IPv4 silently (we return empty NOERROR for AAAA).
+   - Watch the Connections tab in the meow-ios app: every flow should
+     show the hostname (e.g. "github.com:443"), not a raw 28.x.y.z IP.
+
+2. Proxy group switching: tap through several selector groups in
+   the UI. Each switch should apply in under a second; no spinning
+   spinners, no toast errors.
+
+3. Connect / disconnect cycles, subscription refresh, settings YAML
+   editor — no new crashes or UI hangs vs 2026043001.
+
+KNOWN LIMITATIONS
+• In-TUN TCP/53 traffic is intentionally dropped. iOS's stub
+  resolver only falls back to TCP/53 for very large UDP replies,
+  which fake-IP responses never produce, so this should not be
+  user-visible. If you see a "DNS failure" from a tool that hard-codes
+  TCP DNS, please report it.
+
+• Non-DNS UDP traffic is still not forwarded by the tunnel.
+  WireGuard outbounds will not pass traffic. QUIC / HTTP3 falls back
+  to TCP HTTP/2 (usually transparent).
+
+• If you previously set a custom "DNS servers" list in Settings, the
+  field is gone in this build — that input has been ignored since
+  fake-IP shipped. Configure DNS via the dns: block in your
+  subscription / config YAML instead.
+
+Please send TestFlight feedback or open an issue at:
+https://github.com/madeye/meow-ios/issues

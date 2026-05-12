@@ -1,0 +1,50 @@
+Build 2026051201 (1.2.0)
+
+新特性
+• 引入 Fake-IP DNS,取代此前的 DoH / china-DNS / dns_table 分流栈。
+  PacketTunnel 现在为每个 A 查询返回 28.0.0.0/8 私有段内的一个虚拟
+  IP,屏蔽 AAAA,并通过 mihomo 自带的 dns: 配置把真实域名交由内嵌
+  resolver 处理。TCP / UDP 连接在分发前会用虚拟 IP 反查出域名,因此
+  mihomo 看到的是分配时记录的真实 qname(而不是 SNI 嗅探结果),
+  域名规则匹配更可靠。
+
+• mihomo-rust 升级到 v0.7.0。包含上游修复;实际出栈协议集(Shadowsocks /
+  Trojan / VLESS / Direct / Reject 加 selector & url-test 组)未变化。
+
+• 代理组切换改走 NE 进程内 app-message,不再走 REST。UI 选节点明显
+  更快,也不再有偶发的 HTTP 报错弹窗。
+
+• 内部清理:删除了无用的"DNS 服务器"设置项(自 Fake-IP 上线后该输入
+  已不再被读取),把诊断 HTTP 日志限制在 debug 构建中,把 500 ms 流量
+  心跳日志从 .error 降到 .debug,避免淹没崩溃日志。
+
+测试要点
+1. DNS 烟雾测试(这是本次最大改动):
+   - 用 Safari 打开多个站点(如 github.com、news.ycombinator.com、
+     baidu.com、taobao.com),都应能解析和加载。
+   - 打开带内嵌 WebView 的 App(微信朋友圈、Twitter)。尤其是优先
+     IPv6 的 App —— 应能静默回退到 IPv4(我们对 AAAA 返回空
+     NOERROR)。
+   - 在 meow-ios App 的 "连接" 页观察:每条流都应该显示域名(如
+     "github.com:443"),不应是裸的 28.x.y.z 地址。
+
+2. 代理组切换:点选几个 selector 组。每次切换应在 1 秒内生效,无
+   转圈、无错误提示。
+
+3. 连接 / 断开循环、订阅刷新、设置 YAML 编辑器 —— 相比 2026043001
+   无新增崩溃或界面卡顿。
+
+已知限制
+• 隧道内 TCP/53 流量会被丢弃。iOS 自身的 stub resolver 只在 UDP 回包
+  过大时才回落到 TCP/53,而 fake-IP 应答永远不会触发该路径,因此用户
+  通常感知不到。如果某个硬编码 TCP DNS 的工具报"DNS 失败",请反馈。
+
+• 隧道仍未转发非 DNS 的 UDP 流量。WireGuard 出站不工作;QUIC /
+  HTTP3 会回落到 TCP HTTP/2(通常透明)。
+
+• 如果之前在设置里填过自定义 "DNS 服务器" 列表 —— 该输入项在本构建
+  中已被移除。自 Fake-IP 上线起该输入就已被忽略。请改在订阅 / 配置
+  YAML 的 dns: 段里指定 DNS。
+
+请通过 TestFlight 反馈或在以下地址提 issue:
+https://github.com/madeye/meow-ios/issues

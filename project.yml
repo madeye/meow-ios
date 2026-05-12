@@ -46,8 +46,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: meow
-        CFBundleShortVersionString: "1.1.6"
-        CFBundleVersion: "2026050701"
+        CFBundleShortVersionString: "1.2.0"
+        CFBundleVersion: "2026051201"
         LSRequiresIPhoneOS: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -110,6 +110,7 @@ targets:
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true
+      - sdk: SystemConfiguration.framework
     postBuildScripts:
       - name: Strip Release binary (strip -Sx)
         runOnlyWhenInstalling: false
@@ -192,8 +193,8 @@ targets:
       path: PacketTunnel/Info.plist
       properties:
         CFBundleDisplayName: meow Tunnel
-        CFBundleShortVersionString: "1.1.6"
-        CFBundleVersion: "2026050701"
+        CFBundleShortVersionString: "1.2.0"
+        CFBundleVersion: "2026051201"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: PacketTunnelProvider
@@ -222,6 +223,7 @@ targets:
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
         optional: true
+      - sdk: SystemConfiguration.framework
     postBuildScripts:
       - name: Strip Release binary (strip -Sx)
         runOnlyWhenInstalling: false

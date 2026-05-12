@@ -587,7 +587,7 @@ async fn dispatch_tcp_via_mihomo(
         src_port: src.port(),
         dst_ip,
         dst_port: dst.port(),
-        host,
+        host: host.into(),
         ..Default::default()
     };
 
@@ -747,7 +747,7 @@ async fn dispatch_udp(
         src_port: src.port(),
         dst_ip,
         dst_port: dst.port(),
-        host,
+        host: host.into(),
         ..Default::default()
     };
 
