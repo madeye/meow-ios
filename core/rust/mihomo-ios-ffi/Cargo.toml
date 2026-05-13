@@ -5,7 +5,12 @@ edition = "2021"
 description = "mihomo-rust engine + tun2socks + fake-IP DNS for meow-ios — C ABI, no Go, no JNI."
 
 [lib]
-crate-type = ["staticlib"]
+# `staticlib` is the iOS xcframework consumer; `rlib` exists so the
+# `macos-utun-harness` sibling crate (a developer-only end-to-end test
+# binary that runs the FFI against a real `utun` device on macOS) can
+# depend on us as a normal Rust dependency instead of going through
+# C-ABI relinking. Adds zero cost to the iOS build.
+crate-type = ["staticlib", "rlib"]
 
 [lints.rust]
 unsafe_code = "allow"
