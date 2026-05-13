@@ -85,11 +85,53 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
             // the authoritative qname captured at DNS-allocation time. Strip
             // at the FFI boundary so user subscriptions can't re-enable it.
             "sniffer",
+            // Drop any user-supplied `dns:` block. iOS pins its own resolver
+            // configuration via `pinned_dns_block` below so the fake-IP
+            // CN-bypass probe and any other DNS-dependent paths always use
+            // a known-good upstream set regardless of subscription content.
+            "dns",
         ] {
             m.remove(serde_yaml::Value::String(key.to_string()));
         }
+        // Inject the pinned DNS config last so it always wins over any
+        // residue we just removed.
+        if let serde_yaml::Value::Mapping(dns) = pinned_dns_block() {
+            m.insert(
+                serde_yaml::Value::String("dns".into()),
+                serde_yaml::Value::Mapping(dns),
+            );
+        }
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
+}
+
+/// Pinned DNS block injected into every engine config. The nameserver set
+/// is chosen for CN reachability + global coverage without requiring a
+/// working proxy first:
+///
+///   * 119.29.29.29 (DNSPod / Tencent) — fast inside CN, also reachable
+///     externally; primary for CN-bypass probes.
+///   * 223.5.5.5    (Alibaba PublicDNS) — secondary CN-side nameserver.
+///   * 1.1.1.1      (Cloudflare) — global fallback for sites the CN
+///     resolvers refuse to answer for / poison.
+///
+/// Fake-IP mode + the in-TUN UDP/53 intercept don't require the engine to
+/// bind a resolver port — `listen: ""` keeps mihomo from spawning one.
+/// `enhanced-mode: fake-ip` keeps mihomo's own DNS path consistent with
+/// the FFI's fake-IP pool semantics (the FFI handler answers most queries
+/// directly; this setting governs the few paths that still reach mihomo).
+fn pinned_dns_block() -> serde_yaml::Value {
+    let yaml = r#"
+enable: true
+listen: ""
+enhanced-mode: fake-ip
+fake-ip-range: 28.0.0.0/8
+nameserver:
+  - 119.29.29.29
+  - 223.5.5.5
+  - 1.1.1.1
+"#;
+    serde_yaml::from_str(yaml).expect("pinned DNS YAML is a compile-time constant")
 }
 
 /// RAII handle that removes a file on drop. Used so the sibling
@@ -340,6 +382,53 @@ log-level: info
         }
         assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
         assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
+
+        // Pinned DNS block must always be present after strip, with our
+        // three nameservers in order.
+        let dns = m
+            .get(serde_yaml::Value::String("dns".into()))
+            .and_then(|v| v.as_mapping())
+            .expect("pinned dns block injected");
+        let ns: Vec<&str> = dns
+            .get(serde_yaml::Value::String("nameserver".into()))
+            .and_then(|v| v.as_sequence())
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(ns, vec!["119.29.29.29", "223.5.5.5", "1.1.1.1"]);
+    }
+
+    #[test]
+    fn user_dns_is_replaced_by_pinned() {
+        let yaml = r#"
+dns:
+  enable: true
+  nameserver:
+    - 8.8.8.8
+    - 9.9.9.9
+mode: rule
+"#;
+        let out = strip_listener_fields(yaml).expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        let dns = doc
+            .as_mapping()
+            .unwrap()
+            .get(serde_yaml::Value::String("dns".into()))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        let ns: Vec<&str> = dns
+            .get(serde_yaml::Value::String("nameserver".into()))
+            .and_then(|v| v.as_sequence())
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            ns,
+            vec!["119.29.29.29", "223.5.5.5", "1.1.1.1"],
+            "user nameservers must not survive the strip+inject"
+        );
     }
 
     #[test]

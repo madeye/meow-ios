@@ -212,8 +212,14 @@ impl FakeIpPool {
         Some(host)
     }
 
-    /// Test seam: is `ip` within the pool's usable range?
-    #[cfg(test)]
+    /// `true` iff `ip` is a fake-IP allocation candidate from this pool's
+    /// CIDR (and not in the reserved-octet bands). Callers (tun2socks) use
+    /// this to skip the reverse-lookup mutex acquisition on flows whose
+    /// destination IP is unambiguously *not* one we synthesized — e.g.
+    /// CN-bypass replies that returned a real upstream IP, or clients that
+    /// dialed a literal IP directly. A miss inside `reverse_lookup` would
+    /// return `None` anyway, but the CIDR check is a cheap pre-filter that
+    /// avoids the lock on the (now common, post-CN-bypass) real-IP path.
     pub(crate) fn contains(&self, ip: IpAddr) -> bool {
         let v4 = match ip {
             IpAddr::V4(v4) => v4,

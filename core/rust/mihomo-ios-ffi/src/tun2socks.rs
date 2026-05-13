@@ -560,12 +560,33 @@ async fn dispatch_tcp(
     };
 
     // Reverse the fake-IP back to the hostname captured at DNS-allocation
-    // time. A miss means the flow is targeting a literal IP the client
-    // dialed directly (no DNS round trip) — let mihomo's rule engine see
-    // the real `dst_ip` and route by IP rules.
-    let (host, dst_ip) = match crate::fake_ip::pool().reverse_lookup(dst.ip()) {
-        Some(hostname) => (hostname, None),
-        None => (String::new(), Some(dst.ip())),
+    // time, but only if the destination is actually inside the fake-IP
+    // pool's CIDR. For any real-IP handshake — clients dialing literal IPs
+    // or CN-bypass DNS replies that returned upstream-real addresses — we
+    // skip the reverse-lookup entirely and let mihomo's rule engine route
+    // on the literal `dst_ip`. This avoids acquiring the pool mutex on
+    // every real-IP TCP flow and, more importantly, avoids any chance of a
+    // stale reverse-lookup hit if the pool's CIDR were ever widened.
+    let pool = crate::fake_ip::pool();
+    let (host, dst_ip) = if pool.contains(dst.ip()) {
+        // dst is inside the fake-IP CIDR — it MUST resolve to a hostname we
+        // allocated earlier. A miss means the allocation was evicted (LRU
+        // pressure or TTL expiry) and we no longer know what real host this
+        // synthetic address stood in for. Routing the literal 28.x.x.x to
+        // mihomo would dial an unreachable address; drop the flow instead
+        // so the client retries DNS and gets a fresh allocation.
+        match pool.reverse_lookup(dst.ip()) {
+            Some(hostname) => (hostname, None),
+            None => {
+                logging::bridge_log(&format!(
+                    "tun2socks: dropping TCP flow — fake-IP {} has no pool entry",
+                    dst.ip()
+                ));
+                return;
+            }
+        }
+    } else {
+        (String::new(), Some(dst.ip()))
     };
 
     dispatch_tcp_via_mihomo(stream, src, dst, state, tunnel, host, dst_ip).await;
@@ -734,10 +755,25 @@ async fn dispatch_udp(
     };
 
     // Same fake-IP reverse as the TCP path: hand mihomo the hostname when
-    // we have one, otherwise let the engine route on the literal IP.
-    let (host, dst_ip) = match crate::fake_ip::pool().reverse_lookup(dst.ip()) {
-        Some(hostname) => (hostname, None),
-        None => (String::new(), Some(dst.ip())),
+    // we have one, otherwise let the engine route on the literal IP. The
+    // CIDR pre-filter skips the pool mutex for real-IP UDP flows (DNS
+    // bootstrap to upstream resolvers, QUIC to CN-bypass real IPs, …).
+    let pool = crate::fake_ip::pool();
+    let (host, dst_ip) = if pool.contains(dst.ip()) {
+        // See dispatch_tcp's matching arm for the drop rationale: a fake-IP
+        // datagram with no pool entry has nowhere to go.
+        match pool.reverse_lookup(dst.ip()) {
+            Some(hostname) => (hostname, None),
+            None => {
+                logging::bridge_log(&format!(
+                    "tun2socks: dropping UDP datagram — fake-IP {} has no pool entry",
+                    dst.ip()
+                ));
+                return;
+            }
+        }
+    } else {
+        (String::new(), Some(dst.ip()))
     };
 
     let mut metadata = Metadata {
