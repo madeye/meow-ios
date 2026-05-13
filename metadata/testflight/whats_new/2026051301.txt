@@ -1,0 +1,62 @@
+Build 2026051301 (1.2.1)
+
+WHAT'S NEW
+• CN IP-range bypass for fake-IP DNS. For every A / AAAA query the
+  PacketTunnel now consults the engine resolver first (500 ms budget)
+  and, if the upstream answer falls inside an offline-built CN
+  address-range table (APNIC delegated stats — 4109 v4 intervals,
+  2009 v6 intervals shipped in the app bundle), the synthesized
+  answer is the REAL IP. Those connections then take mihomo's DIRECT
+  outbound instead of being routed through a proxy via a 28.x.x.x
+  fake address. Non-CN hosts and timeouts fall through to the
+  unchanged fake-IP path.
+
+• Pinned DNS upstream. The engine now uses a fixed nameserver set —
+  119.29.29.29 (DNSPod), 223.5.5.5 (AliDNS), 1.1.1.1 (Cloudflare) —
+  regardless of what the subscription's dns: block contains. The
+  user-supplied dns: block is stripped before load. Fast CN-side
+  resolution for the CN-bypass probe, with Cloudflare as the global
+  fallback.
+
+• tun2socks: real-IP flows skip the fake-IP reverse-lookup. TCP and
+  UDP dispatch now CIDR-gates the pool mutex — CN-bypass real-IP
+  handshakes and direct-IP dials no longer touch the fake-IP pool
+  lock and can't accidentally pick up a stale hostname. Flows whose
+  destination falls inside the fake-IP CIDR but has no live pool
+  entry (LRU-evicted or TTL-expired) are now dropped instead of
+  being routed as literal 28.x.x.x — the client will re-resolve.
+
+KNOWN LIMITATIONS
+• In-TUN TCP/53 traffic is intentionally dropped. iOS's stub
+  resolver only falls back to TCP/53 for very large UDP replies,
+  which fake-IP responses never produce, so this should not be
+  user-visible. If you see a "DNS failure" from a tool that hard-
+  codes TCP DNS, please report it.
+
+• UDP-to-remote IS supported (dispatch into mihomo's UDP path,
+  full NAT-keyed reply injection) but requires the outbound to
+  support UDP relay. SS / Trojan / VLESS all do when the server
+  side enables it; if a node is TCP-only on the server, UDP flows
+  through it will silently drop.
+
+WHAT TO TEST
+1. CN-bypass smoke test:
+   - On a clean install (or after Reset Network Settings), open
+     Safari and hit a CN site (baidu.com, taobao.com, weibo.com) and
+     a non-CN site (github.com). Both should load.
+   - In the meow-ios Connections tab, the CN site's flow should
+     show the real CN IP as destination (e.g. 14.215.x.x for
+     baidu.com), not a 28.x.x.x address. The non-CN site should
+     still show 28.x.x.x.
+
+2. Subscription DNS override:
+   - Edit your subscription to add a custom dns: block with weird
+     nameservers (e.g. 8.8.8.8). Reconnect.
+   - The block should be silently ignored — engine logs show
+     119.29.29.29 / 223.5.5.5 / 1.1.1.1 in use regardless.
+
+3. Connect / disconnect cycles, subscription refresh, settings YAML
+   editor — no new crashes or UI hangs vs 2026051201.
+
+Please send TestFlight feedback or open an issue at:
+https://github.com/madeye/meow-ios/issues
