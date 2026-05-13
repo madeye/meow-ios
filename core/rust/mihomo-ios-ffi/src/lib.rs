@@ -19,6 +19,7 @@
 //! inside the engine's outbound chain. The crate no longer ships a DoH
 //! cache, china-DNS split-horizon, or in-FFI TCP-DNS client.
 
+mod cn_iprange;
 mod diagnostics;
 mod engine;
 mod fake_ip;

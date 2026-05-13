@@ -28,14 +28,23 @@
 //! the sliding-TTL entry is still live — keeps reverse-lookup hits warm for
 //! long-running TCP flows that re-resolve mid-session.
 
-use crate::fake_ip;
+use crate::{cn_iprange, fake_ip};
 use hickory_proto::op::{Message, MessageType, OpCode, ResponseCode};
-use hickory_proto::rr::rdata::A;
+use hickory_proto::rr::rdata::{A, AAAA};
 use hickory_proto::rr::{DNSClass, Name, RData, Record, RecordType};
 use mihomo_dns::{DnsServer, Resolver};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tracing::{debug, trace};
+
+/// Per-query upstream resolve timeout for the CN-bypass probe. Picked so
+/// that a slow upstream (mihomo bootstrap, DoH cold-start) does not stall
+/// the synthetic fake-IP reply path: 500 ms is large enough that a healthy
+/// resolver answers comfortably, and small enough that timing out and
+/// falling back to a fake-IP allocation keeps the client moving instead of
+/// hanging on the DNS step.
+const CN_RESOLVE_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// Process-global resolver handle published by `engine::start` so the TUN
 /// UDP/53 intercept can call into [`handle_query`] without threading the
@@ -86,8 +95,37 @@ pub(crate) async fn handle_query(data: &[u8], resolver: &Resolver) -> Option<Vec
     // serve whichever the first one is rather than splitting the reply.
     let q = msg.queries().first()?;
     match q.query_type() {
-        RecordType::A => Some(build_fake_a_response(&msg, q.name(), q.query_class())),
-        RecordType::AAAA => Some(build_empty_noerror(&msg, q.name(), q.query_class())),
+        RecordType::A => {
+            // CN-bypass probe: if the real upstream resolves into mainland
+            // CN address space, answer with the real IP so the client takes
+            // the engine's DIRECT outbound — no fake-IP indirection, no
+            // SOCKS rerouting. Anything else (non-CN, no answer, timeout,
+            // table not loaded) falls through to fake-IP allocation.
+            let host = qname_to_host(q.name());
+            if let Some(real) = cn_bypass_v4(resolver, &host).await {
+                Some(build_real_a_response(&msg, q.name(), q.query_class(), real))
+            } else {
+                Some(build_fake_a_response(&msg, q.name(), q.query_class()))
+            }
+        }
+        RecordType::AAAA => {
+            // Symmetric to A: if the v6 answer is in CN-v6 space we surface
+            // it so the client can use IPv6 DIRECT. Otherwise we keep the
+            // historical behaviour (empty NOERROR) — the fake-IP pool is
+            // v4-only and we don't want to advertise a v6 path the engine
+            // can't honour with synthetic addresses.
+            let host = qname_to_host(q.name());
+            if let Some(real) = cn_bypass_v6(resolver, &host).await {
+                Some(build_real_aaaa_response(
+                    &msg,
+                    q.name(),
+                    q.query_class(),
+                    real,
+                ))
+            } else {
+                Some(build_empty_noerror(&msg, q.name(), q.query_class()))
+            }
+        }
         _ => {
             // Anything else — TXT, HTTPS, SVCB, MX, … — falls through to the
             // upstream resolver. mihomo's `DnsServer::handle_query` answers
@@ -104,6 +142,93 @@ pub(crate) async fn handle_query(data: &[u8], resolver: &Resolver) -> Option<Vec
             }
         }
     }
+}
+
+/// Resolve `host` via the engine resolver (mihomo's configured nameservers /
+/// fallback / policy chain) and return `Some(v4)` iff the answer falls
+/// inside any CN v4 interval. Timeout-bounded — see [`CN_RESOLVE_TIMEOUT`].
+/// Anything else (no answer, non-CN answer, timeout, table unloaded) yields
+/// `None`, telling the caller to fall through to fake-IP allocation.
+async fn cn_bypass_v4(resolver: &Resolver, host: &str) -> Option<std::net::Ipv4Addr> {
+    let Ok(maybe_ip) = tokio::time::timeout(CN_RESOLVE_TIMEOUT, resolver.lookup_ipv4(host)).await
+    else {
+        trace!("fake-ip-dns: v4 resolve timeout for {}", host);
+        return None;
+    };
+    let IpAddr::V4(v4) = maybe_ip? else {
+        // Resolver returned v6 from a v4 query — shouldn't happen, but be
+        // defensive.
+        return None;
+    };
+    if cn_iprange::contains_v4(v4) {
+        debug!("fake-ip-dns: CN bypass v4 {} -> {}", host, v4);
+        Some(v4)
+    } else {
+        None
+    }
+}
+
+/// v6 mirror of [`cn_bypass_v4`].
+async fn cn_bypass_v6(resolver: &Resolver, host: &str) -> Option<std::net::Ipv6Addr> {
+    let Ok(maybe_ip) = tokio::time::timeout(CN_RESOLVE_TIMEOUT, resolver.lookup_ipv6(host)).await
+    else {
+        trace!("fake-ip-dns: v6 resolve timeout for {}", host);
+        return None;
+    };
+    let IpAddr::V6(v6) = maybe_ip? else {
+        return None;
+    };
+    if cn_iprange::contains_v6(v6) {
+        debug!("fake-ip-dns: CN bypass v6 {} -> {}", host, v6);
+        Some(v6)
+    } else {
+        None
+    }
+}
+
+/// Build a single-answer A response carrying the real upstream IP. TTL is
+/// the same 60s the fake-IP path uses — clients should revisit DNS at the
+/// same cadence regardless of which path answered.
+fn build_real_a_response(
+    query: &Message,
+    qname: &Name,
+    class: DNSClass,
+    ip: std::net::Ipv4Addr,
+) -> Vec<u8> {
+    let mut resp = response_skeleton(query);
+    let mut rec = Record::from_rdata(qname.clone(), 60, RData::A(A(ip)));
+    rec.set_dns_class(class);
+    resp.add_answer(rec);
+    resp.to_vec().unwrap_or_else(|_| Vec::new())
+}
+
+/// Build a single-answer AAAA response carrying the real upstream IPv6.
+fn build_real_aaaa_response(
+    query: &Message,
+    qname: &Name,
+    class: DNSClass,
+    ip: std::net::Ipv6Addr,
+) -> Vec<u8> {
+    let mut resp = response_skeleton(query);
+    let mut rec = Record::from_rdata(qname.clone(), 60, RData::AAAA(AAAA(ip)));
+    rec.set_dns_class(class);
+    resp.add_answer(rec);
+    resp.to_vec().unwrap_or_else(|_| Vec::new())
+}
+
+/// Shared response header: copy id, flip type to Response, echo questions.
+fn response_skeleton(query: &Message) -> Message {
+    let mut resp = Message::new();
+    resp.set_id(query.id());
+    resp.set_message_type(MessageType::Response);
+    resp.set_op_code(OpCode::Query);
+    resp.set_recursion_desired(query.recursion_desired());
+    resp.set_recursion_available(true);
+    resp.set_response_code(ResponseCode::NoError);
+    for q in query.queries() {
+        resp.add_query(q.clone());
+    }
+    resp
 }
 
 /// Build a single-answer A response: allocate a fake IP for `qname`, set the

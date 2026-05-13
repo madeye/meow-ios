@@ -211,6 +211,14 @@ pub fn start(config_path: &str) -> Result<()> {
     // the pool's mappings outlive the engine on purpose to keep long-lived
     // flows from being stranded when the engine restarts.
     let _ = crate::fake_ip::init_pool(crate::fake_ip::DEFAULT_CIDR, crate::fake_ip::DEFAULT_TTL);
+    // Load the CN IP-range tables (best-effort — missing or malformed files
+    // log + leave the table empty, in which case `fake_ip_dns::handle_query`
+    // falls back to its normal fake-IP allocation path). `HOME_DIR` is set
+    // by `meow_core_set_home_dir` at PacketTunnelProvider startup, ahead of
+    // any `engine::start` call.
+    if let Some(home) = crate::HOME_DIR.lock().as_ref() {
+        crate::cn_iprange::load(std::path::Path::new(home));
+    }
     // Publish the resolver so tun2socks's UDP/53 intercept can answer DNS
     // queries that arrive inside the TUN (NEDNSSettings advertises a
     // TUN-subnet IP as the system resolver, so every DNS packet shows up as
