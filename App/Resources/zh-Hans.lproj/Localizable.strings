@@ -1,84 +1,85 @@
-/* meow-ios — Simplified Chinese (zh-Hans) localization scaffold.
+/* meow-ios — Simplified Chinese (zh-Hans) localization.
 
-   This file is an IDENTITY PLACEHOLDER: every key carries its English value.
-   It proves the zh-Hans.lproj wiring works end-to-end (Xcode compiles the
-   catalog, strings bundle ships in the .app, runtime picks it up when the
-   device locale = zh-Hans) without committing to a translation round yet.
+   Covers the zh-CN device locale. Key set is 1:1 with en.lproj — every key in
+   en.lproj/Localizable.strings appears here with a real translation. Strings
+   deliberately omitted from en.lproj (QA/OCR harness pins, stable diagnostic
+   reason codes, internal chart bindings, log-level Picker .tag() values)
+   must NOT be added here either — see en.lproj header for the exclusion list.
 
-   Translators: overwrite every value on the right-hand side. Keys are frozen
-   per screen namespace (tabs.*, home.*, subscriptions.*, etc.) and must match
-   the en.lproj key set 1:1. Do NOT localize strings deliberately omitted from
-   en.lproj — see that file's header for the exclusion list (QA/OCR harness
-   pins, stable diagnostic reason codes, internal chart bindings, etc.).
-
-   Source for future translation: /Volumes/DATA/workspace/mihomo-android/mobile/src/main/res/values-zh/strings.xml (canonical zh_CN for the Android sibling). */
+   Style:
+     - Verbs in toolbar / button positions use 2-character imperatives where
+       possible: 添加 / 取消 / 保存 / 关闭 / 删除 / 测试 / 重试.
+     - "Proxy" → 代理; "Direct" stays "DIRECT" (literal rule type from mihomo,
+       not prose). Same for "MATCH", "DOMAIN-SUFFIX", etc. — they are rule
+       identifiers, not translation candidates.
+     - Ellipsis is the single character "…" (U+2026), matching en.lproj. */
 
 
 /* Tab bar */
-"tabs.home" = "Home";
-"tabs.subscriptions" = "Subscriptions";
-"tabs.traffic" = "Traffic";
-"tabs.logs" = "Logs";
-"tabs.settings" = "Settings";
+"tabs.home" = "首页";
+"tabs.subscriptions" = "订阅";
+"tabs.traffic" = "流量";
+"tabs.logs" = "日志";
+"tabs.settings" = "设置";
 
 
 /* Common */
-"common.ok" = "OK";
-"common.cancel" = "Cancel";
-"common.close" = "Close";
-"common.error" = "Error";
-"common.delete" = "Delete";
+"common.ok" = "好";
+"common.cancel" = "取消";
+"common.close" = "关闭";
+"common.error" = "错误";
+"common.delete" = "删除";
 
 
 /* Home screen */
 "home.nav.title" = "meow";
-"home.profile.none" = "No Profile";
-"home.toggle.connect" = "Connect";
-"home.toggle.connecting" = "Connecting…";
-"home.toggle.disconnect" = "Disconnect";
-"home.toggle.disconnecting" = "Disconnecting…";
-"home.packet.ingress" = "Ingress";
-"home.packet.egress" = "Egress";
-"home.traffic.upload" = "Upload";
-"home.traffic.download" = "Download";
-"home.traffic.total %@" = "Total %@";
-"home.proxyGroups.header" = "Proxy Groups";
-"home.proxyGroups.placeholder.connected" = "Loading groups…";
-"home.proxyGroups.placeholder.connecting" = "Connecting — groups appear when the engine is up.";
-"home.proxyGroups.placeholder.disconnected" = "Connect to populate available groups.";
-"home.nav.connections" = "Connections";
-"home.nav.rules" = "Rules";
-"home.nav.providers" = "Providers";
-"home.nav.diagnostics" = "Diagnostics";
-"home.error.apiUnavailable" = "API unavailable";
-"home.error.selectFailed" = "select failed";
-"home.error.tunnelFailed.title" = "Couldn't start tunnel";
-"home.error.dismiss" = "Dismiss";
+"home.profile.none" = "无配置";
+"home.toggle.connect" = "连接";
+"home.toggle.connecting" = "连接中…";
+"home.toggle.disconnect" = "断开";
+"home.toggle.disconnecting" = "断开中…";
+"home.packet.ingress" = "入站";
+"home.packet.egress" = "出站";
+"home.traffic.upload" = "上传";
+"home.traffic.download" = "下载";
+"home.traffic.total %@" = "合计 %@";
+"home.proxyGroups.header" = "代理组";
+"home.proxyGroups.placeholder.connected" = "正在载入代理组…";
+"home.proxyGroups.placeholder.connecting" = "正在连接 — 引擎启动后将显示代理组。";
+"home.proxyGroups.placeholder.disconnected" = "连接后将显示可用代理组。";
+"home.nav.connections" = "连接";
+"home.nav.rules" = "规则";
+"home.nav.providers" = "Provider";
+"home.nav.diagnostics" = "诊断";
+"home.error.apiUnavailable" = "API 不可用";
+"home.error.selectFailed" = "切换失败";
+"home.error.tunnelFailed.title" = "无法启动隧道";
+"home.error.dismiss" = "忽略";
 
 
 /* Subscriptions */
-"subscriptions.nav.title" = "Subscriptions";
-"subscriptions.add.nav.title" = "Add Subscription";
-"subscriptions.add.field.name" = "Name";
-"subscriptions.add.field.url" = "URL";
-"subscriptions.add.button.add" = "Add";
-"subscriptions.add.button.adding" = "Adding…";
-"subscriptions.import.errorTitle" = "Couldn't import subscription";
-"subscriptions.row.updatedAgo %@" = "Updated %@ ago";
+"subscriptions.nav.title" = "订阅";
+"subscriptions.add.nav.title" = "添加订阅";
+"subscriptions.add.field.name" = "名称";
+"subscriptions.add.field.url" = "网址";
+"subscriptions.add.button.add" = "添加";
+"subscriptions.add.button.adding" = "添加中…";
+"subscriptions.import.errorTitle" = "导入订阅失败";
+"subscriptions.row.updatedAgo %@" = "%@前更新";
 
 
 /* Connections */
-"connections.empty.title" = "No connections";
-"connections.empty.description" = "Active traffic will appear here.";
-"connections.toolbar.closeAll" = "Close All";
-"connections.swipe.close" = "Close";
-"connections.nav.titleFormat %lld" = "Connections (%lld)";
+"connections.empty.title" = "无连接";
+"connections.empty.description" = "活动流量将显示在此处。";
+"connections.toolbar.closeAll" = "全部关闭";
+"connections.swipe.close" = "关闭";
+"connections.nav.titleFormat %lld" = "连接 (%lld)";
 
 
 /* Rules */
-"rules.empty.title" = "No rules";
-"rules.empty.description" = "Rules appear when a profile is loaded.";
-"rules.nav.titleFormat %lld" = "Rules (%lld)";
+"rules.empty.title" = "无规则";
+"rules.empty.description" = "加载配置后将显示规则。";
+"rules.nav.titleFormat %lld" = "规则 (%lld)";
 "rules.button.edit" = "编辑";
 
 /* Rules editor (structured per-rule edit sheet) */
@@ -86,6 +87,7 @@
 "rulesEditor.empty.title" = "无规则";
 "rulesEditor.empty.description" = "点击 + 添加第一条规则。";
 "rulesEditor.button.add" = "添加";
+"rulesEditor.button.addChinaPreset" = "添加国内直连预设";
 "rulesEditor.button.cancel" = "取消";
 "rulesEditor.button.save" = "保存";
 "rulesEditor.button.saving" = "保存中…";
@@ -106,76 +108,76 @@
 
 
 /* Logs */
-"logs.picker.level" = "Level";
-"logs.level.debug" = "debug";
-"logs.level.info" = "info";
-"logs.level.warning" = "warning";
-"logs.level.error" = "error";
-"logs.toggle.autoScroll" = "Auto-scroll";
-"logs.empty.title" = "No logs";
-"logs.empty.description" = "Logs appear when the tunnel is active.";
-"logs.nav.titleFormat %lld" = "Logs (%lld)";
+"logs.picker.level" = "级别";
+"logs.level.debug" = "调试";
+"logs.level.info" = "信息";
+"logs.level.warning" = "警告";
+"logs.level.error" = "错误";
+"logs.toggle.autoScroll" = "自动滚动";
+"logs.empty.title" = "无日志";
+"logs.empty.description" = "隧道启动后将显示日志。";
+"logs.nav.titleFormat %lld" = "日志 (%lld)";
 
 
 /* Providers */
-"providers.empty.title" = "No providers";
-"providers.empty.description" = "Providers appear when a profile is loaded.";
-"providers.nav.titleFormat %lld" = "Providers (%lld)";
-"providers.a11y.healthCheck %@" = "Health check %@";
-"providers.a11y.test %@" = "Test %@";
+"providers.empty.title" = "无 Provider";
+"providers.empty.description" = "加载配置后将显示 Provider。";
+"providers.nav.titleFormat %lld" = "Provider (%lld)";
+"providers.a11y.healthCheck %@" = "健康检查 %@";
+"providers.a11y.test %@" = "测试 %@";
 
 
 /* Yaml Editor */
-"yamlEditor.nav.title" = "Edit Config";
-"yamlEditor.empty.title" = "Empty config";
-"yamlEditor.empty.description" = "Paste a Clash YAML config to start editing.";
-"yamlEditor.button.revert" = "Revert";
-"yamlEditor.button.save" = "Save";
-"yamlEditor.button.saving" = "Saving…";
-"yamlEditor.a11y.revert" = "Revert to last saved config";
-"yamlEditor.a11y.save" = "Save config";
-"yamlEditor.error.invalid" = "Invalid config";
+"yamlEditor.nav.title" = "编辑配置";
+"yamlEditor.empty.title" = "配置为空";
+"yamlEditor.empty.description" = "粘贴 Clash YAML 配置以开始编辑。";
+"yamlEditor.button.revert" = "撤销";
+"yamlEditor.button.save" = "保存";
+"yamlEditor.button.saving" = "保存中…";
+"yamlEditor.a11y.revert" = "还原到上次保存的配置";
+"yamlEditor.a11y.save" = "保存配置";
+"yamlEditor.error.invalid" = "配置无效";
 
 
 /* Settings */
-"settings.nav.title" = "Settings";
-"settings.section.general" = "General";
-"settings.toggle.allowLan" = "Allow LAN";
+"settings.nav.title" = "设置";
+"settings.section.general" = "通用";
+"settings.toggle.allowLan" = "允许局域网";
 "settings.toggle.ipv6" = "IPv6";
-"settings.picker.logLevel" = "Log Level";
-"settings.logLevel.debug" = "Debug";
-"settings.logLevel.info" = "Info";
-"settings.logLevel.warning" = "Warning";
-"settings.logLevel.error" = "Error";
-"settings.logLevel.silent" = "Silent";
-"settings.section.diagnostics" = "Diagnostics";
-"settings.label.diagnostics" = "Diagnostics";
-"settings.section.about" = "About";
-"settings.about.version" = "Version";
-"settings.about.memory" = "Memory";
+"settings.picker.logLevel" = "日志级别";
+"settings.logLevel.debug" = "调试";
+"settings.logLevel.info" = "信息";
+"settings.logLevel.warning" = "警告";
+"settings.logLevel.error" = "错误";
+"settings.logLevel.silent" = "静默";
+"settings.section.diagnostics" = "诊断";
+"settings.label.diagnostics" = "诊断";
+"settings.section.about" = "关于";
+"settings.about.version" = "版本";
+"settings.about.memory" = "内存";
 
 
 /* User Diagnostics */
-"userDiagnostics.nav.title" = "Diagnostics";
-"userDiagnostics.section.directTcp" = "Direct TCP";
-"userDiagnostics.section.proxyHttp" = "Proxy HTTP";
-"userDiagnostics.section.dns" = "DNS Resolver";
-"userDiagnostics.empty.title" = "VPN required";
-"userDiagnostics.empty.description" = "Connect to the proxy to run Proxy HTTP and DNS Resolver checks.";
-"userDiagnostics.button.test" = "Test";
-"userDiagnostics.button.testing" = "Testing…";
-"userDiagnostics.error.parseHostPort" = "Expected host:port (e.g. 1.1.1.1:443)";
+"userDiagnostics.nav.title" = "诊断";
+"userDiagnostics.section.directTcp" = "直连 TCP";
+"userDiagnostics.section.proxyHttp" = "代理 HTTP";
+"userDiagnostics.section.dns" = "DNS 解析";
+"userDiagnostics.empty.title" = "需要 VPN";
+"userDiagnostics.empty.description" = "连接代理后才能进行代理 HTTP 和 DNS 解析测试。";
+"userDiagnostics.button.test" = "测试";
+"userDiagnostics.button.testing" = "测试中…";
+"userDiagnostics.error.parseHostPort" = "需为主机:端口格式(例如 1.1.1.1:443)";
 
 
 /* Traffic */
-"traffic.nav.title" = "Traffic";
-"traffic.empty.title" = "No traffic data yet";
-"traffic.empty.description" = "Start the VPN to begin recording usage.";
-"traffic.label.speed" = "Speed";
-"traffic.label.last7Days" = "Last 7 Days";
-"traffic.tile.today" = "Today";
-"traffic.tile.thisMonth" = "This Month";
+"traffic.nav.title" = "流量";
+"traffic.empty.title" = "暂无流量数据";
+"traffic.empty.description" = "启动 VPN 后开始记录用量。";
+"traffic.label.speed" = "速率";
+"traffic.label.last7Days" = "最近 7 天";
+"traffic.tile.today" = "今天";
+"traffic.tile.thisMonth" = "本月";
 
 
 /* Fullscreen diagnostics overlay (ContentView) */
-"content.diagnostics.nav.title" = "Diagnostics";
+"content.diagnostics.nav.title" = "诊断";

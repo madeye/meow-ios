@@ -82,6 +82,7 @@
 "rulesEditor.empty.title" = "No rules";
 "rulesEditor.empty.description" = "Tap + to add the first rule.";
 "rulesEditor.button.add" = "Add";
+"rulesEditor.button.addChinaPreset" = "Add China DIRECT preset";
 "rulesEditor.button.cancel" = "Cancel";
 "rulesEditor.button.save" = "Save";
 "rulesEditor.button.saving" = "Saving…";
