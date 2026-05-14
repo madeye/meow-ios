@@ -5,8 +5,8 @@ import Yams
 
 @Suite("RulesYAMLEditor + EditableRule round-trip")
 struct RulesYAMLEditorTests {
-    @Test("DOMAIN-SUFFIX parses + serialises identically")
-    func parseDomainSuffix() throws {
+    @Test
+    func `DOMAIN-SUFFIX parses + serialises identically`() throws {
         let rule = try #require(EditableRule(rawLine: "DOMAIN-SUFFIX,google.com,Proxy"))
         #expect(rule.type == "DOMAIN-SUFFIX")
         #expect(rule.payload == "google.com")
@@ -15,8 +15,8 @@ struct RulesYAMLEditorTests {
         #expect(rule.rawLine == "DOMAIN-SUFFIX,google.com,Proxy")
     }
 
-    @Test("MATCH has no payload and collapses to two fields on emit")
-    func parseMatch() throws {
+    @Test
+    func `MATCH has no payload and collapses to two fields on emit`() throws {
         let rule = try #require(EditableRule(rawLine: "MATCH,DIRECT"))
         #expect(rule.type == "MATCH")
         #expect(rule.payload == "")
@@ -24,30 +24,30 @@ struct RulesYAMLEditorTests {
         #expect(rule.rawLine == "MATCH,DIRECT")
     }
 
-    @Test("Trailing no-resolve flag survives a round-trip on IP rules")
-    func roundTripFlags() throws {
+    @Test
+    func `Trailing no-resolve flag survives a round-trip on IP rules`() throws {
         let rule = try #require(EditableRule(rawLine: "IP-CIDR,1.1.1.1/32,DIRECT,no-resolve"))
         #expect(rule.flags == ["no-resolve"])
         #expect(rule.rawLine == "IP-CIDR,1.1.1.1/32,DIRECT,no-resolve")
     }
 
-    @Test("Whitespace around commas is folded into the canonical form")
-    func whitespaceFolding() throws {
+    @Test
+    func `Whitespace around commas is folded into the canonical form`() throws {
         let rule = try #require(EditableRule(rawLine: " DOMAIN-SUFFIX , x.com , DIRECT "))
         #expect(rule.payload == "x.com")
         #expect(rule.rawLine == "DOMAIN-SUFFIX,x.com,DIRECT")
     }
 
-    @Test("Truncated lines (no proxy) parse as nil rather than half-built")
-    func rejectsTruncatedLine() {
+    @Test
+    func `Truncated lines (no proxy) parse as nil rather than half-built`() {
         // One field — not a rule at all.
         #expect(EditableRule(rawLine: "DOMAIN-SUFFIX") == nil)
         // Two fields but type is not MATCH → still missing proxy.
         #expect(EditableRule(rawLine: "DOMAIN-SUFFIX,google.com") == nil)
     }
 
-    @Test("RulesYAMLEditor.load extracts every rule line in order")
-    func loadFromYAML() throws {
+    @Test
+    func `RulesYAMLEditor.load extracts every rule line in order`() throws {
         let yaml = """
         mode: rule
         rules:
@@ -62,8 +62,8 @@ struct RulesYAMLEditorTests {
         #expect(rules[2].type == "MATCH")
     }
 
-    @Test("RulesYAMLEditor.apply rewrites only the rules block")
-    func applyPreservesOtherKeys() throws {
+    @Test
+    func `RulesYAMLEditor.apply rewrites only the rules block`() throws {
         let source = """
         mode: rule
         log-level: info
@@ -90,20 +90,20 @@ struct RulesYAMLEditorTests {
         #expect(lines == ["MATCH,DIRECT"])
     }
 
-    @Test("Empty YAML round-trips to no rules")
-    func emptyYAML() throws {
+    @Test
+    func `Empty YAML round-trips to no rules`() throws {
         let rules = try RulesYAMLEditor.load(from: "")
         #expect(rules.isEmpty)
     }
 
-    @Test("Missing rules block returns an empty list rather than failing")
-    func missingRulesBlock() throws {
+    @Test
+    func `Missing rules block returns an empty list rather than failing`() throws {
         let rules = try RulesYAMLEditor.load(from: "mode: rule\n")
         #expect(rules.isEmpty)
     }
 
-    @Test("Non-string entries in rules: are silently dropped")
-    func dropsNonStringEntries() throws {
+    @Test
+    func `Non-string entries in rules: are silently dropped`() throws {
         // Defensive: if a future YAML ships an object-form rule shape we
         // can't parse as a single line, skip rather than crashing.
         let yaml = """

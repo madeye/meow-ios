@@ -7,15 +7,23 @@
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS is delegated to mihomo's resolver running in fake-IP mode.
+//! DNS is delegated to mihomo's resolver running in fake-IP mode for the
+//! qtypes mihomo's `DnsServer::handle_query` knows about — A (1) and AAAA
+//! (28). Anything else (HTTPS=65, SVCB=64, TXT=16, MX=15, PTR=12, …) is
+//! forwarded as a raw UDP packet to the pinned upstream pool and the
+//! response is injected straight back. mihomo's DnsServer returns NXDOMAIN
+//! for non-A/AAAA queries, which kills modern iOS connection setup (Safari's
+//! HTTPS-record probe, ECH, DNS-SD, mDNS-fallback) — the passthrough path
+//! lets those queries get a real answer instead.
+//!
 //! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
 //! every UDP DNS query arrives as an in-TUN IP packet; the ingress loop below
-//! intercepts it pre-stack, hands the raw DNS payload to
-//! `mihomo_dns::DnsServer::handle_query`, and injects the reply back into the
-//! egress channel with src/dst + ports swapped. No UDP listener socket exists
-//! — there's nothing for one to listen on. The resolver itself owns fake-IP
-//! synthesis, the reverse mapping, AAAA / hosts / NXDOMAIN semantics, and
-//! TTL handling; the FFI does not.
+//! intercepts it pre-stack, branches on qtype, and injects the reply back
+//! into the egress channel with src/dst + ports swapped. No UDP listener
+//! socket exists — there's nothing for one to listen on. The resolver itself
+//! owns fake-IP synthesis, reverse mapping, AAAA / hosts / NXDOMAIN
+//! semantics, and TTL handling for A/AAAA; the FFI owns only the qtype
+//! peek + the upstream forward.
 //!
 //! TCP/UDP destination IPs come back as fake-IPs from mihomo's resolver pool.
 //! `dispatch_tcp` and `dispatch_udp` pass the literal `dst.ip()` to
@@ -466,33 +474,61 @@ async fn run_tun2socks(
 
         // Fake-IP mode: NEDNSSettings advertises a TUN-subnet IP
         // (172.19.0.2) as the system DNS server, so every UDP DNS query
-        // arrives here as an in-TUN IP packet. Hand the raw DNS payload to
-        // `mihomo_dns::DnsServer::handle_query` — which owns fake-IP
-        // synthesis, the reverse mapping, AAAA / hosts / NXDOMAIN semantics,
-        // and TTL — swap src/dst + ports on the reply, and inject the
-        // response packet straight into the egress channel. Never let the
-        // DNS packet touch the smoltcp stack (the destination IP isn't a
-        // real host on the inside, and we'd just create an orphan session).
+        // arrives here as an in-TUN IP packet. Branch on qtype:
+        //
+        //   * A (1) / AAAA (28)  → mihomo's `DnsServer::handle_query`
+        //     (fake-IP synthesis, reverse map, hosts, TTL).
+        //   * anything else      → raw UDP forward to the pinned upstream
+        //     pool (HTTPS, SVCB, TXT, MX, PTR, …). mihomo's DnsServer
+        //     synthesises NXDOMAIN for non-A/AAAA, which kills iOS's
+        //     HTTPS-record probe + ECH + Safari's modern connect path; the
+        //     passthrough route lets those queries reach a real resolver.
+        //
+        // Never let the DNS packet touch the smoltcp stack — the
+        // destination IP isn't a real host on the inside, and we'd just
+        // create an orphan session.
         if parse_udp_packet(&ip_data).is_some_and(|p| p.dst_port == 53) {
             let request = ip_data.clone();
             let egress = egress_tx.clone();
             tokio::spawn(async move {
-                let Some(tunnel) = crate::engine::tunnel() else {
-                    trace!("tun2socks: UDP/53 query dropped — engine not yet running");
-                    return;
-                };
                 let Some(parsed) = parse_udp_packet(&request) else {
                     return;
                 };
-                let resolver = tunnel.resolver().clone();
-                let response_payload =
+                let qtype = parse_dns_qtype(parsed.payload);
+
+                let response_payload = if matches!(qtype, Some(1) | Some(28)) {
+                    let Some(tunnel) = crate::engine::tunnel() else {
+                        trace!("tun2socks: UDP/53 A/AAAA dropped — engine not yet running");
+                        return;
+                    };
+                    let resolver = tunnel.resolver().clone();
                     match DnsServer::handle_query(parsed.payload, &resolver).await {
                         Ok(bytes) => bytes,
                         Err(e) => {
                             trace!("tun2socks: DnsServer::handle_query error: {}", e);
                             return;
                         }
-                    };
+                    }
+                } else {
+                    // Non-A/AAAA: forward verbatim to the upstream pool,
+                    // first response wins. Falls through to NXDOMAIN-shaped
+                    // dropped reply if every upstream times out — better
+                    // than mihomo's blanket NXDOMAIN, which actively
+                    // misleads the client.
+                    match forward_dns_to_upstream(
+                        parsed.payload,
+                        DNS_PASSTHROUGH_UPSTREAMS,
+                        DNS_PASSTHROUGH_TIMEOUT,
+                    )
+                    .await
+                    {
+                        Some(bytes) => bytes,
+                        None => {
+                            trace!("tun2socks: DNS passthrough timed out (qtype={:?})", qtype);
+                            return;
+                        }
+                    }
+                };
                 let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
                     return;
                 };
@@ -818,6 +854,111 @@ fn spawn_udp_reply_reader(
 }
 
 // ---------------------------------------------------------------------------
+// DNS passthrough — for qtypes mihomo's resolver doesn't synthesise (anything
+// other than A / AAAA) we forward the raw query to one of the pinned
+// upstream resolvers and inject the reply back. Mirrors the upstream pool in
+// `engine::pinned_dns_block` (CN-side, no anycast) so that split-horizon
+// answers are consistent across the A/AAAA and HTTPS/SVCB/TXT paths.
+// ---------------------------------------------------------------------------
+
+/// Pinned UDP/53 upstream pool used for non-A/AAAA passthrough. Kept in
+/// sync with `engine::pinned_dns_block`'s nameserver list; if you add or
+/// remove a CN nameserver there, mirror it here.
+const DNS_PASSTHROUGH_UPSTREAMS: &[&str] = &["119.29.29.29:53", "223.5.5.5:53"];
+
+/// Per-attempt deadline before we give up on the whole upstream pool. iOS
+/// clients retry on their own when no reply comes back — we'd rather drop
+/// the response than hold a `tokio::spawn` task open indefinitely against
+/// a dead upstream.
+const DNS_PASSTHROUGH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Read the qtype from the first question of a DNS query payload. Returns
+/// `None` for malformed packets (truncation, missing terminator). Handles
+/// the RFC-1035 §4.1.4 message-compression pointer encoding (top two bits
+/// of the length octet set → 16-bit pointer back into the message)
+/// because some clients send a compressed query name even though it's the
+/// first occurrence — overly defensive but cheap.
+pub(crate) fn parse_dns_qtype(payload: &[u8]) -> Option<u16> {
+    if payload.len() < 12 {
+        return None;
+    }
+    let qdcount = u16::from_be_bytes([payload[4], payload[5]]);
+    if qdcount == 0 {
+        return None;
+    }
+    let mut pos = 12usize;
+    loop {
+        let len = *payload.get(pos)? as usize;
+        if len == 0 {
+            pos = pos.checked_add(1)?;
+            break;
+        }
+        if len & 0xC0 == 0xC0 {
+            // Compression pointer is a 2-byte field; qtype follows the
+            // pointer (we don't need to chase the pointer for qtype).
+            pos = pos.checked_add(2)?;
+            break;
+        }
+        pos = pos.checked_add(1 + len)?;
+    }
+    let hi = *payload.get(pos)?;
+    let lo = *payload.get(pos.checked_add(1)?)?;
+    Some(u16::from_be_bytes([hi, lo]))
+}
+
+/// Forward `query` verbatim to each upstream in parallel, return the
+/// first reply whose 16-bit DNS ID matches the query. `None` if every
+/// upstream times out, errors, or replies with a mismatched ID.
+///
+/// Uses a fresh ephemeral UDP socket per upstream; iOS extension sockets
+/// bypass the tunnel by default so the dial reaches the real upstream
+/// over the device's underlying network interface rather than looping
+/// back into the tun's UDP/53 intercept.
+pub(crate) async fn forward_dns_to_upstream(
+    query: &[u8],
+    upstreams: &[&str],
+    timeout: std::time::Duration,
+) -> Option<Vec<u8>> {
+    if upstreams.is_empty() || query.len() < 2 {
+        return None;
+    }
+    let query_id = u16::from_be_bytes([query[0], query[1]]);
+    let query_owned = query.to_vec();
+
+    type DnsForwardFut = Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>>;
+    let mut futs: Vec<DnsForwardFut> = Vec::with_capacity(upstreams.len());
+    for upstream in upstreams {
+        let Ok(addr) = upstream.parse::<SocketAddr>() else {
+            continue;
+        };
+        let q = query_owned.clone();
+        futs.push(Box::pin(async move {
+            let socket = tokio::net::UdpSocket::bind(("0.0.0.0", 0u16)).await.ok()?;
+            socket.send_to(&q, addr).await.ok()?;
+            let mut buf = vec![0u8; 1500];
+            let recv = tokio::time::timeout(timeout, socket.recv_from(&mut buf)).await;
+            let (n, _) = recv.ok()?.ok()?;
+            buf.truncate(n);
+            // RFC 1035 §4.1.1 — a reply's ID must match the query's ID;
+            // otherwise it's stray traffic on this ephemeral port.
+            if buf.len() >= 2 && u16::from_be_bytes([buf[0], buf[1]]) == query_id {
+                Some(buf)
+            } else {
+                None
+            }
+        }));
+    }
+    while !futs.is_empty() {
+        let (result, _idx, remaining) = futures::future::select_all(futs).await;
+        if result.is_some() {
+            return result;
+        }
+        futs = remaining;
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
 // UDP helpers — minimal IPv4/UDP parser used to identify in-TUN DNS traffic
 // (UDP/53) so it can be dropped pre-stack. See ingress loop in `run_tun2socks`.
 // ---------------------------------------------------------------------------
@@ -951,6 +1092,139 @@ mod tests {
         // payload
         pkt.extend_from_slice(b"QQQQ");
         pkt
+    }
+
+    /// Build a minimal DNS query payload (header + one question) for a
+    /// given qname + qtype. No EDNS, no compression, IN class.
+    fn dns_query(qname: &str, qtype: u16) -> Vec<u8> {
+        let mut pkt = Vec::new();
+        pkt.extend_from_slice(&[0xAB, 0xCD]); // ID = 0xABCD
+        pkt.extend_from_slice(&[0x01, 0x00]); // standard query, RD set
+        pkt.extend_from_slice(&[0x00, 0x01]); // QDCOUNT = 1
+        pkt.extend_from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]); // AN/NS/AR = 0
+        for label in qname.split('.') {
+            pkt.push(label.len() as u8);
+            pkt.extend_from_slice(label.as_bytes());
+        }
+        pkt.push(0x00); // qname terminator
+        pkt.extend_from_slice(&qtype.to_be_bytes()); // QTYPE
+        pkt.extend_from_slice(&[0x00, 0x01]); // QCLASS = IN
+        pkt
+    }
+
+    #[test]
+    fn parse_qtype_recognises_a() {
+        let pkt = dns_query("example.com", 1);
+        assert_eq!(parse_dns_qtype(&pkt), Some(1));
+    }
+
+    #[test]
+    fn parse_qtype_recognises_aaaa() {
+        let pkt = dns_query("example.com", 28);
+        assert_eq!(parse_dns_qtype(&pkt), Some(28));
+    }
+
+    #[test]
+    fn parse_qtype_recognises_https() {
+        // qtype 65 (HTTPS RR, RFC 9460) — the iOS-Safari modern probe
+        // that motivated the passthrough path.
+        let pkt = dns_query("xhscdn.com", 65);
+        assert_eq!(parse_dns_qtype(&pkt), Some(65));
+    }
+
+    #[test]
+    fn parse_qtype_recognises_svcb_and_txt_and_mx_and_ptr() {
+        for qtype in [12u16, 15, 16, 64] {
+            let pkt = dns_query("a.b.c", qtype);
+            assert_eq!(parse_dns_qtype(&pkt), Some(qtype));
+        }
+    }
+
+    #[test]
+    fn parse_qtype_handles_compression_pointer_in_qname() {
+        // Synthetic: qname is a 2-byte compression pointer (0xC0 0x0C →
+        // points back to offset 12, the original qname). Some clients
+        // emit this even though pointers in queries are pathological;
+        // the parser must skip the 2-byte field and read qtype after.
+        let mut pkt = Vec::new();
+        pkt.extend_from_slice(&[0xAB, 0xCD, 0x01, 0x00, 0x00, 0x01]);
+        pkt.extend_from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        pkt.extend_from_slice(&[0xC0, 0x0C]); // compression pointer "qname"
+        pkt.extend_from_slice(&[0x00, 0x41]); // qtype = 65 (HTTPS)
+        pkt.extend_from_slice(&[0x00, 0x01]); // qclass = IN
+        assert_eq!(parse_dns_qtype(&pkt), Some(65));
+    }
+
+    #[test]
+    fn parse_qtype_rejects_short_packet() {
+        assert_eq!(parse_dns_qtype(&[]), None);
+        assert_eq!(parse_dns_qtype(&[0; 11]), None);
+    }
+
+    #[test]
+    fn parse_qtype_rejects_zero_qdcount() {
+        let mut pkt = dns_query("a.b", 1);
+        pkt[4] = 0;
+        pkt[5] = 0; // QDCOUNT = 0
+        assert_eq!(parse_dns_qtype(&pkt), None);
+    }
+
+    #[test]
+    fn parse_qtype_rejects_truncated_qname() {
+        // Length octet promises 32 bytes but the buffer ends right after.
+        let pkt = vec![
+            0xAB, 0xCD, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, b'x',
+        ];
+        assert_eq!(parse_dns_qtype(&pkt), None);
+    }
+
+    #[tokio::test]
+    async fn forward_dns_returns_first_matching_reply() {
+        // Spin up a tiny UDP echo "resolver" that just rewrites the QR
+        // bit and sends back the query verbatim — close enough for the
+        // ID-match contract this function enforces.
+        let listener = tokio::net::UdpSocket::bind(("127.0.0.1", 0u16))
+            .await
+            .expect("bind echo");
+        let upstream = format!("{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 1500];
+            if let Ok((n, src)) = listener.recv_from(&mut buf).await {
+                buf.truncate(n);
+                if buf.len() >= 3 {
+                    buf[2] |= 0x80; // set QR (response) bit
+                }
+                let _ = listener.send_to(&buf, src).await;
+            }
+        });
+        let query = dns_query("example.com", 65);
+        let reply = forward_dns_to_upstream(
+            &query,
+            &[upstream.as_str()],
+            std::time::Duration::from_secs(2),
+        )
+        .await
+        .expect("upstream replied");
+        // ID echoed back, QR bit now set.
+        assert_eq!(&reply[0..2], &query[0..2]);
+        assert_eq!(reply[2] & 0x80, 0x80, "response bit set");
+    }
+
+    #[tokio::test]
+    async fn forward_dns_times_out_when_upstream_drops() {
+        // Bind a socket but never read — every send will sit unanswered.
+        let listener = tokio::net::UdpSocket::bind(("127.0.0.1", 0u16))
+            .await
+            .expect("bind sink");
+        let upstream = format!("{}", listener.local_addr().unwrap());
+        let query = dns_query("example.com", 65);
+        let reply = forward_dns_to_upstream(
+            &query,
+            &[upstream.as_str()],
+            std::time::Duration::from_millis(120),
+        )
+        .await;
+        assert!(reply.is_none(), "expected timeout, got {:?}", reply);
     }
 
     #[test]
