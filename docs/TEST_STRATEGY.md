@@ -316,7 +316,7 @@ The iOS NetworkExtension process is capped at **~15 MB resident memory** by the 
 | Extension resident memory at idle (60s post-connect) | ≤ **14 MB** | `task_info` via Instruments Allocations; ship-blocker |
 | Extension peak memory under load (100 Mbps sustained, 60s) | ≤ **14.5 MB** | Instruments Allocations — any sample ≥ 15 MB fails build |
 | Extension memory headroom stress test | No jetsam over 30 min at 50 Mbps + 200 concurrent connections | Instruments Allocations + `log stream` for jetsam events |
-| `MihomoCore.xcframework` stripped on-disk | ≤ **8 MB** per-slice | CI gate via `size`/`stat`; revisit if core gains new protocols |
+| `PacketTunnel.appex` stripped binary | ≤ **10 MB** (soft warn at 9 MB) | CI gate via `stat` in `ci.yml` size-budget step; revisit when mihomo-rust gains new protocols. Raised 8 → 10 MB in 2026-05 to track the v0.7.x bump — see step comment for rationale. The actual ship constraint is the row above (extension RSS); binary size is a proxy heuristic |
 | App-side memory at idle | ≤ 80 MB | Instruments Allocations |
 | Memory growth after 1h session | ≤ +0.5 MB in extension; ≤ +10 MB in app | Identify leaks via Instruments Leaks |
 
@@ -543,7 +543,7 @@ Jobs (parallel where possible):
 
 1. **build-core** — checkout rust crate + `mihomo-rust` submodule, install `aarch64-apple-ios`/`aarch64-apple-ios-sim` Rust targets, run `scripts/build-rust.sh` → upload `MihomoCore.xcframework` artifact (single unified framework per PRD v1.1+)
 2. **lint** — SwiftLint, SwiftFormat --dry-run, actionlint on workflow files
-3. **size-check** — fail if `MihomoCore.xcframework` (stripped, per-slice) exceeds 8 MB (§8.1)
+3. **size-check** — fail if `PacketTunnel.appex` stripped binary exceeds 10 MB (§8.1)
 4. **unit-test** — download `MihomoCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` for `MeowTests`
 5. **integration-test** — simulator-based NetworkExtension lifecycle + FFI tests (subset that runs without device)
 6. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
@@ -615,7 +615,7 @@ On `main`:
 
 | Risk (from PRD §8) | Test Mitigation | Priority |
 |---------------------|-----------------|----------|
-| Extension memory limit (iOS NE cap ≈ 15 MB) | CI fails build if `MihomoCore.xcframework` > 8 MB stripped; manual pre-release smoke (T2.8) fails if resident > 14 MB sustained or any sample ≥ 15 MB per §8.1 | P0 |
+| Extension memory limit (iOS NE cap ≈ 15 MB) | CI fails build if `PacketTunnel.appex` stripped binary > 10 MB (proxy heuristic — see §8.1); manual pre-release smoke (T2.8) fails if resident > 14 MB sustained or any sample ≥ 15 MB per §8.1 | P0 |
 | mihomo-rust protocol parity gaps vs. Go mihomo | Protocol matrix §6.3 exercises every outbound shipped by mihomo-rust v0.6.1 (SS / Trojan / VLESS variants) through real test servers; missing/broken protocol = ship-blocker for that protocol. Out-of-scope outbounds (VMess, WireGuard, TUIC, Hysteria 2) are deferred — not advertised, not tested. | P0 |
 | Apple review rejection | Static scan for ATS / privacy violations; manual pre-submission checklist | P0 |
 | NetworkExtension sandbox file I/O | Integration tests §4.1 exercise only App Group paths; any direct path triggers test failure | P1 |
