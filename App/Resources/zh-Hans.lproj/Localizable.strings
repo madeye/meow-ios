@@ -79,6 +79,30 @@
 "rules.empty.title" = "No rules";
 "rules.empty.description" = "Rules appear when a profile is loaded.";
 "rules.nav.titleFormat %lld" = "Rules (%lld)";
+"rules.button.edit" = "编辑";
+
+/* Rules editor (structured per-rule edit sheet) */
+"rulesEditor.nav.title" = "编辑规则";
+"rulesEditor.empty.title" = "无规则";
+"rulesEditor.empty.description" = "点击 + 添加第一条规则。";
+"rulesEditor.button.add" = "添加";
+"rulesEditor.button.cancel" = "取消";
+"rulesEditor.button.save" = "保存";
+"rulesEditor.button.saving" = "保存中…";
+
+/* Single-rule editor sheet */
+"ruleEditor.nav.title" = "规则";
+"ruleEditor.section.type" = "类型";
+"ruleEditor.section.payload" = "匹配项";
+"ruleEditor.section.proxy" = "代理";
+"ruleEditor.field.type" = "类型";
+"ruleEditor.field.payload" = "匹配项";
+"ruleEditor.field.proxy" = "代理";
+"ruleEditor.field.proxy.custom" = "自定义名称";
+"ruleEditor.field.noResolve" = "no-resolve";
+"ruleEditor.field.noResolve.footer" = "匹配前跳过 DNS 解析。仅当 IP 规则应只匹配已解析的目标时使用。";
+"ruleEditor.button.cancel" = "取消";
+"ruleEditor.button.save" = "保存";
 
 
 /* Logs */

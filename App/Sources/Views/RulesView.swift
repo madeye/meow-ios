@@ -1,10 +1,16 @@
 import MeowModels
+import SwiftData
 import SwiftUI
 
 struct RulesView: View {
     @Environment(MihomoAPI.self) private var api
+    /// The user's active profile drives the editor — that's where the
+    /// authoritative `rules:` block lives. The Edit button stays disabled
+    /// while no profile is selected (matches `ProxyGroupsView`'s pattern).
+    @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
     @State private var rules: [Rule] = []
     @State private var errorMessage: String?
+    @State private var presentingEditor = false
 
     var body: some View {
         List {
@@ -32,6 +38,30 @@ struct RulesView: View {
             "rules.nav.titleFormat \(rules.count)",
             comment: "Rules screen navigation title; %lld = rule count",
         ))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    presentingEditor = true
+                } label: {
+                    Label("rules.button.edit", systemImage: "pencil")
+                }
+                .disabled(selected.first == nil)
+                .accessibilityIdentifier("rules.editButton")
+            }
+        }
+        .sheet(
+            isPresented: $presentingEditor,
+            // The editor wrote the source YAML; the live `/rules` table is
+            // still serving pre-edit state until the tunnel restarts. Re-
+            // fetch anyway so any same-process edits that the engine *does*
+            // pick up (none today, but cheap insurance) become visible.
+            onDismiss: { Task { await load() } },
+            content: {
+                if let profile = selected.first {
+                    RulesEditorView(profile: profile)
+                }
+            },
+        )
         .refreshable { await load() }
         .task { await load() }
     }

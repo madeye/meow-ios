@@ -75,6 +75,30 @@
 "rules.empty.title" = "No rules";
 "rules.empty.description" = "Rules appear when a profile is loaded.";
 "rules.nav.titleFormat %lld" = "Rules (%lld)";
+"rules.button.edit" = "Edit";
+
+/* Rules editor (structured per-rule edit sheet) */
+"rulesEditor.nav.title" = "Edit Rules";
+"rulesEditor.empty.title" = "No rules";
+"rulesEditor.empty.description" = "Tap + to add the first rule.";
+"rulesEditor.button.add" = "Add";
+"rulesEditor.button.cancel" = "Cancel";
+"rulesEditor.button.save" = "Save";
+"rulesEditor.button.saving" = "Saving…";
+
+/* Single-rule editor sheet */
+"ruleEditor.nav.title" = "Rule";
+"ruleEditor.section.type" = "Type";
+"ruleEditor.section.payload" = "Payload";
+"ruleEditor.section.proxy" = "Proxy";
+"ruleEditor.field.type" = "Type";
+"ruleEditor.field.payload" = "Payload";
+"ruleEditor.field.proxy" = "Proxy";
+"ruleEditor.field.proxy.custom" = "Custom name";
+"ruleEditor.field.noResolve" = "no-resolve";
+"ruleEditor.field.noResolve.footer" = "Skip DNS resolution before matching. Use for IP rules that should match only on already-resolved destinations.";
+"ruleEditor.button.cancel" = "Cancel";
+"ruleEditor.button.save" = "Save";
 
 
 /* Logs */
