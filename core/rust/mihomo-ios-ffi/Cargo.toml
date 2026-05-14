@@ -2,7 +2,7 @@
 name = "mihomo-ios-ffi"
 version = "0.1.0"
 edition = "2021"
-description = "mihomo-rust engine + tun2socks + fake-IP DNS for meow-ios — C ABI, no Go, no JNI."
+description = "mihomo-rust engine + tun2socks for meow-ios — C ABI, no Go, no JNI. DNS is delegated in-process to mihomo's resolver in fake-IP mode."
 
 [lib]
 # `staticlib` is the iOS xcframework consumer; `rlib` exists so the
@@ -37,8 +37,9 @@ oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
 # `rustls` is declared so `engine::start` can install the ring crypto
 # provider once at process init for any HTTPS the mihomo engine itself
-# opens (subscription fetch, HTTPS outbound, …). Fake-IP DNS doesn't
-# terminate TLS, so this is the only direct rustls consumer.
+# opens (subscription fetch, HTTPS outbound, …). The tun2socks UDP/53
+# intercept defers parse/serialize to `mihomo_dns::DnsServer::handle_query`,
+# so this is the only direct rustls consumer.
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -56,21 +57,15 @@ urlencoding = "2"
 # tun2socks
 netstack-smoltcp = "0.2"
 
-# Fake-IP DNS server: DNS message parse/serialize. Already pulled in
-# transitively through `mihomo-dns`'s `hickory-resolver`, but we declare
-# it explicitly so the import surface in `src/fake_ip_dns.rs` is pinned
-# alongside the lockfile entry.
-hickory-proto = "0.25"
-
 # Embedded mihomo-rust engine. Pinned to a release tag; bump deliberately
 # rather than tracking main. Each crate is a workspace member of
 # madeye/mihomo-rust.
-mihomo-common = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.2" }
-mihomo-config = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.2" }
-mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.2" }
-mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.2" }
-mihomo-api = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.2" }
-mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.2" }
+mihomo-common = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.3" }
+mihomo-config = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.3" }
+mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.3" }
+mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.3" }
+mihomo-api = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.3" }
+mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.3" }
 
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
@@ -86,9 +81,11 @@ smoltcp = { git = "https://github.com/madeye/smoltcp", branch = "fix/reject-byte
 cbindgen = "0.28"
 
 [dev-dependencies]
-# xdg_home_dir_tests probes the env-var wire-up via the GeoIP load path.
-# `maxminddb` was previously a top-level dependency for the now-removed
-# china-DNS split-horizon module; it stays as dev-only to keep that test.
+# `xdg_home_dir_tests` probes the env-var wire-up via mihomo-config's GeoIP
+# load path. No FFI-side GeoIP / CN-range table is loaded at runtime any
+# longer — mihomo's resolver owns the GEOIP rule path — but the test keeps
+# `maxminddb` (dev-only, zero shipping impact) so it can also open the
+# fixture MMDB directly and prove the env-derived path resolves correctly.
 tempfile = "3"
 maxminddb = "0.27"
 

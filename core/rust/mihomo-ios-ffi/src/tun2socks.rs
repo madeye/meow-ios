@@ -7,21 +7,27 @@
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS lives in `crate::fake_ip_dns::handle_query`, invoked inline from the
-//! ingress loop below. NEDNSSettings advertises a TUN-subnet address as the
-//! system resolver, so every UDP DNS query arrives as an in-TUN IP packet;
-//! we intercept it pre-stack, run it through the handler, and inject the
-//! reply back into the egress channel with src/dst + ports swapped. No UDP
-//! listener socket exists — there's nothing for one to listen on.
+//! DNS is delegated to mihomo's resolver running in fake-IP mode.
+//! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
+//! every UDP DNS query arrives as an in-TUN IP packet; the ingress loop below
+//! intercepts it pre-stack, hands the raw DNS payload to
+//! `mihomo_dns::DnsServer::handle_query`, and injects the reply back into the
+//! egress channel with src/dst + ports swapped. No UDP listener socket exists
+//! — there's nothing for one to listen on. The resolver itself owns fake-IP
+//! synthesis, the reverse mapping, AAAA / hosts / NXDOMAIN semantics, and
+//! TTL handling; the FFI does not.
 //!
-//! TCP/UDP destination IPs come back as fake-IPs from the
-//! `crate::fake_ip` pool; both `dispatch_tcp` and `dispatch_udp` reverse
-//! them to hostnames before populating `metadata.host`, so mihomo's
-//! rule/proxy chain sees the original qname rather than the synthetic IP.
+//! TCP/UDP destination IPs come back as fake-IPs from mihomo's resolver pool.
+//! `dispatch_tcp` and `dispatch_udp` pass the literal `dst.ip()` to
+//! `mihomo_tunnel`, whose `pre_handle_metadata` reverses any fake-IP back to
+//! the original qname before rule matching — so the rule / proxy chain still
+//! sees the hostname rather than the synthetic IP, without the FFI keeping
+//! its own pool.
 
 use crate::logging;
 use futures::{SinkExt, StreamExt};
 use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
+use mihomo_dns::DnsServer;
 use mihomo_tunnel::tunnel::TunnelInner;
 use mihomo_tunnel::udp::UdpSession;
 use parking_lot::Mutex;
@@ -460,28 +466,33 @@ async fn run_tun2socks(
 
         // Fake-IP mode: NEDNSSettings advertises a TUN-subnet IP
         // (172.19.0.2) as the system DNS server, so every UDP DNS query
-        // arrives here as an in-TUN IP packet. Hand it to
-        // `fake_ip_dns::handle_query`, swap src/dst + ports on the reply,
-        // and inject the response packet straight into the egress channel
-        // — never let it touch the smoltcp stack (the destination IP isn't
-        // a real host on the inside, and we'd just create an orphan
-        // session).
+        // arrives here as an in-TUN IP packet. Hand the raw DNS payload to
+        // `mihomo_dns::DnsServer::handle_query` — which owns fake-IP
+        // synthesis, the reverse mapping, AAAA / hosts / NXDOMAIN semantics,
+        // and TTL — swap src/dst + ports on the reply, and inject the
+        // response packet straight into the egress channel. Never let the
+        // DNS packet touch the smoltcp stack (the destination IP isn't a
+        // real host on the inside, and we'd just create an orphan session).
         if parse_udp_packet(&ip_data).is_some_and(|p| p.dst_port == 53) {
             let request = ip_data.clone();
             let egress = egress_tx.clone();
             tokio::spawn(async move {
-                let Some(resolver) = crate::fake_ip_dns::resolver() else {
-                    trace!("tun2socks: UDP/53 query dropped — resolver not yet published");
+                let Some(tunnel) = crate::engine::tunnel() else {
+                    trace!("tun2socks: UDP/53 query dropped — engine not yet running");
                     return;
                 };
                 let Some(parsed) = parse_udp_packet(&request) else {
                     return;
                 };
-                let Some(response_payload) =
-                    crate::fake_ip_dns::handle_query(parsed.payload, &resolver).await
-                else {
-                    return;
-                };
+                let resolver = tunnel.resolver().clone();
+                let response_payload =
+                    match DnsServer::handle_query(parsed.payload, &resolver).await {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            trace!("tun2socks: DnsServer::handle_query error: {}", e);
+                            return;
+                        }
+                    };
                 let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
                     return;
                 };
@@ -559,56 +570,22 @@ async fn dispatch_tcp(
         return;
     };
 
-    // Reverse the fake-IP back to the hostname captured at DNS-allocation
-    // time, but only if the destination is actually inside the fake-IP
-    // pool's CIDR. For any real-IP handshake — clients dialing literal IPs
-    // or CN-bypass DNS replies that returned upstream-real addresses — we
-    // skip the reverse-lookup entirely and let mihomo's rule engine route
-    // on the literal `dst_ip`. This avoids acquiring the pool mutex on
-    // every real-IP TCP flow and, more importantly, avoids any chance of a
-    // stale reverse-lookup hit if the pool's CIDR were ever widened.
-    let pool = crate::fake_ip::pool();
-    let (host, dst_ip) = if pool.contains(dst.ip()) {
-        // dst is inside the fake-IP CIDR — it MUST resolve to a hostname we
-        // allocated earlier. A miss means the allocation was evicted (LRU
-        // pressure or TTL expiry) and we no longer know what real host this
-        // synthetic address stood in for. Routing the literal 28.x.x.x to
-        // mihomo would dial an unreachable address; drop the flow instead
-        // so the client retries DNS and gets a fresh allocation.
-        match pool.reverse_lookup(dst.ip()) {
-            Some(hostname) => (hostname, None),
-            None => {
-                logging::bridge_log(&format!(
-                    "tun2socks: dropping TCP flow — fake-IP {} has no pool entry",
-                    dst.ip()
-                ));
-                return;
-            }
-        }
-    } else {
-        (String::new(), Some(dst.ip()))
-    };
-
-    dispatch_tcp_via_mihomo(stream, src, dst, state, tunnel, host, dst_ip).await;
-}
-
-async fn dispatch_tcp_via_mihomo(
-    stream: NetstackTcpStream,
-    src: SocketAddr,
-    dst: SocketAddr,
-    state: Arc<FlowState>,
-    tunnel: mihomo_tunnel::Tunnel,
-    host: String,
-    dst_ip: Option<std::net::IpAddr>,
-) {
+    // No FFI-side fake-IP reverse: hand `dst.ip()` straight to mihomo with
+    // an empty host. `mihomo_tunnel::tcp::handle_tcp` calls
+    // `pre_handle_metadata` first, which consults the resolver's fake-IP
+    // reverse table — if `dst.ip()` is inside the resolver's pool the
+    // metadata is rewritten in place to `(host: <qname>, dst_ip: None)`
+    // before rule matching, and if it isn't (literal-IP dial, fallback
+    // answer, etc.) the rule engine matches on the literal IP. Either way
+    // the FFI does not need its own pool.
     let metadata = Metadata {
         network: Network::Tcp,
         conn_type: ConnType::Inner,
         src_ip: Some(src.ip()),
         src_port: src.port(),
-        dst_ip,
+        dst_ip: Some(dst.ip()),
         dst_port: dst.port(),
-        host: host.into(),
+        host: String::new().into(),
         ..Default::default()
     };
 
@@ -669,10 +646,9 @@ impl ProxyConn for NetstackConn {
 ///
 /// Generic over the inner stream so the idle-tracking semantics apply to
 /// the mihomo path (`IdleTracking<NetstackConn>`, served as a
-/// `Box<dyn ProxyConn>` to `mihomo_tunnel::tcp::handle_tcp`). The CN-IP
-/// direct-bypass relay that used the same wrapper over a raw
-/// `tokio::net::TcpStream` was removed when DNS moved to fake-IP mode —
-/// every TCP flow now goes through `dispatch_tcp_via_mihomo`.
+/// `Box<dyn ProxyConn>` to `mihomo_tunnel::tcp::handle_tcp`). Every TCP
+/// flow goes through `mihomo_tunnel::tcp::handle_tcp`; there is no
+/// alternate FFI-side bypass relay any more.
 struct IdleTracking<T> {
     inner: T,
     state: Arc<FlowState>,
@@ -724,8 +700,9 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for IdleTracking<T> {
 }
 
 // `ProxyConn` only matters on the mihomo path (the trait is consumed by
-// `mihomo_tunnel::tcp::handle_tcp`); scope the impl to the netstack flavor so
-// the CN-IP-direct wrapper doesn't have to invent a `remote_destination()`.
+// `mihomo_tunnel::tcp::handle_tcp`); scope the impl to the netstack flavor
+// so other future `IdleTracking<_>` instantiations don't have to invent a
+// `remote_destination()` they wouldn't use.
 impl ProxyConn for IdleTracking<NetstackConn> {
     fn remote_destination(&self) -> String {
         self.inner.remote_destination()
@@ -754,46 +731,33 @@ async fn dispatch_udp(
         return;
     };
 
-    // Same fake-IP reverse as the TCP path: hand mihomo the hostname when
-    // we have one, otherwise let the engine route on the literal IP. The
-    // CIDR pre-filter skips the pool mutex for real-IP UDP flows (DNS
-    // bootstrap to upstream resolvers, QUIC to CN-bypass real IPs, …).
-    let pool = crate::fake_ip::pool();
-    let (host, dst_ip) = if pool.contains(dst.ip()) {
-        // See dispatch_tcp's matching arm for the drop rationale: a fake-IP
-        // datagram with no pool entry has nowhere to go.
-        match pool.reverse_lookup(dst.ip()) {
-            Some(hostname) => (hostname, None),
-            None => {
-                logging::bridge_log(&format!(
-                    "tun2socks: dropping UDP datagram — fake-IP {} has no pool entry",
-                    dst.ip()
-                ));
-                return;
-            }
-        }
-    } else {
-        (String::new(), Some(dst.ip()))
-    };
-
+    // No FFI-side fake-IP reverse: pass `dst.ip()` through and let mihomo's
+    // `pre_handle_metadata` rewrite to the qname when the destination is
+    // inside the resolver's fake-IP pool, exactly like the TCP path.
     let mut metadata = Metadata {
         network: Network::Udp,
         conn_type: ConnType::Inner,
         src_ip: Some(src.ip()),
         src_port: src.port(),
-        dst_ip,
+        dst_ip: Some(dst.ip()),
         dst_port: dst.port(),
-        host: host.into(),
+        host: String::new().into(),
         ..Default::default()
     };
 
-    // ADR-0008 post-Direction-A NAT key: (src SocketAddr, resolved dst
-    // SocketAddr). mihomo-tunnel calls `pre_resolve` internally before
-    // inserting into `nat_table`; we must match its output exactly or the
-    // subsequent `nat_table.get(&key)` misses. `host` was already populated
-    // above from the fake-IP pool reverse-lookup, so `pre_resolve` just
-    // resolves it through the engine resolver and fills `dst_ip` — same
-    // call mihomo would make internally, kept idempotent on second invoke.
+    // Mirror `handle_udp`'s prologue so the NAT key we compute here matches
+    // exactly what handle_udp will insert into `nat_table`:
+    //
+    //   1. `pre_handle_metadata` — if `dst.ip()` is a fake-IP, this rewrites
+    //      metadata to `(host: <qname>, dst_ip: None)`.
+    //   2. `pre_resolve` — re-resolves the host (if any) through the engine
+    //      resolver and re-populates `dst_ip` with the real upstream IP.
+    //
+    // Both calls are idempotent — handle_udp invokes them again internally
+    // and they short-circuit on the already-populated metadata. The
+    // round-trip is unavoidable on this side because we need the resolved
+    // SocketAddr to key the reply-reader registry.
+    tunnel.inner().pre_handle_metadata(&mut metadata);
     tunnel.inner().pre_resolve(&mut metadata).await;
     let Some(resolved_ip) = metadata.dst_ip else {
         // Resolution failed — handle_udp will also bail, nothing to dispatch.

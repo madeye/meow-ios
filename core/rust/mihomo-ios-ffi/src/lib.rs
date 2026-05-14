@@ -10,20 +10,19 @@
 //!                                          rules / proxies / DNS / REST API
 //!
 //! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
-//! owns a single tokio runtime that both halves share. DNS runs in fake-IP
-//! NAT mode: `fake_ip_dns` answers A queries with synthetic IPs from the
-//! `fake_ip` pool (AAAA → empty NOERROR; other RR types delegate to
-//! `mihomo_dns::DnsServer::handle_query`). The tun2socks dispatch path
-//! reverses each fake IP back to its hostname through the pool before
-//! handing the flow to `mihomo_tunnel`, so the real resolution happens
-//! inside the engine's outbound chain. The crate no longer ships a DoH
-//! cache, china-DNS split-horizon, or in-FFI TCP-DNS client.
+//! owns a single tokio runtime that both halves share. DNS is delegated
+//! end-to-end to mihomo's resolver running in fake-IP mode: the tun2socks
+//! UDP/53 intercept hands every in-TUN DNS datagram straight to
+//! `mihomo_dns::DnsServer::handle_query`, which synthesises the fake-IP, owns
+//! the reverse mapping, and answers AAAA / hosts / NXDOMAIN consistently.
+//! The TCP and UDP dispatch paths then pass the literal fake-IP destination
+//! to `mihomo_tunnel`, whose `pre_handle_metadata` reverses it back to the
+//! original hostname before rule matching. The FFI no longer carries its
+//! own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH cache, or
+//! in-FFI TCP-DNS client.
 
-mod cn_iprange;
 mod diagnostics;
 mod engine;
-mod fake_ip;
-mod fake_ip_dns;
 mod logging;
 mod subscription;
 mod tun2socks;

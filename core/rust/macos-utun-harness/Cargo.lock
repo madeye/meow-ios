@@ -109,15 +109,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "arc-swap"
-version = "1.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a3a1fd6f75306b68087b831f025c712524bcb19aad54e557b1129cfa0a2b207"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -777,18 +768,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
-name = "enum-as-inner"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e6a265c649f3f5979b601d26f1d05ada116434c87741c9493cb56218f76cbc"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -850,15 +829,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "fsevent-sys"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -1118,7 +1088,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "h2",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "http",
  "idna",
  "ipnet",
@@ -1129,31 +1099,6 @@ dependencies = [
  "tinyvec",
  "tokio",
  "tokio-rustls",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "hickory-proto"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
-dependencies = [
- "async-trait",
- "cfg-if",
- "data-encoding",
- "enum-as-inner",
- "futures-channel",
- "futures-io",
- "futures-util",
- "idna",
- "ipnet",
- "once_cell",
- "rand 0.9.4",
- "ring",
- "thiserror 2.0.18",
- "tinyvec",
- "tokio",
  "tracing",
  "url",
 ]
@@ -1181,27 +1126,6 @@ dependencies = [
 
 [[package]]
 name = "hickory-resolver"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc62a9a99b0bfb44d2ab95a7208ac952d31060efc16241c87eaf36406fecf87a"
-dependencies = [
- "cfg-if",
- "futures-util",
- "hickory-proto 0.25.2",
- "ipconfig",
- "moka",
- "once_cell",
- "parking_lot",
- "rand 0.9.4",
- "resolv-conf",
- "smallvec",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "hickory-resolver"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0d58d28879ceecde6607729660c2667a081ccdc082e082675042793960f178c"
@@ -1209,7 +1133,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "ipconfig",
  "ipnet",
  "jni",
@@ -1240,7 +1164,7 @@ dependencies = [
  "data-encoding",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "ipnet",
  "prefix-trie",
  "serde",
@@ -1496,26 +1420,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inotify"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd5b3eaf1a28b758ac0faa5a4254e8ab2705605496f1b1f3fbbc3988ad73d199"
-dependencies = [
- "bitflags 2.11.1",
- "inotify-sys",
- "libc",
-]
-
-[[package]]
-name = "inotify-sys"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1651,26 +1555,6 @@ dependencies = [
  "futures-util",
  "once_cell",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "kqueue"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eac30106d7dce88daf4a3fcb4879ea939476d5074a9b7ddd0fb97fa4bed5596a"
-dependencies = [
- "kqueue-sys",
- "libc",
-]
-
-[[package]]
-name = "kqueue-sys"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "285efcf12ef41bec907b3000d5ffaeb54191d4d9d83c0d6157e6cbc2db255e64"
-dependencies = [
- "bitflags 2.11.1",
- "libc",
 ]
 
 [[package]]
@@ -1825,8 +1709,8 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "mihomo-api"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "axum",
  "base64",
@@ -1856,8 +1740,8 @@ dependencies = [
 
 [[package]]
 name = "mihomo-common"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1877,14 +1761,14 @@ dependencies = [
 
 [[package]]
 name = "mihomo-config"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64",
- "hickory-proto 0.26.1",
- "hickory-resolver 0.26.1",
+ "hickory-proto",
+ "hickory-resolver",
  "ipnet",
  "maxminddb",
  "mihomo-common",
@@ -1904,12 +1788,12 @@ dependencies = [
 
 [[package]]
 name = "mihomo-dns"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "dashmap 6.1.0",
  "futures",
- "hickory-resolver 0.26.1",
+ "hickory-resolver",
  "hickory-server",
  "ipnet",
  "lru",
@@ -1917,6 +1801,8 @@ dependencies = [
  "mihomo-common",
  "mihomo-trie",
  "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -1931,7 +1817,6 @@ dependencies = [
  "cbindgen",
  "dashmap 6.1.0",
  "futures",
- "hickory-proto 0.25.2",
  "libc",
  "log",
  "mihomo-api",
@@ -1956,8 +1841,8 @@ dependencies = [
 
 [[package]]
 name = "mihomo-proxy"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "async-trait",
  "base64",
@@ -1983,8 +1868,8 @@ dependencies = [
 
 [[package]]
 name = "mihomo-rules"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "ipnet",
  "iprange",
@@ -1999,8 +1884,8 @@ dependencies = [
 
 [[package]]
 name = "mihomo-transport"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "async-trait",
  "base64",
@@ -2011,7 +1896,6 @@ dependencies = [
  "httparse",
  "rand 0.9.4",
  "rustls",
- "rustls-pemfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls",
@@ -2022,13 +1906,13 @@ dependencies = [
 
 [[package]]
 name = "mihomo-trie"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 
 [[package]]
 name = "mihomo-tunnel"
-version = "0.7.0"
-source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.0#63a193e57dab0d26d12f044ce2e7e61e43b0799b"
+version = "0.7.3"
+source = "git+https://github.com/madeye/mihomo-rust?tag=v0.7.3#0f182f4b48c6593d476e22012dc941f766cd4359"
 dependencies = [
  "async-trait",
  "dashmap 6.1.0",
@@ -2063,7 +1947,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
 dependencies = [
  "libc",
- "log",
  "wasi",
  "windows-sys 0.61.2",
 ]
@@ -2127,33 +2010,6 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
-]
-
-[[package]]
-name = "notify"
-version = "8.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d3d07927151ff8575b7087f245456e549fea62edf0ec4e565a5ee50c8402bc3"
-dependencies = [
- "bitflags 2.11.1",
- "fsevent-sys",
- "inotify",
- "kqueue",
- "libc",
- "log",
- "mio",
- "notify-types",
- "walkdir",
- "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "notify-types"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
-dependencies = [
- "bitflags 2.11.1",
 ]
 
 [[package]]
@@ -2761,15 +2617,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls-pemfile"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
-dependencies = [
- "rustls-pki-types",
-]
-
-[[package]]
 name = "rustls-pki-types"
 version = "1.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2961,7 +2808,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "482831bf9d55acf3c98e211b6c852c3dfdf1d1b0d23fdf1d887c5a4b2acad4e4"
 dependencies = [
  "aes",
- "arc-swap",
  "base64",
  "blake3",
  "byte_string",
@@ -2969,11 +2815,9 @@ dependencies = [
  "cfg-if",
  "dynosaur",
  "futures",
- "hickory-resolver 0.25.2",
  "libc",
  "log",
  "lru_time_cache",
- "notify",
  "percent-encoding",
  "pin-project",
  "rand 0.9.4",

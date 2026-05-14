@@ -3,12 +3,14 @@
 //! SOCKS listener; TCP flows hop Rust-to-Rust through a shared
 //! `Arc<TunnelInner>` rather than through a loopback socket.
 //!
-//! DNS is not handled here. Post fake-IP merge the engine no longer spawns a
-//! DNS task: A/AAAA queries are answered synthetically by
-//! `crate::fake_ip_dns::handle_query` from the tun2socks UDP/53 intercept,
-//! and any other RR type delegates into `mihomo_dns::DnsServer::handle_query`
-//! using the resolver `engine::start` publishes via
-//! [`crate::fake_ip_dns::set_resolver`]. No socket is bound for DNS.
+//! DNS is delegated end-to-end to mihomo's resolver. The pinned `dns:` block
+//! injected below puts the resolver in fake-IP mode with the FFI's chosen
+//! CIDR (`28.0.0.0/8`) and no listening socket (`listen: ""`). The tun2socks
+//! UDP/53 intercept hands every in-TUN DNS datagram straight to
+//! `mihomo_dns::DnsServer::handle_query`, which both synthesises the fake-IP
+//! answer and owns the reverse mapping that `mihomo_tunnel::pre_handle_metadata`
+//! consults on the TCP/UDP dispatch path. The engine spawns no separate DNS
+//! task and binds no DNS socket.
 //!
 //! Lifecycle: `start(config_path)` spawns the REST API on the shared tokio
 //! runtime and keeps its `JoinHandle` in `EngineState`. `stop()` aborts that
@@ -52,7 +54,8 @@ fn install_tls_provider() {
 /// Strip the shorthand listener ports and explicit `listeners:` array from a
 /// raw config YAML. iOS dispatches TCP flows in-process via the netstack →
 /// `mihomo_tunnel` Rust-to-Rust hop (no SOCKS loopback) and answers DNS
-/// inside the tun2socks UDP/53 intercept (no bound resolver port); there is
+/// inline by handing every in-TUN UDP/53 datagram to
+/// `mihomo_dns::DnsServer::handle_query` (no bound resolver port); there is
 /// no loopback listener and no bound port. Upstream's `build_named_listeners`
 /// (mihomo-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
 /// Class A) — e.g. "port 7890 already used by listener 'mixed'" — so a
@@ -76,19 +79,20 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
             "mixed-port",
             "tproxy-port",
             "listeners",
-            // Drop the entire `sniffer:` block. tun2socks pre-populates
-            // `metadata.host` from the fake-IP pool's reverse lookup before
-            // dispatching into `mihomo_tunnel`, so SNI/ALPN sniffing inside
-            // mihomo is redundant — and when enabled it would overwrite the
-            // pool-derived hostname based on whatever the sniffer parses out
-            // of the first TLS / HTTP record, which is a regression versus
-            // the authoritative qname captured at DNS-allocation time. Strip
-            // at the FFI boundary so user subscriptions can't re-enable it.
+            // Drop the entire `sniffer:` block. mihomo's
+            // `pre_handle_metadata` reverses each fake-IP destination back
+            // to the qname recorded by the resolver before rule matching,
+            // so SNI/ALPN sniffing is redundant — and when enabled it would
+            // overwrite the resolver-derived hostname based on whatever the
+            // sniffer parses out of the first TLS / HTTP record, which is a
+            // regression versus the authoritative qname captured at DNS
+            // resolution time. Strip at the FFI boundary so user
+            // subscriptions can't re-enable it.
             "sniffer",
             // Drop any user-supplied `dns:` block. iOS pins its own resolver
-            // configuration via `pinned_dns_block` below so the fake-IP
-            // CN-bypass probe and any other DNS-dependent paths always use
-            // a known-good upstream set regardless of subscription content.
+            // configuration via `pinned_dns_block` below so the resolver is
+            // always in fake-IP mode with the FFI's chosen CIDR and known-good
+            // CN upstreams, regardless of subscription content.
             "dns",
         ] {
             m.remove(serde_yaml::Value::String(key.to_string()));
@@ -105,31 +109,31 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
 }
 
-/// Pinned DNS block injected into every engine config. The nameserver
-/// set is restricted to CN-side resolvers because mihomo's `query_pool`
-/// races every entry in parallel ("first response wins"), and mixing a
-/// global anycast resolver into the same pool lets it win the race from
-/// outside CN — returning the global / SG / HK PoP for split-horizon
-/// hosts like xiaohongshu.com, which then misses the cn-ipv4-range
-/// CN-bypass and gets routed as if it were a non-CN destination.
+/// Pinned DNS block injected into every engine config. Configures mihomo's
+/// resolver in fake-IP mode with the FFI's chosen CIDR; the tun2socks
+/// UDP/53 intercept then hands every in-TUN datagram straight to
+/// `mihomo_dns::DnsServer::handle_query`, so this block is the single source
+/// of truth for synthesis, reverse mapping, AAAA / hosts / NXDOMAIN, and
+/// upstream nameserver selection.
+///
+/// The nameserver set is restricted to CN-side resolvers because mihomo's
+/// `query_pool` races every entry in parallel ("first response wins"), and
+/// mixing a global anycast resolver into the same pool lets it win the race
+/// from outside CN — returning the global / SG / HK PoP for split-horizon
+/// hosts like xiaohongshu.com, which then misses the GEOIP-driven CN bypass
+/// inside mihomo's rule engine.
 ///
 ///   * 119.29.29.29 (DNSPod / Tencent) — fast inside CN, also reachable
-///     externally; primary for CN-bypass probes.
+///     externally; primary for split-horizon hosts that need the CN view.
 ///   * 223.5.5.5    (Alibaba PublicDNS) — secondary CN-side nameserver.
 ///
-/// A global resolver (1.1.1.1 etc.) was removed from this list after
-/// the `xhs_e2e` Rust-only repro showed it winning the race for
-/// `www.xiaohongshu.com` and returning a non-CN PoP. If we ever need a
-/// global fallback for sites the CN resolvers refuse to answer, the
-/// right place to wire it is mihomo-rust's `fallback:` block (which
-/// only runs when the primary pool yields nothing or the answer trips
-/// `fallback-filter`), not the primary `nameserver:` pool.
+/// If a global fallback is ever needed for sites the CN resolvers refuse to
+/// answer, the right place to wire it is mihomo-rust's `fallback:` block
+/// (which only runs when the primary pool yields nothing or the answer
+/// trips `fallback-filter`), not the primary `nameserver:` pool.
 ///
-/// Fake-IP mode + the in-TUN UDP/53 intercept don't require the engine to
-/// bind a resolver port — `listen: ""` keeps mihomo from spawning one.
-/// `enhanced-mode: fake-ip` keeps mihomo's own DNS path consistent with
-/// the FFI's fake-IP pool semantics (the FFI handler answers most queries
-/// directly; this setting governs the few paths that still reach mihomo).
+/// `listen: ""` keeps mihomo from binding its own UDP/53 socket — the FFI
+/// owns the in-TUN intercept and calls `DnsServer::handle_query` directly.
 fn pinned_dns_block() -> serde_yaml::Value {
     let yaml = r#"
 enable: true
@@ -257,24 +261,10 @@ pub fn start(config_path: &str) -> Result<()> {
     let listeners = cfg.listeners.named.clone();
     let log_tx = log_broadcast_tx().clone();
 
-    // Initialize the fake-IP pool once per process. `init_pool` is a
-    // no-op on the second call, so a `start → stop → start` cycle is safe —
-    // the pool's mappings outlive the engine on purpose to keep long-lived
-    // flows from being stranded when the engine restarts.
-    let _ = crate::fake_ip::init_pool(crate::fake_ip::DEFAULT_CIDR, crate::fake_ip::DEFAULT_TTL);
-    // Load the CN IP-range tables (best-effort — missing or malformed files
-    // log + leave the table empty, in which case `fake_ip_dns::handle_query`
-    // falls back to its normal fake-IP allocation path). `HOME_DIR` is set
-    // by `meow_core_set_home_dir` at PacketTunnelProvider startup, ahead of
-    // any `engine::start` call.
-    if let Some(home) = crate::HOME_DIR.lock().as_ref() {
-        crate::cn_iprange::load(std::path::Path::new(home));
-    }
-    // Publish the resolver so tun2socks's UDP/53 intercept can answer DNS
-    // queries that arrive inside the TUN (NEDNSSettings advertises a
-    // TUN-subnet IP as the system resolver, so every DNS packet shows up as
-    // an in-TUN UDP datagram — there's no separate listening socket).
-    crate::fake_ip_dns::set_resolver(cfg.dns.resolver.clone());
+    // No FFI-side fake-IP pool, no FFI-side CN-IP table, no resolver hand-off:
+    // mihomo's own fake-IP pool (configured by `pinned_dns_block`) owns
+    // synthesis + reverse mapping, and the tun2socks UDP/53 intercept fetches
+    // the resolver lazily through `engine::tunnel()?.resolver()`.
 
     let api_task = cfg.api.external_controller.map(|addr| {
         let api_server = ApiServer::new(
@@ -321,8 +311,8 @@ pub fn stop() {
         h.abort();
         let _ = runtime.block_on(h);
     }
-    // DNS no longer owns a background task — handle_query runs inline on the
-    // tun2socks UDP/53 intercept path, so there's nothing to abort here.
+    // DNS owns no background task — `DnsServer::handle_query` runs inline on
+    // the tun2socks UDP/53 intercept path, so there's nothing to abort here.
     info!("mihomo-rust engine stopped");
 }
 
