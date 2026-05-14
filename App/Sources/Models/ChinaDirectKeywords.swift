@@ -364,15 +364,33 @@ enum ChinaDirectKeywords {
         }
     }
 
+    /// Prepend `preset` to `existing` so the preset rows match first.
+    /// Preset rows already present in `existing` (same TYPE / payload) are
+    /// skipped so re-tapping the action is a no-op. The relative order of
+    /// `existing` is preserved behind the preset block.
+    ///
+    /// Mihomo evaluates `rules:` top-down and stops at the first hit, so
+    /// front-of-list placement is what guarantees a China-app domain
+    /// reaches `DIRECT` even when a user's later rule would have sent the
+    /// same hostname through a proxy group.
+    static func prepend(preset: [EditableRule], to existing: [EditableRule]) -> (merged: [EditableRule], added: Int) {
+        var existingKeys = Set<String>()
+        for rule in existing {
+            existingKeys.insert(key(for: rule))
+        }
+        let fresh = preset.filter { !existingKeys.contains(key(for: $0)) }
+        return (fresh + existing, fresh.count)
+    }
+
     /// Merge `preset` into `existing`, skipping any preset row whose
     /// (type, payload) pair is already present (case-insensitive on type,
     /// case-sensitive on payload — keywords are matched verbatim by
     /// mihomo). New rows are appended in preset order. Returns the merged
     /// list and the count of rows actually inserted.
     ///
-    /// Insertion above `MATCH` is the caller's responsibility — see the
-    /// `RulesEditorView.applyChinaPreset` site, which slices around the
-    /// MATCH index just like the manual Add path does.
+    /// This is the append-flavoured sibling of `prepend(preset:to:)`;
+    /// kept for callers (and tests) that want preset rows added to the
+    /// tail of an existing list rather than the head.
     static func merge(preset: [EditableRule], into existing: [EditableRule]) -> (merged: [EditableRule], added: Int) {
         var seen = Set<String>()
         for rule in existing {

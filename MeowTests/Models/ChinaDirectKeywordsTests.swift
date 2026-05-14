@@ -78,4 +78,40 @@ struct ChinaDirectKeywordsTests {
         let alipay = merged.filter { $0.payload == "alipay" }
         #expect(alipay.count == 1, "lower-cased TYPE must still dedup against preset")
     }
+
+    @Test
+    func `prepend(preset:to:) puts every preset row in front of existing rules`() {
+        let existing: [EditableRule] = [
+            EditableRule(type: "DOMAIN-SUFFIX", payload: "example.com", proxy: "PROXY"),
+            EditableRule(type: "MATCH", payload: "", proxy: "PROXY"),
+        ]
+        let preset = ChinaDirectKeywords.presetRules()
+        let (merged, added) = ChinaDirectKeywords.prepend(preset: preset, to: existing)
+
+        #expect(added == preset.count)
+        #expect(merged.count == preset.count + existing.count)
+        // First N rows must be the preset, in preset order, ahead of the
+        // user's existing rows — that's the whole "match before others"
+        // contract.
+        for (offset, row) in preset.enumerated() {
+            #expect(merged[offset].type == row.type)
+            #expect(merged[offset].payload == row.payload)
+            #expect(merged[offset].proxy == row.proxy)
+        }
+        // Existing rules survive in their original relative order at the tail.
+        #expect(merged[preset.count].payload == "example.com")
+        #expect(merged.last?.type == "MATCH")
+    }
+
+    @Test
+    func `prepend is idempotent — re-applying adds zero and keeps order stable`() {
+        let preset = ChinaDirectKeywords.presetRules()
+        let existing: [EditableRule] = [EditableRule(type: "MATCH", payload: "", proxy: "PROXY")]
+        let (firstPass, addedFirst) = ChinaDirectKeywords.prepend(preset: preset, to: existing)
+        let (secondPass, addedSecond) = ChinaDirectKeywords.prepend(preset: preset, to: firstPass)
+        #expect(addedFirst == preset.count)
+        #expect(addedSecond == 0)
+        #expect(secondPass.count == firstPass.count)
+        #expect(secondPass.map(\.payload) == firstPass.map(\.payload))
+    }
 }

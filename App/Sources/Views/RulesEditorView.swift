@@ -170,20 +170,22 @@ struct RulesEditorView: View {
         hasUnsavedChanges = true
     }
 
-    /// Insert the curated `ChinaDirectKeywords` preset above the trailing
-    /// `MATCH` rule (or appended if no MATCH exists). Existing rows with
-    /// the same (type, payload) are skipped — re-tapping the preset is a
-    /// no-op, so the user can safely use it as "make sure these are
-    /// installed" rather than worrying about duplicates.
+    /// Prepend the curated `ChinaDirectKeywords` preset to the rule list
+    /// so the keyword rows match BEFORE any existing entries. Existing
+    /// rows with the same (type, payload) are skipped — re-tapping the
+    /// preset is a no-op rather than producing duplicates.
+    ///
+    /// Front-of-list placement is the whole point of the preset: mihomo
+    /// walks `rules:` top-down and stops at the first match, so for the
+    /// "send China-app traffic to DIRECT regardless of the user's other
+    /// routing" intent to hold, these rows must precede everything else.
+    /// The trailing `MATCH` (and any other prior rows) stay in their
+    /// original order behind the preset.
     private func applyChinaPreset() {
         let preset = ChinaDirectKeywords.presetRules()
-        let matchIndex = rules.firstIndex { $0.type.uppercased() == "MATCH" }
-        let head: [EditableRule] = matchIndex.map { Array(rules.prefix($0)) } ?? rules
-        let tail: [EditableRule] = matchIndex.map { Array(rules.suffix(from: $0)) } ?? []
-
-        let (mergedHead, added) = ChinaDirectKeywords.merge(preset: preset, into: head)
+        let (merged, added) = ChinaDirectKeywords.prepend(preset: preset, to: rules)
         guard added > 0 else { return }
-        rules = mergedHead + tail
+        rules = merged
         hasUnsavedChanges = true
     }
 
