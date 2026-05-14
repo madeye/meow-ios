@@ -62,12 +62,26 @@ struct RulesEditorView: View {
                         .accessibilityIdentifier("rulesEditor.cancelButton")
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        presentingNewRule = true
+                    Menu {
+                        Button {
+                            presentingNewRule = true
+                        } label: {
+                            Label("rulesEditor.button.add", systemImage: "plus")
+                        }
+                        .accessibilityIdentifier("rulesEditor.addButton")
+                        Button {
+                            applyChinaPreset()
+                        } label: {
+                            Label(
+                                "rulesEditor.button.addChinaPreset",
+                                systemImage: "globe.asia.australia",
+                            )
+                        }
+                        .accessibilityIdentifier("rulesEditor.addChinaPresetButton")
                     } label: {
                         Label("rulesEditor.button.add", systemImage: "plus")
                     }
-                    .accessibilityIdentifier("rulesEditor.addButton")
+                    .accessibilityIdentifier("rulesEditor.addMenu")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(
@@ -153,6 +167,23 @@ struct RulesEditorView: View {
     private func apply(_ updated: EditableRule) {
         guard let i = rules.firstIndex(where: { $0.id == updated.id }) else { return }
         rules[i] = updated
+        hasUnsavedChanges = true
+    }
+
+    /// Insert the curated `ChinaDirectKeywords` preset above the trailing
+    /// `MATCH` rule (or appended if no MATCH exists). Existing rows with
+    /// the same (type, payload) are skipped — re-tapping the preset is a
+    /// no-op, so the user can safely use it as "make sure these are
+    /// installed" rather than worrying about duplicates.
+    private func applyChinaPreset() {
+        let preset = ChinaDirectKeywords.presetRules()
+        let matchIndex = rules.firstIndex { $0.type.uppercased() == "MATCH" }
+        let head: [EditableRule] = matchIndex.map { Array(rules.prefix($0)) } ?? rules
+        let tail: [EditableRule] = matchIndex.map { Array(rules.suffix(from: $0)) } ?? []
+
+        let (mergedHead, added) = ChinaDirectKeywords.merge(preset: preset, into: head)
+        guard added > 0 else { return }
+        rules = mergedHead + tail
         hasUnsavedChanges = true
     }
 
