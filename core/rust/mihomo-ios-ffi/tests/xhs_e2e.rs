@@ -14,14 +14,16 @@
 //!
 //!   * DNS layer — does the in-TUN UDP/53 intercept answer at all? Does
 //!     the CN-bypass probe return a real CN address for `xiaohongshu.com`,
-//!     or does it fall through to a `28.x.x.x` fake-IP? (xiaohongshu.com
-//!     is a Chinese site; a fake-IP answer here would tell us the
-//!     resolver couldn't reach an upstream nameserver or the cn-ipv4
-//!     table didn't load.)
+//!     or does it fall through to a `28.x.x.x` fake-IP?
+//!   * DNS upstream-shopping — per-nameserver direct UDP/53 probes (not
+//!     `getaddrinfo`!) against each pinned upstream (`119.29.29.29`,
+//!     `223.5.5.5`, `1.1.1.1`). xiaohongshu.com has split-horizon DNS:
+//!     CN-side resolvers return a CN PoP (`81.69.116.x`), Cloudflare /
+//!     anycast resolvers return a SG / HK PoP (`43.175.7.x`). The
+//!     test box's OS resolver may add its own twist on top.
 //!   * TCP layer — does the netstack accept the SYN, does `dispatch_tcp`
-//!     successfully route the flow (DIRECT for a CN IP, or the resolved
-//!     proxy for a fake-IP), and does the upstream actually answer a TLS
-//!     ClientHello with `Host: www.xiaohongshu.com`?
+//!     successfully route the flow, and does the upstream actually
+//!     answer a TLS ClientHello with `Host: www.xiaohongshu.com`?
 //!
 //! Run with:
 //!
@@ -34,7 +36,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::CString;
-use std::net::ToSocketAddrs;
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::os::raw::c_void;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -765,14 +767,19 @@ fn ffi_tcp_probe(host: &str, port: i32, timeout_ms: i32) {
     }
 }
 
-/// Parse `<home>/mihomo/cn-ipv4.bin` directly and check membership for
-/// the OS-resolved IPv4 of each host. The wire format is documented in
-/// `src/cn_iprange.rs`. We do this in-test rather than depending on the
-/// `pub(crate)` `cn_iprange::contains_v4` so the test stays an
-/// integration test and the production helper doesn't need to grow a
-/// public surface for diagnostics.
+/// Parse `<home>/mihomo/cn-ipv4.bin` and check membership for each host
+/// — but resolve via direct UDP/53 queries to specific upstream
+/// nameservers rather than going through the OS resolver. The OS
+/// resolver can be configured to use a non-CN upstream (corp DNS,
+/// 8.8.8.8, …), which returns a non-CN PoP for hosts that have global
+/// CDN coverage like xiaohongshu.com. Querying the same nameservers
+/// the FFI pins for the engine makes the test see what the engine sees.
+///
+/// We probe both 119.29.29.29 (DNSPod, CN-side) and 1.1.1.1
+/// (Cloudflare, global) and print both answers so the disparity is
+/// visible. For one or both nameservers being unreachable from the
+/// test host, the membership line shows `<unreachable>`.
 fn cn_table_probe<const N: usize>(hosts: [&str; N]) {
-    // Same path layout `seed_home` builds.
     let path = std::env::temp_dir()
         .join(format!("meow-xhs-e2e-{}", std::process::id()))
         .join("mihomo")
@@ -792,38 +799,99 @@ fn cn_table_probe<const N: usize>(hosts: [&str; N]) {
         intervals.len(),
         path.display()
     );
+
+    // Same nameserver set the FFI pins (`pinned_dns_block` in engine.rs).
+    // Querying each in turn so we see the per-nameserver answer.
+    let resolvers: [(&str, std::net::Ipv4Addr); 3] = [
+        ("DNSPod CN", std::net::Ipv4Addr::new(119, 29, 29, 29)),
+        ("Alibaba CN", std::net::Ipv4Addr::new(223, 5, 5, 5)),
+        ("Cloudflare global", std::net::Ipv4Addr::new(1, 1, 1, 1)),
+    ];
+
+    // OS-resolver baseline first — shows what `getaddrinfo` (which is
+    // sensitive to /etc/resolv.conf, scutil DNS, VPN-injected resolvers,
+    // etc.) returns on this host. Useful as a control: if the OS-resolver
+    // answer differs from the per-nameserver answers, the test host's
+    // resolver path is itself proxied / non-CN.
     for host in hosts {
-        let resolved = match (host, 0u16).to_socket_addrs() {
-            Ok(it) => it
-                .filter_map(|s| match s.ip() {
+        let os_resolved: Option<std::net::Ipv4Addr> =
+            (host, 0u16).to_socket_addrs().ok().and_then(|mut it| {
+                it.find_map(|s| match s.ip() {
                     std::net::IpAddr::V4(v) => Some(v),
                     _ => None,
                 })
-                .next(),
-            Err(_) => None,
-        };
-        match resolved {
-            None => eprintln!("xhs_e2e: cn-ipv4 membership({host}) — OS resolver returned no v4"),
-            Some(ip) => {
-                let key = u32::from(ip);
-                let idx = intervals.partition_point(|(s, _)| *s <= key);
-                let in_cn = if idx == 0 {
-                    false
-                } else {
-                    key <= intervals[idx - 1].1
-                };
-                eprintln!(
-                    "xhs_e2e: cn-ipv4 membership({host} -> {ip}) = {} {}",
-                    in_cn,
-                    if in_cn {
-                        "(CN, would direct-route)"
+            });
+        match os_resolved {
+            None => eprintln!("xhs_e2e:   OS-resolver({host}) -> <no v4>"),
+            Some(ip) => eprintln!(
+                "xhs_e2e:   OS-resolver({host}) -> {ip}  cn-table={}",
+                in_cn_table(&intervals, ip)
+            ),
+        }
+        for (label, ns) in &resolvers {
+            match direct_udp_dns_query(host, *ns, Duration::from_millis(1500)) {
+                Ok(ips) => {
+                    if ips.is_empty() {
+                        eprintln!("xhs_e2e:   {label} @ {ns} ({host}) -> <empty answer>");
                     } else {
-                        "(non-CN — bypass would NOT have fired even if the resolver call worked)"
+                        for ip in &ips {
+                            eprintln!(
+                                "xhs_e2e:   {label} @ {ns} ({host}) -> {ip}  cn-table={}",
+                                in_cn_table(&intervals, *ip)
+                            );
+                        }
                     }
-                );
+                }
+                Err(e) => eprintln!("xhs_e2e:   {label} @ {ns} ({host}) -> <unreachable>: {e}"),
             }
         }
     }
+}
+
+/// True iff `ip` is covered by any interval in the pre-loaded cn-ipv4
+/// table. Mirrors `cn_iprange::contains_v4`.
+fn in_cn_table(intervals: &[(u32, u32)], ip: std::net::Ipv4Addr) -> bool {
+    let key = u32::from(ip);
+    let idx = intervals.partition_point(|(s, _)| *s <= key);
+    if idx == 0 {
+        return false;
+    }
+    key <= intervals[idx - 1].1
+}
+
+/// Bind an ephemeral UDP socket, send a single A query for `host` to
+/// `nameserver:53`, wait up to `timeout` for the reply, parse the A
+/// answers. No retries, no TCP fallback, no EDNS0 — minimal stub
+/// resolver, sufficient for diagnostic.
+fn direct_udp_dns_query(
+    host: &str,
+    nameserver: std::net::Ipv4Addr,
+    timeout: Duration,
+) -> std::io::Result<Vec<std::net::Ipv4Addr>> {
+    let sock = UdpSocket::bind("0.0.0.0:0")?;
+    sock.set_read_timeout(Some(timeout))?;
+    let addr = SocketAddr::from((nameserver, 53));
+    // Random-ish id; collisions don't matter at this scale.
+    let id = (Instant::now().elapsed().as_nanos() as u16) | 0x8000;
+    let query = dns_a_query(host, id);
+    sock.send_to(&query, addr)?;
+    let mut buf = [0u8; 1500];
+    let (n, from) = sock.recv_from(&mut buf)?;
+    if from.ip() != std::net::IpAddr::V4(nameserver) {
+        return Err(std::io::Error::other(format!(
+            "reply from unexpected source {from}"
+        )));
+    }
+    let (rcode, ips) = parse_dns_a_response(&buf[..n]);
+    if rcode != 0 && ips.is_empty() {
+        return Err(std::io::Error::other(format!(
+            "server returned rcode={rcode}"
+        )));
+    }
+    Ok(ips
+        .into_iter()
+        .map(|b| std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3]))
+        .collect())
 }
 
 fn load_cn_v4(path: &std::path::Path) -> std::io::Result<Vec<(u32, u32)>> {

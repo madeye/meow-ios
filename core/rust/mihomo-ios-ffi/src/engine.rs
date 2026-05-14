@@ -105,15 +105,25 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
 }
 
-/// Pinned DNS block injected into every engine config. The nameserver set
-/// is chosen for CN reachability + global coverage without requiring a
-/// working proxy first:
+/// Pinned DNS block injected into every engine config. The nameserver
+/// set is restricted to CN-side resolvers because mihomo's `query_pool`
+/// races every entry in parallel ("first response wins"), and mixing a
+/// global anycast resolver into the same pool lets it win the race from
+/// outside CN — returning the global / SG / HK PoP for split-horizon
+/// hosts like xiaohongshu.com, which then misses the cn-ipv4-range
+/// CN-bypass and gets routed as if it were a non-CN destination.
 ///
 ///   * 119.29.29.29 (DNSPod / Tencent) — fast inside CN, also reachable
 ///     externally; primary for CN-bypass probes.
 ///   * 223.5.5.5    (Alibaba PublicDNS) — secondary CN-side nameserver.
-///   * 1.1.1.1      (Cloudflare) — global fallback for sites the CN
-///     resolvers refuse to answer for / poison.
+///
+/// A global resolver (1.1.1.1 etc.) was removed from this list after
+/// the `xhs_e2e` Rust-only repro showed it winning the race for
+/// `www.xiaohongshu.com` and returning a non-CN PoP. If we ever need a
+/// global fallback for sites the CN resolvers refuse to answer, the
+/// right place to wire it is mihomo-rust's `fallback:` block (which
+/// only runs when the primary pool yields nothing or the answer trips
+/// `fallback-filter`), not the primary `nameserver:` pool.
 ///
 /// Fake-IP mode + the in-TUN UDP/53 intercept don't require the engine to
 /// bind a resolver port — `listen: ""` keeps mihomo from spawning one.
@@ -129,7 +139,6 @@ fake-ip-range: 28.0.0.0/8
 nameserver:
   - 119.29.29.29
   - 223.5.5.5
-  - 1.1.1.1
 "#;
     serde_yaml::from_str(yaml).expect("pinned DNS YAML is a compile-time constant")
 }
@@ -383,8 +392,10 @@ log-level: info
         assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
         assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
 
-        // Pinned DNS block must always be present after strip, with our
-        // three nameservers in order.
+        // Pinned DNS block must always be present after strip, with the
+        // CN-side nameservers in order. The set is intentionally
+        // CN-only — see `pinned_dns_block`'s doc comment on why a global
+        // resolver (1.1.1.1 etc.) is *not* part of this pool.
         let dns = m
             .get(serde_yaml::Value::String("dns".into()))
             .and_then(|v| v.as_mapping())
@@ -396,7 +407,7 @@ log-level: info
             .iter()
             .map(|v| v.as_str().unwrap())
             .collect();
-        assert_eq!(ns, vec!["119.29.29.29", "223.5.5.5", "1.1.1.1"]);
+        assert_eq!(ns, vec!["119.29.29.29", "223.5.5.5"]);
     }
 
     #[test]
@@ -426,7 +437,7 @@ mode: rule
             .collect();
         assert_eq!(
             ns,
-            vec!["119.29.29.29", "223.5.5.5", "1.1.1.1"],
+            vec!["119.29.29.29", "223.5.5.5"],
             "user nameservers must not survive the strip+inject"
         );
     }
