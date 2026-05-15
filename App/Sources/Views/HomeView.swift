@@ -332,7 +332,7 @@ private struct StageDot: View {
     private var color: Color {
         switch stage {
         case .idle, .stopped: .secondary
-        case .connecting, .stopping: .yellow
+        case .connecting, .stopping: .orange
         case .connected: .green
         case .error: .red
         }
