@@ -66,6 +66,11 @@
 "subscriptions.add.button.adding" = "添加中…";
 "subscriptions.import.errorTitle" = "导入订阅失败";
 "subscriptions.row.updatedAgo %@" = "%@前更新";
+"subscriptions.row.a11y.edit %@" = "编辑 %@ 的 YAML";
+"subscriptions.row.a11y.refresh %@" = "刷新 %@";
+"subscriptions.toolbar.a11y.add" = "添加订阅";
+"subscriptions.empty.title" = "暂无订阅";
+"subscriptions.empty.description" = "点击右上角的 + 添加 Mihomo 或 Clash 订阅链接。";
 
 
 /* Connections */

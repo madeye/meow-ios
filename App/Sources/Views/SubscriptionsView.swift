@@ -33,7 +33,7 @@ struct SubscriptionsView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Edit YAML for \(profile.name)")
+                        .accessibilityLabel(Text("subscriptions.row.a11y.edit \(profile.name)"))
                         .accessibilityIdentifier("subscriptions.row.editYaml")
                         Button {
                             Task { try? await service.refresh(profile) }
@@ -43,7 +43,7 @@ struct SubscriptionsView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Refresh \(profile.name)")
+                        .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -61,6 +61,16 @@ struct SubscriptionsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .overlay {
+            if profiles.isEmpty {
+                ContentUnavailableView(
+                    "subscriptions.empty.title",
+                    systemImage: "tray",
+                    description: Text("subscriptions.empty.description"),
+                )
+                .accessibilityIdentifier("subscriptions.emptyState")
+            }
+        }
         .navigationTitle("subscriptions.nav.title")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -69,7 +79,8 @@ struct SubscriptionsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("Add subscription")
+                .accessibilityLabel(Text("subscriptions.toolbar.a11y.add"))
+                .accessibilityIdentifier("subscriptions.toolbar.add")
             }
         }
         .sheet(isPresented: $showingAdd) {

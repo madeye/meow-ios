@@ -61,6 +61,11 @@
 "subscriptions.add.button.adding" = "Adding…";
 "subscriptions.import.errorTitle" = "Couldn't import subscription";
 "subscriptions.row.updatedAgo %@" = "Updated %@ ago";
+"subscriptions.row.a11y.edit %@" = "Edit YAML for %@";
+"subscriptions.row.a11y.refresh %@" = "Refresh %@";
+"subscriptions.toolbar.a11y.add" = "Add subscription";
+"subscriptions.empty.title" = "No subscriptions yet";
+"subscriptions.empty.description" = "Tap + to add a Mihomo or Clash subscription URL.";
 
 
 /* Connections */
