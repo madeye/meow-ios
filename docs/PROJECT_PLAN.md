@@ -142,7 +142,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
   2. `DNS_OK` — resolve `apple.com` via 172.19.0.2:53; expect ≥1 A record within 3 s
   3. `TCP_PROXY_OK` — TCP connect to `connectivitycheck.gstatic.com:443` through proxy within 5 s
   4. `HTTP_204_OK` — HTTP GET `http://connectivitycheck.gstatic.com/generate_204` returns 204
-  5. `MEM_OK` — extension resident memory ≤ 14 MB; FAIL if ≥ 15 MB
+  5. `MEM_OK` — extension resident memory ≤ 40 MB; FAIL if ≥ 50 MB
 - Each `UILabel` has `accessibilityIdentifier` = `CHECK_NAME` for unit-level UI test anchoring + VoiceOver
 - **Blocks:** T2.8 (manual device smoke)
 - **Depends on:** T2.3, T2.5
@@ -361,7 +361,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Subscription seeder + NE-error-surface UX tests: **retired with LocalE2ETests** (v1.4)
 
 #### T6.4 — Performance Tests
-- **Extension resident memory during active VPN:** target ≤ 14 MB; hard-fail at 15 MB (TEST_STRATEGY v1.2)
+- **Extension resident memory during active VPN:** target ≤ 40 MB; hard-fail at 50 MB (TEST_STRATEGY v1.2)
 - **MihomoCore.xcframework stripped binary size:** ≤ 8 MB (TEST_STRATEGY v1.2); enforced in T1.4 CI step
 - Battery usage (Instruments Energy Log, 1-hour session)
 - TUN throughput (iperf3 through proxy, target: ≥ 100 Mbps on WiFi)

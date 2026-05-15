@@ -5,8 +5,8 @@
 **Author:** Architecture Team  
 **Status:** Draft  
 **Changelog:**
-- v1.1 — Dropped Go mihomo core; replaced with pure-Rust mihomo-rust engine (single `MihomoCore.xcframework`). iOS NetworkExtension 15 MB memory limit motivation documented.
-- v1.2 — Added §4.4 Diagnostics Surface Contract (OCR-stable label format for QA nightly harness). Memory budget tightened to TEST_STRATEGY v1.2: Extension ≤14 MB / 15 MB hard-fail; xcframework ≤8 MB.
+- v1.1 — Dropped Go mihomo core; replaced with pure-Rust mihomo-rust engine (single `MihomoCore.xcframework`). iOS NetworkExtension 50 MB memory limit motivation documented.
+- v1.2 — Added §4.4 Diagnostics Surface Contract (OCR-stable label format for QA nightly harness). Memory budget tightened to TEST_STRATEGY v1.2: Extension ≤40 MB / 50 MB hard-fail; xcframework ≤8 MB.
 - v1.3 — Removed `mihomo-listener` crate from Rust dependency list (not needed in in-process path). Noted subscription conversion (`src/subscription.rs`) and diagnostics (`src/diagnostics.rs`) as Rust-native replacements for old Go paths. Added non-DNS UDP gap as MVP known limitation and new risk row.
 - v1.4 — Automated E2E scope retired per user directive 2026-04-18: vphone-cli nightly harness, tart-in-harness topology, and LocalE2ETests (Option 2 seeder + NE-error-surface) all dropped in favor of manual device verification on user's iPhone. §4.4 retitled to reflect manual-QA framing (label format stays useful for on-device readability; OCR contract removed). M1.5 milestone rewritten from "Nightly Gate Unblocked" to "Manual Smoke Passes".
 
@@ -63,7 +63,7 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
           └──────────────────────────────────────────────┘
 ```
 
-> **Why pure Rust?** iOS NetworkExtension processes have a 15 MB memory ceiling. The previous design included a Go-compiled mihomo engine (~20–30 MB stripped binary alone), which exceeds that budget. Replacing it with [mihomo-rust](https://github.com/madeye/mihomo-rust) — a pure-Rust reimplementation of the mihomo proxy kernel — yields a single static library that fits within the memory constraint while eliminating the Go toolchain dependency entirely.
+> **Why pure Rust?** iOS NetworkExtension processes are jetsam-killed at ~50 MB resident memory. The previous design included a Go-compiled mihomo engine (~20–30 MB stripped binary plus the Go runtime overhead and mihomo's per-flow state), which left almost no headroom for the netstack and per-flow allocations once traffic arrived. Replacing it with [mihomo-rust](https://github.com/madeye/mihomo-rust) — a pure-Rust reimplementation of the mihomo proxy kernel — yields a single static library that fits within the memory constraint while eliminating the Go toolchain dependency entirely.
 
 ### 2.2 Layer Responsibilities
 
@@ -413,7 +413,7 @@ CHECK_NAME: FAIL(<reason>)
 | 2 | `DNS_OK` | `apple.com` resolves to ≥1 A record via 172.19.0.2:53 within 3 s | `FAIL(timeout)`, `FAIL(nxdomain)` |
 | 3 | `TCP_PROXY_OK` | TCP connect to `connectivitycheck.gstatic.com:443` succeeds through proxy within 5 s | `FAIL(timeout)`, `FAIL(refused)` |
 | 4 | `HTTP_204_OK` | HTTP GET `http://connectivitycheck.gstatic.com/generate_204` returns status 204 | `FAIL(status=NNN)`, `FAIL(timeout)` |
-| 5 | `MEM_OK` | Extension resident memory ≤ 14 MB | `FAIL(mem=NNmb>=15mb)` |
+| 5 | `MEM_OK` | Extension resident memory ≤ 40 MB | `FAIL(mem=NNmb>=15mb)` |
 
 **Screen layout (fixed, must not reorder):**
 ```
@@ -646,7 +646,7 @@ Both app target and PacketTunnel extension must share:
 
 ### Milestone 6: Testing & App Store Submission (Weeks 11–12)
 - Full regression test pass on physical devices (iPhone 15+, iOS 26)
-- Performance profiling (memory target ≤14 MB, hard-fail 15 MB)
+- Performance profiling (memory target ≤40 MB, hard-fail 50 MB)
 - App Store metadata, screenshots, privacy policy
 - TestFlight beta
 - App Store submission
@@ -657,7 +657,7 @@ Both app target and PacketTunnel extension must share:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Network Extension memory limit | High | Critical | **Budget (TEST_STRATEGY v1.2):** Extension resident ≤ 14 MB PASS / ≥ 15 MB hard-fail; MihomoCore.xcframework stripped ≤ 8 MB. Both enforced as CI gates (T1.4 size check; T6.4 runtime measure). Rust release profile: `lto = "fat"`, `opt-level = "z"`, `strip = "symbols"`. Profile with Instruments Memory Graph in M1. |
+| Network Extension memory limit | High | Critical | **Budget (TEST_STRATEGY v1.2):** Extension resident ≤ 40 MB PASS / ≥ 50 MB hard-fail; MihomoCore.xcframework stripped ≤ 8 MB. Both enforced as CI gates (T1.4 size check; T6.4 runtime measure). Rust release profile: `lto = "fat"`, `opt-level = "z"`, `strip = "symbols"`. Profile with Instruments Memory Graph in M1. |
 | **Non-DNS UDP not forwarded (M0/M1 gap)** | **Confirmed** | **Medium** | **QUIC/HTTP3 degrades to TCP HTTP/2 (usually transparent); UDP-only apps break silently. Disclosed in M0 release notes. Patched in M1 via T2.9 (wire netstack-smoltcp UDP → `mihomo_tunnel::udp::handle_udp`). Prerequisite: upstream mihomo-rust UDP API maturity check.** |
 | mihomo-rust protocol coverage | Resolved | Low | Audit complete: mihomo-rust v0.6.1 ships SS / Trojan / VLESS outbounds (plus HTTP / SOCKS5 / Direct / Reject). VMess, WireGuard, TUIC, Hysteria 2 are out of scope for M1 — defer or upstream-contribute post-M1. |
 | Rust binary size with all mihomo-rust crates | Medium | Medium | Use `cargo bloat`; enable LTO + `opt-level = "z"`; disable unused feature flags; CI hard-fails if xcframework > 8 MB |

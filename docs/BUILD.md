@@ -75,7 +75,7 @@ will be silently overwritten.
 
 ## Native library builds
 
-There is no Go toolchain. The NetworkExtension memory ceiling (15 MB resident
+There is no Go toolchain. The NetworkExtension memory ceiling (50 MB resident
 on iOS) forbids the Go runtime, so the proxy engine is
 [`mihomo-rust`](https://github.com/madeye/mihomo-rust) embedded into our FFI
 crate as a Cargo dependency. Only one static library ships.
