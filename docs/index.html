@@ -562,9 +562,10 @@
         <div class="panel warn">
           <span class="label warn-c">Known limitation</span>
           <p>
-            Some features are still under active development. The tunnel does
-            not yet forward non-DNS UDP traffic — QUIC / HTTP3 falls back to
-            TCP HTTP/2 on most sites.
+            UDP (including QUIC / HTTP3) is forwarded through the
+            packet tunnel, but reliability varies with your proxy outbound's
+            UDP support — QUIC may fall back to TCP HTTP/2 on outbounds that
+            don't carry UDP cleanly.
           </p>
           <p>
             Please report issues via

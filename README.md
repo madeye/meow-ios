@@ -12,6 +12,12 @@ Public beta is open on TestFlight: <https://testflight.apple.com/join/nnDAn7ZH>.
 Requires iOS 26 or later (iPhone and iPad). Bring your own Mihomo / Clash
 subscription — meow does not provide proxy servers.
 
+Latest release: [**v1.3.0**](https://github.com/madeye/meow-ios/releases/tag/v1.3.0)
+— RSS reductions targeting the NetworkExtension jetsam cap (peak FFI RSS
+−76% in stress tests), runtime-tunable TCP accept cap, hermetic stress
+test harness. See the [release notes](https://github.com/madeye/meow-ios/releases)
+for the full per-version changelog.
+
 ## Status
 
 Public beta. See [`docs/PRD.md`](docs/PRD.md) and
