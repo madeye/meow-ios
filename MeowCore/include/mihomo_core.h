@@ -196,4 +196,35 @@ int meow_tun_ingest(const uint8_t *data, uintptr_t len);
  */
 void meow_tun_stop(void);
 
+/**
+ * Set the TCP accept-side cap. Bounds the number of concurrent
+ * `dispatch_tcp` tasks live at once, which is the dominant factor in
+ * peak FFI RSS under burst (1000+ concurrent dispatches each carrying
+ * per-flow Metadata, Box<dyn ProxyConn>, mihomo outbound dial state,
+ * and netstack ring buffers can push the extension past the 50 MiB
+ * jetsam cap). Default 128.
+ *
+ * Takes effect on the next `meow_tun_start`. Calls during a live
+ * tunnel are accepted but do not resize the running semaphore.
+ *
+ * Returns 0 on success, -1 on invalid input (`cap == 0`, which would
+ * deadlock the accept loop).
+ */
+int meow_tun_set_accept_cap(int cap);
+
+/**
+ * Read the currently-configured TCP accept cap. Reflects the value the
+ * next `meow_tun_start` will use; does not query the running semaphore.
+ */
+int meow_tun_accept_cap(void);
+
+/**
+ * Resident memory size of the FFI's containing process, in bytes. Same
+ * number macOS jetsam compares against the 50 MiB PacketTunnel cap, so
+ * Swift can poll this to chart the on-device RSS curve during a stress
+ * run without depending on Instruments. Returns 0 on platforms where
+ * the mach call isn't available (non-Apple targets).
+ */
+uint64_t meow_resident_bytes(void);
+
 #endif  /* MIHOMO_CORE_H */

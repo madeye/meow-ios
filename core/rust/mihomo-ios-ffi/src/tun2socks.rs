@@ -91,13 +91,36 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 // peaked at 440 MiB of RSS in the first ~10 s of load — 8.8× the on-device
 // 50 MB jetsam cap — almost entirely from the size of this in-flight set.
 //
-// The cap holds the smoltcp listener until a permit is available; smoltcp
-// keeps the SYN in its accept queue (bounded internally by stack_buffer_size),
-// so the cap manifests as TCP backpressure on the originating apps rather
-// than dropped flows. Sized at 128: enough to keep typical foreground page
-// loads at full concurrency, low enough that 128 × per-flow allocation
-// stays comfortably under the cap even with mihomo's heavier outbound paths.
-const TCP_ACCEPT_CAP: usize = 128;
+// Tunable at runtime via [`set_accept_cap`] / `meow_tun_set_accept_cap`.
+// The atomic is sampled at `start()` to size the per-tunnel semaphore;
+// changes after start take effect on the next `meow_tun_start`. We don't
+// reseat a live semaphore — tokio's Semaphore can `add_permits` but not
+// shrink without forgetting permits mid-flight, which would let live flows
+// outrun the new cap until they drain. Restart-scoped is cleaner.
+//
+// 128 default: enough to keep typical foreground page loads at full
+// concurrency, low enough that 128 × per-flow allocation stays comfortably
+// under the cap on iOS hardware. Slow-DNS environments may need more.
+const TCP_ACCEPT_CAP_DEFAULT: usize = 128;
+static TCP_ACCEPT_CAP: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(TCP_ACCEPT_CAP_DEFAULT);
+
+/// Set the TCP accept cap. Takes effect on the next `meow_tun_start`.
+/// `cap` must be > 0 — zero would deadlock the accept loop. Returns true
+/// if applied, false on invalid input.
+pub fn set_accept_cap(cap: usize) -> bool {
+    if cap == 0 {
+        return false;
+    }
+    TCP_ACCEPT_CAP.store(cap, Ordering::Relaxed);
+    true
+}
+
+/// Read the currently-configured accept cap. Reflects the value the next
+/// `meow_tun_start` will use, not the size of any live semaphore.
+pub fn accept_cap() -> usize {
+    TCP_ACCEPT_CAP.load(Ordering::Relaxed)
+}
 
 // Sweep window. Tightened from 90 / 30 s to 30 / 10 s: dead-flow state
 // holds for at most one sweep interval past the idle deadline, so the
@@ -318,7 +341,7 @@ async fn run_tun2socks(
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
-    let tcp_accept_sem = Arc::new(Semaphore::new(TCP_ACCEPT_CAP));
+    let tcp_accept_sem = Arc::new(Semaphore::new(accept_cap()));
 
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
