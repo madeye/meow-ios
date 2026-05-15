@@ -24,6 +24,7 @@
 mod diagnostics;
 mod engine;
 mod logging;
+pub mod rss;
 mod subscription;
 mod tun2socks;
 

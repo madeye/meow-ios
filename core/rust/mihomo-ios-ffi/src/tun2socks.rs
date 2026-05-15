@@ -827,7 +827,16 @@ fn spawn_udp_reply_reader(
     tunnel_inner: Arc<TunnelInner>,
 ) {
     tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
+        // Per-session reply buffer. Sized for the iOS TUN MTU (1500) plus
+        // headroom for the rare oversized UDP datagram that survives path
+        // fragmentation. Was 64 KiB — at N concurrent UDP sessions (DNS,
+        // QUIC, NAT-traversal probes) that sums to N * 64 KiB pinned for
+        // each session's idle lifetime, blowing past the 50 MB jetsam cap
+        // long before mihomo's NAT timeout reaps the session. 4 KiB covers
+        // every UDP datagram that can actually round-trip through a
+        // 1500-MTU tun without fragmentation; oversized datagrams are
+        // truncated at the read, which matches the on-wire reality.
+        let mut buf = vec![0u8; 4 * 1024];
         loop {
             match session.conn.read_packet(&mut buf).await {
                 Ok((n, _from)) => {

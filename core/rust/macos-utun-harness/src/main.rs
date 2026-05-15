@@ -45,7 +45,7 @@ use utun::Utun;
 // so we are exercising the exact bytes the PacketTunnel extension runs.
 use mihomo_ios_ffi::{
     meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
-    meow_engine_stop, meow_tun_ingest, meow_tun_start, meow_tun_stop,
+    meow_engine_stop, meow_tun_ingest, meow_tun_start, meow_tun_stop, rss,
 };
 
 #[derive(Parser, Debug)]
@@ -67,6 +67,38 @@ struct Args {
     /// first free unit.
     #[arg(long, default_value_t = 0)]
     unit: u32,
+
+    /// If > 0, sample resident memory every N seconds and log it. Use
+    /// this to chart the FFI's RSS curve under whatever traffic shape
+    /// the operator drives through the tun. Cheap (one mach_task call
+    /// per tick); leave at 0 for normal interactive runs.
+    #[arg(long, default_value_t = 0)]
+    rss_monitor_interval_secs: u64,
+
+    /// If set, spawn a background load generator that opens
+    /// `stress_conns` concurrent TCP connections to this host:port,
+    /// holds each open for `stress_hold_ms`, then closes and repeats.
+    /// All originate from the harness process — under a default
+    /// `route add -net 0.0.0.0/1 172.19.0.2` they enter the tun and
+    /// drive real flow churn through the engine, surfacing per-flow
+    /// memory leaks that the cargo integration test can't see.
+    #[arg(long)]
+    stress_target: Option<String>,
+
+    /// Concurrent connections held open by the stress loop. Ignored
+    /// when `--stress-target` is unset.
+    #[arg(long, default_value_t = 32)]
+    stress_conns: usize,
+
+    /// Per-connection hold time before the stress loop tears it down
+    /// and reopens. Short holds (≤200 ms) maximise churn per second.
+    #[arg(long, default_value_t = 200)]
+    stress_hold_ms: u64,
+
+    /// Total wall time the stress loop runs before exiting. 0 = run
+    /// until Ctrl-C.
+    #[arg(long, default_value_t = 0)]
+    stress_duration_secs: u64,
 }
 
 /// The egress callback runs on a tokio worker thread (inside the FFI's
@@ -203,6 +235,42 @@ fn main() -> Result<()> {
         thread::spawn(move || ingest_loop(tun_fd))
     };
 
+    // Optional RSS monitor — emits one info-level line per tick with the
+    // mach `resident_size` for this process. Same number jetsam compares
+    // against on the device, so the curve here is directly meaningful for
+    // sizing the 50 MB extension budget.
+    let rss_monitor_thread = if args.rss_monitor_interval_secs > 0 {
+        let interval = std::time::Duration::from_secs(args.rss_monitor_interval_secs);
+        Some(thread::spawn(move || rss_monitor_loop(interval)))
+    } else {
+        None
+    };
+
+    // Optional load generator — drives real flow churn through the
+    // engine to surface per-flow leaks the cargo integration test can't
+    // see (it has no engine + no real outbound). The connections
+    // originate from this process; with the standard
+    // `route add -net 0.0.0.0/1 172.19.0.2` they enter the tun and walk
+    // the dispatch path mihomo's PacketTunnel exercises on-device.
+    let stress_thread = if let Some(target) = args.stress_target.clone() {
+        let conns = args.stress_conns.max(1);
+        let hold = std::time::Duration::from_millis(args.stress_hold_ms);
+        let duration = if args.stress_duration_secs == 0 {
+            None
+        } else {
+            Some(std::time::Duration::from_secs(args.stress_duration_secs))
+        };
+        info!(
+            "stress: target={} conns={} hold={:?} duration={:?}",
+            target, conns, hold, duration
+        );
+        Some(thread::spawn(move || {
+            stress_loop(target, conns, hold, duration)
+        }))
+    } else {
+        None
+    };
+
     // Park the main thread on the shutdown flag; ingestion runs on its own
     // thread so a blocking utun read doesn't gate signal handling.
     while !SHUTDOWN.load(Ordering::SeqCst) {
@@ -220,8 +288,135 @@ fn main() -> Result<()> {
     // explicitly here.
     utun::force_close(tun.as_raw_fd());
     let _ = ingest_thread.join();
+    if let Some(h) = rss_monitor_thread {
+        let _ = h.join();
+    }
+    if let Some(h) = stress_thread {
+        let _ = h.join();
+    }
     info!("clean exit");
     Ok(())
+}
+
+fn rss_monitor_loop(interval: std::time::Duration) {
+    let mut ticks = 0u64;
+    let mut peak_mib: f64 = 0.0;
+    while !SHUTDOWN.load(Ordering::Relaxed) {
+        if let Some(mib) = rss::resident_mib() {
+            if mib > peak_mib {
+                peak_mib = mib;
+            }
+            info!(
+                "rss_monitor t={}s rss={:.2} MiB peak={:.2} MiB",
+                ticks * interval.as_secs(),
+                mib,
+                peak_mib
+            );
+        }
+        ticks += 1;
+        // Sleep in short slices so shutdown is responsive.
+        let mut remaining = interval;
+        while remaining > std::time::Duration::ZERO && !SHUTDOWN.load(Ordering::Relaxed) {
+            let slice = remaining.min(std::time::Duration::from_millis(200));
+            thread::sleep(slice);
+            remaining = remaining.saturating_sub(slice);
+        }
+    }
+}
+
+/// Hammer `target` with `conns` concurrent short-lived TCP connections.
+/// Each worker thread re-opens its connection as soon as the previous
+/// one drops, so steady-state churn is roughly `conns / hold`/sec. Errors
+/// are counted but do not stop the loop — the goal is to pin the engine
+/// in steady-state flow churn while RSS is being sampled, not to assert
+/// reachability.
+fn stress_loop(
+    target: String,
+    conns: usize,
+    hold: std::time::Duration,
+    duration: Option<std::time::Duration>,
+) {
+    use std::net::ToSocketAddrs;
+    use std::sync::atomic::AtomicU64;
+
+    let started = std::time::Instant::now();
+    let opened = std::sync::Arc::new(AtomicU64::new(0));
+    let failed = std::sync::Arc::new(AtomicU64::new(0));
+
+    let mut workers = Vec::with_capacity(conns);
+    for _ in 0..conns {
+        let target = target.clone();
+        let opened = opened.clone();
+        let failed = failed.clone();
+        workers.push(thread::spawn(move || {
+            while !SHUTDOWN.load(Ordering::Relaxed) {
+                if let Some(limit) = duration {
+                    if started.elapsed() >= limit {
+                        return;
+                    }
+                }
+                let addr = match target.to_socket_addrs() {
+                    Ok(mut it) => it.next(),
+                    Err(_) => None,
+                };
+                let Some(addr) = addr else {
+                    failed.fetch_add(1, Ordering::Relaxed);
+                    thread::sleep(std::time::Duration::from_millis(100));
+                    continue;
+                };
+                match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(5))
+                {
+                    Ok(stream) => {
+                        opened.fetch_add(1, Ordering::Relaxed);
+                        thread::sleep(hold);
+                        drop(stream);
+                    }
+                    Err(_) => {
+                        failed.fetch_add(1, Ordering::Relaxed);
+                        thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                }
+            }
+        }));
+    }
+
+    // Reporter: prints aggregate counters every 5s so the operator can
+    // correlate RSS_MONITOR samples with the load profile.
+    let opened_r = opened.clone();
+    let failed_r = failed.clone();
+    let reporter = thread::spawn(move || {
+        let mut last = 0u64;
+        while !SHUTDOWN.load(Ordering::Relaxed) {
+            if let Some(limit) = duration {
+                if started.elapsed() >= limit {
+                    return;
+                }
+            }
+            thread::sleep(std::time::Duration::from_secs(5));
+            let now_o = opened_r.load(Ordering::Relaxed);
+            let f = failed_r.load(Ordering::Relaxed);
+            let rate = (now_o - last) as f64 / 5.0;
+            info!(
+                "stress: opened={} (Δ{:.1}/s) failed={} elapsed={:.0}s",
+                now_o,
+                rate,
+                f,
+                started.elapsed().as_secs_f64()
+            );
+            last = now_o;
+        }
+    });
+
+    for w in workers {
+        let _ = w.join();
+    }
+    let _ = reporter.join();
+    info!(
+        "stress: done — opened={} failed={} elapsed={:.1}s",
+        opened.load(Ordering::Relaxed),
+        failed.load(Ordering::Relaxed),
+        started.elapsed().as_secs_f64()
+    );
 }
 
 fn ingest_loop(fd: RawFd) {
