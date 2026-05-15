@@ -82,25 +82,39 @@ static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
-// TCP flows have no accept-time burst cap: every smoltcp-accepted flow is
-// dispatched. Memory is bounded instead by the 30-second idle sweeper
-// (`TCP_IDLE_SECS`) plus the hourly registry-size watchdog below — the cap
-// was a defensive backstop for an earlier "bursty-on-flow" leak that has
-// since been chased back to its real cause.
+// TCP accept-side burst cap. Without this, every smoltcp-accepted flow
+// spawns a `dispatch_tcp` task immediately — and under a real burst (e.g.
+// loading a content-rich CN homepage that fans out to 50+ subdomains in
+// the first second), 1000+ concurrent dispatch tasks each hold their own
+// per-flow state (Metadata, Box<dyn ProxyConn>, mihomo's outbound dial
+// buffers, the netstack stream's tx/rx ring). The 10-min VM stress run
+// peaked at 440 MiB of RSS in the first ~10 s of load — 8.8× the on-device
+// 50 MB jetsam cap — almost entirely from the size of this in-flight set.
 //
-// UDP and DNS keep their accept-time burst caps because their listeners
-// don't have an equivalent registry / idle-sweeper to bound growth.
-const TCP_IDLE_SECS: u64 = 90;
-const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 30;
+// The cap holds the smoltcp listener until a permit is available; smoltcp
+// keeps the SYN in its accept queue (bounded internally by stack_buffer_size),
+// so the cap manifests as TCP backpressure on the originating apps rather
+// than dropped flows. Sized at 128: enough to keep typical foreground page
+// loads at full concurrency, low enough that 128 × per-flow allocation
+// stays comfortably under the cap even with mihomo's heavier outbound paths.
+const TCP_ACCEPT_CAP: usize = 128;
+
+// Sweep window. Tightened from 90 / 30 s to 30 / 10 s: dead-flow state
+// holds for at most one sweep interval past the idle deadline, so the
+// post-burst tail (~50 s in the 10-min stress run) is what we're trying
+// to compress. iOS jetsam doesn't wait — once we're past the cap any
+// retention beyond the next sweep tick is a jetsam risk.
+const TCP_IDLE_SECS: u64 = 30;
+const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 10;
 const UDP_BURST_CAP: usize = 512;
 
-// Hourly watchdog: belt-and-suspenders backstop on the live `tcp_flows()`
-// registry. Once an hour, if the registry exceeds
-// `TCP_HOURLY_WATCHDOG_THRESHOLD` (e.g. a runaway reconnect storm or a leaked
-// abort handle) abort *every* flow in the table. Aggressive, but the
-// alternative is sitting at jetsam risk for another 59 minutes.
-const TCP_HOURLY_WATCHDOG_INTERVAL_SECS: u64 = 3600;
-const TCP_HOURLY_WATCHDOG_THRESHOLD: usize = 1024;
+// Emergency watchdog: when registry size crosses the threshold, abort
+// *every* flow in the table. Was 3600 s / 1024 flows — the on-device
+// 50 MB cap can't tolerate a runaway-flow window measured in hours.
+// 60 s / 256 flows makes the registry-size backstop measurable in the
+// same units (seconds, MB) the OS will jetsam us in.
+const TCP_WATCHDOG_INTERVAL_SECS: u64 = 60;
+const TCP_WATCHDOG_THRESHOLD: usize = 256;
 
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
@@ -169,8 +183,8 @@ fn sweep_idle_tcp_flows() -> usize {
 
 /// Abort every flow in the registry. Same `abort()` semantics as the idle
 /// sweeper — dropping the `dispatch_tcp` future closes both halves of the
-/// relay. Returns the number of flows closed. Used by the hourly watchdog
-/// when the live count exceeds `TCP_HOURLY_WATCHDOG_THRESHOLD`.
+/// relay. Returns the number of flows closed. Used by the registry watchdog
+/// when the live count exceeds `TCP_WATCHDOG_THRESHOLD`.
 fn close_all_tcp_flows() -> usize {
     let flows = tcp_flows();
     let mut closed: Vec<(u64, SocketAddr, SocketAddr)> = Vec::with_capacity(flows.len());
@@ -181,7 +195,7 @@ fn close_all_tcp_flows() -> usize {
     });
     if !closed.is_empty() {
         warn!(
-            "tun2socks: hourly watchdog closed {} TCP flows",
+            "tun2socks: registry watchdog closed {} TCP flows",
             closed.len()
         );
         for (id, src, dst) in &closed {
@@ -304,6 +318,7 @@ async fn run_tun2socks(
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
+    let tcp_accept_sem = Arc::new(Semaphore::new(TCP_ACCEPT_CAP));
 
     let runner_handle = tokio::spawn(async move {
         if let Err(e) = tcp_runner.await {
@@ -340,6 +355,7 @@ async fn run_tun2socks(
         }
     });
 
+    let tcp_accept_sem_for_task = tcp_accept_sem.clone();
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
             // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it
@@ -357,7 +373,21 @@ async fn run_tun2socks(
                 drop(stream);
                 continue;
             }
-            logging::bridge_log(&format!("tun2socks: TCP {} -> {}", local_addr, remote_addr));
+            // Hold accept until a permit is available — caps the number of
+            // dispatch_tcp tasks live at once and, transitively, the peak
+            // per-flow allocation footprint. `acquire_owned` returns a permit
+            // we move into the spawned task; permit drops on task exit, freeing
+            // a slot for the next accept. smoltcp keeps unaccepted SYNs in its
+            // accept queue (bounded by `stack_buffer_size`), so the cap shows
+            // up as TCP backpressure rather than dropped flows.
+            let Ok(permit) = tcp_accept_sem_for_task.clone().acquire_owned().await else {
+                break; // semaphore closed → tunnel shutting down
+            };
+            // Per-accept logging was INFO; under burst (16k accepts in 600 s
+            // measured in the VM stress run) the formatter + oslog writer
+            // become a measurable cost. Trace level keeps it available for
+            // dev diagnosis without paying the bytes on prod runs.
+            trace!("tun2socks: TCP {} -> {}", local_addr, remote_addr);
 
             let flow_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
             let state = Arc::new(FlowState {
@@ -365,6 +395,7 @@ async fn run_tun2socks(
             });
             let state_for_task = state.clone();
             let task = tokio::spawn(async move {
+                let _permit = permit;
                 dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
                 tcp_flows().remove(&flow_id);
             });
@@ -403,9 +434,8 @@ async fn run_tun2socks(
     // registry is the source of truth — `ACTIVE_TCP_CONNS` is incremented
     // inside `dispatch_tcp` and can briefly disagree at flow boundaries).
     let watchdog_handle = tokio::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(
-            TCP_HOURLY_WATCHDOG_INTERVAL_SECS,
-        ));
+        let mut tick =
+            tokio::time::interval(std::time::Duration::from_secs(TCP_WATCHDOG_INTERVAL_SECS));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Skip the immediate first tick so we don't fire right at startup.
         tick.tick().await;
@@ -415,10 +445,10 @@ async fn run_tun2socks(
                 break;
             }
             let live = tcp_flows().len();
-            if live > TCP_HOURLY_WATCHDOG_THRESHOLD {
+            if live > TCP_WATCHDOG_THRESHOLD {
                 warn!(
-                    "tun2socks: hourly watchdog tripped: {} live TCP flows > {} threshold, closing all",
-                    live, TCP_HOURLY_WATCHDOG_THRESHOLD
+                    "tun2socks: registry watchdog tripped: {} live TCP flows > {} threshold, closing all",
+                    live, TCP_WATCHDOG_THRESHOLD
                 );
                 close_all_tcp_flows();
             }
@@ -575,7 +605,7 @@ async fn run_tun2socks(
 /// RAII guard that decrements `ACTIVE_TCP_CONNS` on drop. Replaces the
 /// manual `fetch_add` / `fetch_sub` pair so the counter stays balanced
 /// when `dispatch_tcp` is dropped mid-`.await` — i.e. when the idle
-/// sweeper, the hourly watchdog, or the tunnel-shutdown loop calls
+/// sweeper, the registry watchdog, or the tunnel-shutdown loop calls
 /// `FlowRecord::abort.abort()`. Without the guard, every aborted flow
 /// leaked +1 on the counter, which is what users saw as a "1k+ active
 /// connections" reading after hours of normal sweeper activity.
