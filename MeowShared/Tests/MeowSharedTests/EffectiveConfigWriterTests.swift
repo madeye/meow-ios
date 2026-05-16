@@ -82,10 +82,10 @@ struct EffectiveConfigWriterTests {
         #expect(geo?["mmdb"]?.contains("country.mmdb") == true)
     }
 
-    // Regression guard: subscriptions with `IP-ASN,<num>,<group>` rules
-    // fail engine_start with "GeoLite2-ASN.mmdb: No such file or directory"
-    // unless geox-url.asn is injected. mihomo lazy-fetches the ASN db on
-    // first IP-ASN eval — the URL has to be there for that to work.
+    /// Regression guard: subscriptions with `IP-ASN,<num>,<group>` rules
+    /// fail engine_start with "GeoLite2-ASN.mmdb: No such file or directory"
+    /// unless geox-url.asn is injected. mihomo lazy-fetches the ASN db on
+    /// first IP-ASN eval — the URL has to be there for that to work.
     @Test
     func `injects geox-url asn entry for IP-ASN rules`() throws {
         let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: Preferences())
