@@ -1,0 +1,29 @@
+Build 2026051602 (1.3.0)
+
+WHAT'S NEW
+• Lower minimum supported iOS to iOS 17. Replaces the iOS 26-only
+  Liquid Glass card surfaces with the standard SwiftUI material; on
+  iOS 26 the system still upgrades to Liquid Glass automatically.
+  iOS 26 users see no visual change; iOS 17–25 users can now install.
+
+• TCP accept-cap tightened from 128 to 32. The dominant lever for
+  PacketTunnel RSS under sustained TCP churn was the count of
+  in-flight dispatch tasks — each holding a full per-flow buffer
+  set in netstack-smoltcp + mihomo-tunnel. The pre-fix default sat at
+  ~122 MiB working set and climbed linearly under load (Tart-VM
+  stress: +0.150 MiB/s, peak 182 MiB) — well over the iOS NE 50 MB
+  jetsam cap. cap=32 caps the working set at ~38 MiB and plateaus
+  immediately. Throughput tradeoff is real on synthetic single-host
+  fan-out (~38% of cap=128's conn/s in the harness) but small in
+  practice for foreground page loads.
+
+KNOWN
+• Non-DNS UDP forwarding still pending (QUIC/HTTP3 degraded to TCP).
+
+FOR TESTERS
+• Pay particular attention to the connection-heavy flows: image-heavy
+  feeds, social apps that fan out across CDNs, sustained downloads
+  through the proxy. The cap=32 change is the main thing on test.
+  If you notice noticeably slower page loads on heavy sites compared
+  to the previous build, please send the build number + a brief
+  description.
