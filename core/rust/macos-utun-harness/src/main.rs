@@ -45,7 +45,7 @@ use utun::Utun;
 // so we are exercising the exact bytes the PacketTunnel extension runs.
 use mihomo_ios_ffi::{
     meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
-    meow_engine_stop, meow_tun_ingest, meow_tun_start, meow_tun_stop, rss,
+    meow_engine_stop, meow_tun_ingest, meow_tun_set_accept_cap, meow_tun_start, meow_tun_stop, rss,
 };
 
 #[derive(Parser, Debug)]
@@ -99,6 +99,12 @@ struct Args {
     /// until Ctrl-C.
     #[arg(long, default_value_t = 0)]
     stress_duration_secs: u64,
+
+    /// Per-tunnel TCP accept cap (max concurrent in-flight flows the
+    /// engine will dispatch). 0 = leave at the FFI default (128).
+    /// Lowering this caps the steady-state per-flow buffer footprint.
+    #[arg(long, default_value_t = 0)]
+    tcp_accept_cap: i32,
 }
 
 /// The egress callback runs on a tokio worker thread (inside the FFI's
@@ -209,6 +215,15 @@ fn main() -> Result<()> {
     let rc = unsafe { meow_engine_start(config_c.as_ptr()) };
     if rc != 0 {
         anyhow::bail!("meow_engine_start failed: {}", last_ffi_error());
+    }
+
+    if args.tcp_accept_cap > 0 {
+        let rc = meow_tun_set_accept_cap(args.tcp_accept_cap);
+        if rc != 0 {
+            warn!("meow_tun_set_accept_cap({}) returned {}", args.tcp_accept_cap, rc);
+        } else {
+            info!("tcp accept cap = {}", args.tcp_accept_cap);
+        }
     }
 
     info!("registering tun egress callback");

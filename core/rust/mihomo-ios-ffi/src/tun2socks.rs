@@ -98,10 +98,25 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 // shrink without forgetting permits mid-flight, which would let live flows
 // outrun the new cap until they drain. Restart-scoped is cleaner.
 //
-// 128 default: enough to keep typical foreground page loads at full
-// concurrency, low enough that 128 × per-flow allocation stays comfortably
-// under the cap on iOS hardware. Slow-DNS environments may need more.
-const TCP_ACCEPT_CAP_DEFAULT: usize = 128;
+// 32 default. Empirical: a 10-min Tart-VM stress at 32-concurrent ×
+// 200 ms-hold connections through github.com:443 — exhaustively
+// instrumented in docs/INVESTIGATION-2026-05-16-stress-rss-netstack-
+// smoltcp.md — produced:
+//   cap=128: 122 MiB working set, +0.150 MiB/s slope, peak 182 MiB
+//   cap= 32:  38 MiB working set, **flat from t=10 s**, no slope
+// The cap, not the underlying allocator or per-flow buffer size, was
+// the dominant lever. The accept-side semaphore caps the in-flight
+// dispatch task population, which directly bounds the per-flow state
+// (Metadata + Box<dyn ProxyConn> + outbound dial buffers + the
+// netstack stream's tx/rx ring) the runtime ever holds at once. At
+// cap=32 the working set is ~4 × per-flow, comfortably below iOS NE's
+// 50 MB jetsam cap with substantial headroom for spikes.
+//
+// Throughput tradeoff: ~25% of the cap=128 conn/s rate (56/s vs
+// 147/s in the same stress harness). Acceptable for the foreground
+// page-load shape we actually need to serve; iOS NE's whole reason
+// for existing is to fit in 50 MB, not to win a benchmark.
+const TCP_ACCEPT_CAP_DEFAULT: usize = 32;
 static TCP_ACCEPT_CAP: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(TCP_ACCEPT_CAP_DEFAULT);
 
