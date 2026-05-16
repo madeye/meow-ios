@@ -24,6 +24,7 @@ struct HomeView: View {
             }
             .padding(16)
         }
+        .background(AppTheme.screenBackground)
         .scrollContentBackground(.hidden)
         .navigationTitle("home.nav.title")
         .task(id: vpnManager.stage) {
@@ -73,21 +74,23 @@ struct HomeView: View {
 
     private var primaryCard: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 10) {
-                    StageDot(stage: vpnManager.stage)
-                    Text(stageBadgeText)
-                        .font(.headline)
-                        .accessibilityIdentifier("home.badge.state")
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .center, spacing: 14) {
+                    StatusGlyph(stage: vpnManager.stage)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(stageBadgeText)
+                            .font(.title2.weight(.semibold))
+                            .accessibilityIdentifier("home.badge.state")
+                        Text(profileName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("home.profile.name")
+                    }
                     Spacer()
-                    Text(profileName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .accessibilityIdentifier("home.profile.name")
                 }
 
-                HStack(spacing: 24) {
+                HStack(spacing: 18) {
                     PacketStat(
                         systemImage: "arrow.down.to.line.square",
                         count: ipcBridge.currentTraffic.ingressPackets,
@@ -112,6 +115,8 @@ struct HomeView: View {
                 if isInFlight {
                     ProgressView().controlSize(.small).tint(.white)
                 }
+                Image(systemName: isConnected ? "power.circle.fill" : "power.circle")
+                    .imageScale(.large)
                 Text(toggleTitle)
                     .font(.headline)
             }
@@ -153,7 +158,7 @@ struct HomeView: View {
             GlassCard {
                 HStack(spacing: 12) {
                     Image(systemName: "rectangle.stack")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(AppTheme.accent)
                         .frame(width: 24)
                     Text("home.proxyGroups.header")
                         .font(.subheadline)
@@ -180,34 +185,42 @@ struct HomeView: View {
     // MARK: - Auxiliary nav
 
     private var auxiliaryNavSection: some View {
-        VStack(spacing: 10) {
-            NavRow(
-                title: "home.nav.connections",
-                systemImage: "chevron.right.square",
-                identifier: "home.nav.connections",
-            ) { ConnectionsView() }
+        GlassCard {
+            VStack(spacing: 0) {
+                NavRow(
+                    title: "home.nav.connections",
+                    systemImage: "chevron.right.square",
+                    identifier: "home.nav.connections",
+                ) { ConnectionsView() }
 
-            NavRow(
-                title: "home.nav.rules",
-                systemImage: "arrow.triangle.branch",
-                identifier: "home.nav.rules",
-            ) { RulesView() }
+                Divider().padding(.leading, 42)
 
-            NavRow(
-                title: "home.nav.providers",
-                systemImage: "tray.full",
-                identifier: "home.nav.providers",
-            ) { ProvidersView() }
+                NavRow(
+                    title: "home.nav.rules",
+                    systemImage: "arrow.triangle.branch",
+                    identifier: "home.nav.rules",
+                ) { RulesView() }
 
-            NavRow(
-                title: "home.nav.diagnostics",
-                systemImage: "stethoscope",
-                identifier: "home.nav.diagnostics",
-            ) {
-                DiagnosticsPanelView()
-                    .ignoresSafeArea(edges: .bottom)
-                    .navigationTitle("home.nav.diagnostics")
-                    .navigationBarTitleDisplayMode(.inline)
+                Divider().padding(.leading, 42)
+
+                NavRow(
+                    title: "home.nav.providers",
+                    systemImage: "tray.full",
+                    identifier: "home.nav.providers",
+                ) { ProvidersView() }
+
+                Divider().padding(.leading, 42)
+
+                NavRow(
+                    title: "home.nav.diagnostics",
+                    systemImage: "stethoscope",
+                    identifier: "home.nav.diagnostics",
+                ) {
+                    DiagnosticsPanelView()
+                        .ignoresSafeArea(edges: .bottom)
+                        .navigationTitle("home.nav.diagnostics")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
             }
         }
     }
@@ -252,10 +265,10 @@ struct HomeView: View {
 
     private var toggleTint: Color {
         switch vpnManager.stage {
-        case .connected: .red
-        case .connecting, .stopping: .orange
-        case .error: .red
-        default: .accentColor
+        case .connected: AppTheme.danger
+        case .connecting, .stopping: AppTheme.warning
+        case .error: AppTheme.danger
+        default: AppTheme.accent
         }
     }
 
@@ -332,9 +345,47 @@ private struct StageDot: View {
     private var color: Color {
         switch stage {
         case .idle, .stopped: .secondary
-        case .connecting, .stopping: .orange
-        case .connected: .green
-        case .error: .red
+        case .connecting, .stopping: AppTheme.warning
+        case .connected: AppTheme.connected
+        case .error: AppTheme.danger
+        }
+    }
+}
+
+private struct StatusGlyph: View {
+    let stage: VpnStage
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(AppTheme.iconBackground)
+                .frame(width: 54, height: 54)
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(color)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            StageDot(stage: stage)
+                .background(.background, in: Circle())
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var symbol: String {
+        switch stage {
+        case .connected: "checkmark.shield.fill"
+        case .connecting, .stopping: "bolt.horizontal.circle.fill"
+        case .error: "exclamationmark.triangle.fill"
+        default: "shield"
+        }
+    }
+
+    private var color: Color {
+        switch stage {
+        case .connected: AppTheme.connected
+        case .connecting, .stopping: AppTheme.warning
+        case .error: AppTheme.danger
+        default: AppTheme.accent
         }
     }
 }
@@ -374,19 +425,21 @@ private struct NavRow<Destination: View>: View {
 
     var body: some View {
         NavigationLink(destination: destination) {
-            GlassCard {
-                HStack(spacing: 12) {
-                    Image(systemName: systemImage)
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 24)
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.tertiary)
-                }
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 30, height: 30)
+                    .background(AppTheme.accent.opacity(0.10), in: Circle())
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier)

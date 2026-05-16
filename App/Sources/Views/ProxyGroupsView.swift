@@ -58,6 +58,7 @@ struct ProxyGroupsView: View {
             }
             .padding(16)
         }
+        .background(AppTheme.screenBackground)
         .scrollContentBackground(.hidden)
         .navigationTitle("home.proxyGroups.header")
         .navigationBarTitleDisplayMode(.inline)

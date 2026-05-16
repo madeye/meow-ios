@@ -10,15 +10,21 @@ struct ContentView: View {
         TabView {
             NavigationStack { HomeView() }
                 .tabItem { Label("tabs.home", systemImage: "house.fill") }
+                .accessibilityIdentifier("Home")
             NavigationStack { SubscriptionsView() }
                 .tabItem { Label("tabs.subscriptions", systemImage: "text.document.fill") }
+                .accessibilityIdentifier("Subscriptions")
             NavigationStack { TrafficView() }
                 .tabItem { Label("tabs.traffic", systemImage: "chart.bar.fill") }
+                .accessibilityIdentifier("Traffic")
             NavigationStack { LogsView() }
                 .tabItem { Label("tabs.logs", systemImage: "list.bullet.rectangle.fill") }
+                .accessibilityIdentifier("Logs")
             NavigationStack { SettingsView() }
                 .tabItem { Label("tabs.settings", systemImage: "gearshape.fill") }
+                .accessibilityIdentifier("Settings")
         }
+        .tint(AppTheme.accent)
         .onOpenURL { url in
             if url.scheme == "meow", url.host == "diagnostics" {
                 showDiagnostics = true

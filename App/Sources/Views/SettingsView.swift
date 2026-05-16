@@ -61,6 +61,8 @@ struct SettingsView: View {
                 }
             #endif
         }
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.screenBackground)
         .navigationTitle("settings.nav.title")
         #if DEBUG
             .navigationDestination(isPresented: $showDebugPanel) {

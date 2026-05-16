@@ -65,6 +65,7 @@ struct TrafficView: View {
             }
             .padding()
         }
+        .background(AppTheme.screenBackground)
     }
 
     private var speedCard: some View {

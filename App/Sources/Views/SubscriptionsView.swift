@@ -61,6 +61,7 @@ struct SubscriptionsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .background(AppTheme.screenBackground)
         .overlay {
             if profiles.isEmpty {
                 ContentUnavailableView(
