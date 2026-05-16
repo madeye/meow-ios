@@ -12,6 +12,10 @@ HEADER_DST="$ROOT/MeowCore/include/mihomo_core.h"
 TARGETS_REQUIRED=(aarch64-apple-ios aarch64-apple-ios-sim)
 PROFILE="release"
 
+# Match the iOS deployment target declared in project.yml so the Rust static
+# libs and the Xcode targets agree on LC_BUILD_VERSION minos.
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-17.0}"
+
 for target in "${TARGETS_REQUIRED[@]}"; do
     if ! rustup target list --installed | grep -qx "$target"; then
         echo "==> Adding rust target $target"

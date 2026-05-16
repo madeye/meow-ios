@@ -16,7 +16,7 @@
 
 ### 1.1 What is meow-ios?
 
-meow-ios is a native iOS VPN/proxy client that ports the Android "meow" app to Apple platforms. It provides a full-featured proxy management experience — Clash-protocol subscriptions, Shadowsocks / Trojan / VLESS outbounds (the protocol set shipped by mihomo-rust v0.6.1), rule-based traffic routing, and DNS-over-HTTPS — wrapped in a modern iOS 26 Liquid Glass UI.
+meow-ios is a native iOS VPN/proxy client that ports the Android "meow" app to Apple platforms. It provides a full-featured proxy management experience — Clash-protocol subscriptions, Shadowsocks / Trojan / VLESS outbounds (the protocol set shipped by mihomo-rust v0.6.1), rule-based traffic routing, and DNS-over-HTTPS — wrapped in a SwiftUI material UI.
 
 ### 1.2 Target Audience
 
@@ -30,7 +30,7 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
 - **Zero-config subscriptions:** paste a URL, meow fetches and converts automatically
 - **Transparent VPN:** all system traffic routed through the proxy without per-app configuration
 - **Real-time visibility:** live connection table, traffic charts, rule matching logs
-- **iOS-native UX:** SwiftUI with iOS 26 Liquid Glass design, no cross-platform compromises
+- **iOS-native UX:** SwiftUI with material design, no cross-platform compromises
 
 ---
 
@@ -40,7 +40,7 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│              SwiftUI App (iOS 26, Liquid Glass)          │
+│              SwiftUI App (iOS 17+, material UI)          │
 │         Tab bar · Cards · Native controls · SwiftData    │
 └─────────────────────┬───────────────────────────────────┘
                       │ App ↔ Extension IPC
@@ -69,7 +69,7 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
 
 | Layer | Technology | Responsibility |
 |-------|-----------|----------------|
-| UI | SwiftUI + iOS 26 | All screens, navigation, state presentation |
+| UI | SwiftUI + iOS 17+ | All screens, navigation, state presentation |
 | App ↔ Extension IPC | CFNotificationCenter + App Group container | Commands (connect/disconnect) and state/traffic events |
 | Packet Tunnel Provider | NEPacketTunnelProvider | VPN lifecycle, TUN fd management |
 | MihomoCore (Rust) | Rust, cbindgen C header, single XCFramework | tun2socks (netstack-smoltcp), DoH, full proxy engine (mihomo-rust), REST controller at 127.0.0.1:9090 |
@@ -208,22 +208,24 @@ This avoids XPC complexity while remaining within Apple's sandbox restrictions.
 
 ---
 
-## 4. iOS 26 UI Design Direction
+## 4. UI Design Direction
 
 ### 4.1 Design Language
 
-meow-ios adopts **iOS 26 Liquid Glass** throughout:
-- `.glassEffect()` modifier on cards and panels
-- Tab bar uses the new floating glass tab bar (`.tabBarStyle(.prominent)` equivalent)
-- Frosted glass navigation bars and sheets
+meow-ios adopts a **SwiftUI material design** throughout:
+- `.regularMaterial` background on cards and panels (with a thin stroke overlay)
+- Standard SwiftUI `TabView` with system tab bar
+- Frosted navigation bars and sheets via system materials
 - Adaptive dark/light appearance with vibrancy
-- SF Symbols 7 iconography
+- SF Symbols iconography
 - Large title navigation where appropriate
+
+Minimum deployment target is iOS 17. On iOS 26 the system upgrades materials with Liquid Glass automatically; no app-side opt-in is required.
 
 ### 4.2 Navigation Structure
 
 ```
-TabView (Liquid Glass tab bar)
+TabView (system tab bar)
 ├── Home          (house.fill)
 ├── Subscriptions (text.document.fill)
 ├── Traffic       (chart.bar.fill)
@@ -614,7 +616,7 @@ Both app target and PacketTunnel extension must share:
 
 ### Milestone 1.5: Manual Smoke Passes (End of Week 3)
 - T2.6 (Debug Diagnostics Panel) complete; all 5 checks rendering on device with `MEOW_DEBUG=1`
-- User runs manual smoke on their iPhone (iOS 26, real device) and confirms all 5 checks read `PASS`
+- User runs manual smoke on their iPhone (iOS 17+ real device) and confirms all 5 checks read `PASS`
 - Gate is user sign-off, not an automated assertion; vphone-cli nightly harness is retired (v1.4)
 
 ### Milestone 2: VPN Toggle + Basic UI (Weeks 4–5)
@@ -640,12 +642,12 @@ Both app target and PacketTunnel extension must share:
 - Daily traffic accumulation in SwiftData
 - Traffic screen with Swift Charts
 - **T2.9 (non-DNS UDP):** wire netstack-smoltcp UDP → `mihomo_tunnel::udp::handle_udp` (pending upstream API maturity)
-- iOS 26 Liquid Glass UI polish pass
+- SwiftUI material UI polish pass
 - Dark mode, Dynamic Type, accessibility audit
 - App icons, launch screen
 
 ### Milestone 6: Testing & App Store Submission (Weeks 11–12)
-- Full regression test pass on physical devices (iPhone 15+, iOS 26)
+- Full regression test pass on physical devices (iPhone running iOS 17+)
 - Performance profiling (memory target ≤40 MB, hard-fail 50 MB)
 - App Store metadata, screenshots, privacy policy
 - TestFlight beta

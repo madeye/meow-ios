@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "MeowShared",
     platforms: [
-        .iOS(.v26),
+        .iOS(.v17),
         // macOS 15 lets `swift test` drive MeowSharedTests from the command
         // line. Production builds always target iOS via `project.yml`; this
         // declaration is only so CI / local dev can run pure-logic tests
