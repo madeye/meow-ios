@@ -8,21 +8,16 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            Tab("tabs.home", systemImage: "house.fill") {
-                NavigationStack { HomeView() }
-            }
-            Tab("tabs.subscriptions", systemImage: "text.document.fill") {
-                NavigationStack { SubscriptionsView() }
-            }
-            Tab("tabs.traffic", systemImage: "chart.bar.fill") {
-                NavigationStack { TrafficView() }
-            }
-            Tab("tabs.logs", systemImage: "list.bullet.rectangle.fill") {
-                NavigationStack { LogsView() }
-            }
-            Tab("tabs.settings", systemImage: "gearshape.fill") {
-                NavigationStack { SettingsView() }
-            }
+            NavigationStack { HomeView() }
+                .tabItem { Label("tabs.home", systemImage: "house.fill") }
+            NavigationStack { SubscriptionsView() }
+                .tabItem { Label("tabs.subscriptions", systemImage: "text.document.fill") }
+            NavigationStack { TrafficView() }
+                .tabItem { Label("tabs.traffic", systemImage: "chart.bar.fill") }
+            NavigationStack { LogsView() }
+                .tabItem { Label("tabs.logs", systemImage: "list.bullet.rectangle.fill") }
+            NavigationStack { SettingsView() }
+                .tabItem { Label("tabs.settings", systemImage: "gearshape.fill") }
         }
         .onOpenURL { url in
             if url.scheme == "meow", url.host == "diagnostics" {
