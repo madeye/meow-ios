@@ -49,7 +49,7 @@ use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{mpsc, OwnedSemaphorePermit, Semaphore};
 use tracing::{info, trace, warn};
 
 use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
@@ -145,6 +145,30 @@ pub fn accept_cap() -> usize {
 const TCP_IDLE_SECS: u64 = 30;
 const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 10;
 const UDP_BURST_CAP: usize = 512;
+
+// In-TUN UDP/53 handler fan-out cap. Each UDP/53 packet spawns an async
+// task that may block on a real DNS round-trip (forward_dns_to_upstream
+// for non-A/AAAA, mihomo's resolver for A/AAAA). Without a cap, a DNS
+// storm (Safari HTTPS/SVCB probes, mDNS-style fan-out, malicious flood)
+// produces unbounded `tokio::spawn` calls each holding the inbound IP
+// frame plus its upstream socket. 256 is sized to match the UDP burst
+// cap above — DNS is conceptually a slice of UDP, not a separate budget.
+const DNS_BURST_CAP: usize = 256;
+static DNS_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+// Per-DNS-task wall-clock cap. Belt-and-suspenders for DNS_BURST_CAP: the
+// cap bounds concurrent tasks but only a timeout bounds individual task
+// lifetime, and 256 stuck tasks against a hung upstream would otherwise
+// permanently exhaust the cap. 5s covers the worst legitimate iOS
+// resolver round-trip (cold DNS-over-HTTPS in a captive-portal scenario)
+// while bounding the lockout window.
+const DNS_TASK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+// Throttle slot for the silent-egress-drop log. The egress path drops
+// outbound frames non-blockingly when egress_rx is saturated (Swift-side
+// writePackets is slow); without a log the user sees a throughput cliff
+// with no on-device signal. Throttled via warn_capped to once per second.
+static EGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 // Emergency watchdog: when registry size crosses the threshold, abort
 // *every* flow in the table. Was 3600 s / 1024 flows — the on-device
@@ -356,6 +380,7 @@ async fn run_tun2socks(
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
+    let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
     let tcp_accept_sem = Arc::new(Semaphore::new(accept_cap()));
 
     let runner_handle = tokio::spawn(async move {
@@ -381,7 +406,14 @@ async fn run_tun2socks(
                 }
                 pkt = stack.next() => {
                     match pkt {
-                        Some(Ok(frame)) => { let _ = egress_tx_stack.try_send(frame); }
+                        Some(Ok(frame)) => {
+                            if egress_tx_stack.try_send(frame).is_err() {
+                                warn_capped(
+                                    &EGRESS_DROP_LOG_LAST_MS,
+                                    "tun2socks: egress queue saturated, dropping outbound frame (Swift writePackets backpressure)",
+                                );
+                            }
+                        }
                         Some(Err(e)) => {
                             logging::bridge_log(&format!("stack recv error: {}", e));
                             break;
@@ -529,8 +561,7 @@ async fn run_tun2socks(
             let reply_tx = udp_reply_tx_accept.clone();
             let readers = reply_readers_accept.clone();
             tokio::spawn(async move {
-                let _permit = permit;
-                dispatch_udp(payload, src, dst, reply_tx, readers).await;
+                dispatch_udp(payload, src, dst, reply_tx, readers, permit).await;
             });
         }
     });
@@ -556,13 +587,25 @@ async fn run_tun2socks(
         // destination IP isn't a real host on the inside, and we'd just
         // create an orphan session.
         if parse_udp_packet(&ip_data).is_some_and(|p| p.dst_port == 53) {
+            let permit = match dns_sem.clone().try_acquire_owned() {
+                Ok(p) => p,
+                Err(_) => {
+                    warn_capped(
+                        &DNS_CAP_LOG_LAST_MS,
+                        "tun2socks: DNS burst cap reached, dropping query",
+                    );
+                    continue;
+                }
+            };
             let request = ip_data.clone();
             let egress = egress_tx.clone();
             tokio::spawn(async move {
-                let Some(parsed) = parse_udp_packet(&request) else {
-                    return;
-                };
-                let qtype = parse_dns_qtype(parsed.payload);
+                let _permit = permit;
+                let work = async {
+                    let Some(parsed) = parse_udp_packet(&request) else {
+                        return;
+                    };
+                    let qtype = parse_dns_qtype(parsed.payload);
 
                 let response_payload = if matches!(qtype, Some(1) | Some(28)) {
                     let Some(tunnel) = crate::engine::tunnel() else {
@@ -597,10 +640,14 @@ async fn run_tun2socks(
                         }
                     }
                 };
-                let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
-                    return;
+                    let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
+                        return;
+                    };
+                    let _ = egress.send(reply_pkt).await;
                 };
-                let _ = egress.send(reply_pkt).await;
+                if tokio::time::timeout(DNS_TASK_TIMEOUT, work).await.is_err() {
+                    trace!("tun2socks: DNS task exceeded {:?}, aborting", DNS_TASK_TIMEOUT);
+                }
             });
             continue;
         }
@@ -829,6 +876,7 @@ async fn dispatch_udp(
     dst: SocketAddr,
     reply_tx: mpsc::Sender<UdpMsg>,
     reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
+    permit: OwnedSemaphorePermit,
 ) {
     let Some(tunnel) = crate::engine::tunnel() else {
         logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
@@ -857,11 +905,20 @@ async fn dispatch_udp(
     //   2. `pre_resolve` — re-resolves the host (if any) through the engine
     //      resolver and re-populates `dst_ip` with the real upstream IP.
     //
-    // Both calls are idempotent — handle_udp invokes them again internally
-    // and they short-circuit on the already-populated metadata. The
-    // round-trip is unavoidable on this side because we need the resolved
-    // SocketAddr to key the reply-reader registry.
+    // Release the UDP burst-cap permit before pre_resolve. The permit's
+    // purpose is to bound the concurrent count of UDP *dispatch* tasks
+    // (handle_udp + NAT-insert work), not to gate DNS resolution. Holding
+    // it across pre_resolve means a slow upstream DNS shrinks the
+    // effective cap in proportion to the resolve latency — under a partial
+    // upstream outage the cap exhausts and new datagrams get silently
+    // dropped even though no real dispatch work is in flight.
+    //
+    // Both pre_* calls are idempotent — handle_udp invokes them again
+    // internally and they short-circuit on the already-populated metadata.
+    // The round-trip is unavoidable on this side because we need the
+    // resolved SocketAddr to key the reply-reader registry.
     tunnel.inner().pre_handle_metadata(&mut metadata);
+    drop(permit);
     tunnel.inner().pre_resolve(&mut metadata).await;
     let Some(resolved_ip) = metadata.dst_ip else {
         // Resolution failed — handle_udp will also bail, nothing to dispatch.

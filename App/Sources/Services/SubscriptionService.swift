@@ -34,7 +34,20 @@ final class SubscriptionService {
         return profile
     }
 
+    /// Import a profile from a local YAML payload (Files / iCloud Drive
+    /// picker). No remote URL — `url` is empty, which the row UI uses to
+    /// hide the refresh affordance.
+    @discardableResult
+    func addLocal(name: String, yamlContent: String) async throws -> Profile {
+        let normalized = try await normalize(body: Data(yamlContent.utf8))
+        let profile = Profile(name: name, url: "", yamlContent: normalized, yamlBackup: normalized)
+        modelContext.insert(profile)
+        try modelContext.save()
+        return profile
+    }
+
     func refresh(_ profile: Profile) async throws {
+        guard !profile.url.isEmpty else { throw SubscriptionError.invalidURL }
         let yaml = try await fetchAndNormalize(url: profile.url)
         profile.yamlBackup = profile.yamlContent
         profile.yamlContent = yaml

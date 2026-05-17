@@ -1,10 +1,12 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SubscriptionsView: View {
     @Environment(SubscriptionService.self) private var service
     @Query(sort: \Profile.lastUpdated, order: .reverse) private var profiles: [Profile]
     @State private var showingAdd = false
+    @State private var showingImporter = false
     @State private var editing: Profile?
     @State private var error: String?
 
@@ -35,15 +37,17 @@ struct SubscriptionsView: View {
                         .buttonStyle(.borderless)
                         .accessibilityLabel(Text("subscriptions.row.a11y.edit \(profile.name)"))
                         .accessibilityIdentifier("subscriptions.row.editYaml")
-                        Button {
-                            Task { try? await service.refresh(profile) }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .frame(minWidth: 44, minHeight: 44)
-                                .contentShape(Rectangle())
+                        if !profile.url.isEmpty {
+                            Button {
+                                Task { try? await service.refresh(profile) }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -75,8 +79,20 @@ struct SubscriptionsView: View {
         .navigationTitle("subscriptions.nav.title")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingAdd = true
+                Menu {
+                    Button {
+                        showingAdd = true
+                    } label: {
+                        Label("subscriptions.toolbar.addFromURL", systemImage: "link")
+                    }
+                    .accessibilityIdentifier("subscriptions.toolbar.addFromURL")
+
+                    Button {
+                        showingImporter = true
+                    } label: {
+                        Label("subscriptions.toolbar.importFromFile", systemImage: "icloud.and.arrow.down")
+                    }
+                    .accessibilityIdentifier("subscriptions.toolbar.importFromFile")
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -86,6 +102,13 @@ struct SubscriptionsView: View {
         }
         .sheet(isPresented: $showingAdd) {
             AddSubscriptionSheet(error: $error)
+        }
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: yamlContentTypes(),
+            allowsMultipleSelection: false,
+        ) { result in
+            handleImport(result)
         }
         .sheet(item: $editing) { profile in
             NavigationStack {
@@ -97,6 +120,57 @@ struct SubscriptionsView: View {
         } message: {
             Text(error ?? "")
         }
+    }
+
+    /// File picker accepts YAML proper plus `.txt` and unspecified data —
+    /// iCloud Drive routinely serves Clash configs uploaded from desktops
+    /// where the OS tagged them as `public.plain-text` or just `public.data`,
+    /// not `public.yaml`. The actual YAML check happens inside addLocal's
+    /// normalize step, so widening the accept list here is safe.
+    private func yamlContentTypes() -> [UTType] {
+        var types: [UTType] = [.yaml, .plainText, .text, .data]
+        if let yml = UTType(filenameExtension: "yml") { types.append(yml) }
+        return types
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case let .success(urls):
+            guard let url = urls.first else { return }
+            Task {
+                do {
+                    let yaml = try await readSecurityScoped(url)
+                    let suggestedName = url.deletingPathExtension().lastPathComponent
+                    let name = suggestedName.isEmpty ? "Imported" : suggestedName
+                    _ = try await service.addLocal(name: name, yamlContent: yaml)
+                } catch {
+                    self.error = error.localizedDescription
+                }
+            }
+        case let .failure(err):
+            error = err.localizedDescription
+        }
+    }
+
+    /// iCloud Drive / Files picker hands back a URL that requires a
+    /// security-scoped resource access pairing before the sandbox lets us
+    /// read it. The picker URL is single-shot — we copy the bytes into a
+    /// String and let the scope expire.
+    private func readSecurityScoped(_ url: URL) async throws -> String {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        guard let yaml = String(data: data, encoding: .utf8) else {
+            throw NSError(
+                domain: "SubscriptionsView",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString(
+                    "subscriptions.import.invalidEncoding",
+                    comment: "Shown when an imported file isn't UTF-8 text",
+                )],
+            )
+        }
+        return yaml
     }
 }
 

@@ -69,6 +69,9 @@
 "subscriptions.row.a11y.edit %@" = "Edit YAML for %@";
 "subscriptions.row.a11y.refresh %@" = "Refresh %@";
 "subscriptions.toolbar.a11y.add" = "Add subscription";
+"subscriptions.toolbar.addFromURL" = "Add from URL";
+"subscriptions.toolbar.importFromFile" = "Import from iCloud Drive…";
+"subscriptions.import.invalidEncoding" = "The selected file isn't valid UTF-8 text.";
 "subscriptions.empty.title" = "No subscriptions yet";
 "subscriptions.empty.description" = "Tap + to add a Mihomo or Clash subscription URL.";
 
