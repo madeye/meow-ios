@@ -2,7 +2,6 @@
    Key namespacing by screen (matches accessibilityIdentifier namespaces where sensible).
 
    Strings deliberately NOT localized and therefore NOT in this file:
-   - HomeView.stageBadgeText — QA harness pins on lowercase ASCII ("disconnected", "connecting", "connected", "disconnecting").
    - DiagnosticsViewController row content — OCR harness pins on uppercase ASCII "CHECK: PASS/FAIL" format.
    - UserDiagnosticsView error reason codes ("tunnel_not_running", "connect_failed", "encode_failed", "unknown_error") — stable diagnostic identifiers.
    - Chart axis raw values ("t", "up", "down", "series", "day", "tx", "rx") — internal chart bindings, not displayed text.
@@ -33,6 +32,10 @@
 "home.toggle.connecting" = "Connecting…";
 "home.toggle.disconnect" = "Disconnect";
 "home.toggle.disconnecting" = "Disconnecting…";
+"home.badge.disconnected" = "Disconnected";
+"home.badge.connecting" = "Connecting";
+"home.badge.connected" = "Connected";
+"home.badge.disconnecting" = "Disconnecting";
 "home.packet.ingress" = "Ingress";
 "home.packet.egress" = "Egress";
 "home.traffic.upload" = "Upload";

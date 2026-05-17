@@ -242,15 +242,12 @@ struct HomeView: View {
         vpnManager.stage == .connecting || vpnManager.stage == .stopping
     }
 
-    /// PRD §4.3 + team-lead spec: lowercase ASCII, exactly one of
-    /// `disconnected`, `connecting`, `connected`, `disconnecting`. QA's
-    /// harness pins on this — don't localise, don't title-case.
-    private var stageBadgeText: String {
+    private var stageBadgeText: LocalizedStringKey {
         switch vpnManager.stage {
-        case .idle, .stopped, .error: "disconnected"
-        case .connecting: "connecting"
-        case .connected: "connected"
-        case .stopping: "disconnecting"
+        case .idle, .stopped, .error: "home.badge.disconnected"
+        case .connecting: "home.badge.connecting"
+        case .connected: "home.badge.connected"
+        case .stopping: "home.badge.disconnecting"
         }
     }
 
