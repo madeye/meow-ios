@@ -39,9 +39,11 @@
 "home.toggle.disconnect" = "断开";
 "home.toggle.disconnecting" = "断开中…";
 "home.badge.disconnected" = "未连接";
+"home.badge.preparing" = "准备中…";
 "home.badge.connecting" = "连接中";
 "home.badge.connected" = "已连接";
 "home.badge.disconnecting" = "断开中";
+"home.toggle.preparing" = "准备中…";
 "home.packet.ingress" = "入站";
 "home.packet.egress" = "出站";
 "home.traffic.upload" = "上传";

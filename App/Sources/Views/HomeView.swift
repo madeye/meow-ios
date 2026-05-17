@@ -239,12 +239,14 @@ struct HomeView: View {
     }
 
     private var isInFlight: Bool {
-        vpnManager.stage == .connecting || vpnManager.stage == .stopping
+        let stage = vpnManager.stage
+        return stage == .preparing || stage == .connecting || stage == .stopping
     }
 
     private var stageBadgeText: LocalizedStringKey {
         switch vpnManager.stage {
         case .idle, .stopped, .error: "home.badge.disconnected"
+        case .preparing: "home.badge.preparing"
         case .connecting: "home.badge.connecting"
         case .connected: "home.badge.connected"
         case .stopping: "home.badge.disconnecting"
@@ -254,6 +256,7 @@ struct HomeView: View {
     private var toggleTitle: LocalizedStringKey {
         switch vpnManager.stage {
         case .connected: "home.toggle.disconnect"
+        case .preparing: "home.toggle.preparing"
         case .connecting: "home.toggle.connecting"
         case .stopping: "home.toggle.disconnecting"
         default: "home.toggle.connect"
@@ -263,7 +266,7 @@ struct HomeView: View {
     private var toggleTint: Color {
         switch vpnManager.stage {
         case .connected: AppTheme.danger
-        case .connecting, .stopping: AppTheme.warning
+        case .preparing, .connecting, .stopping: AppTheme.warning
         case .error: AppTheme.danger
         default: AppTheme.accent
         }
@@ -342,7 +345,7 @@ private struct StageDot: View {
     private var color: Color {
         switch stage {
         case .idle, .stopped: .secondary
-        case .connecting, .stopping: AppTheme.warning
+        case .preparing, .connecting, .stopping: AppTheme.warning
         case .connected: AppTheme.connected
         case .error: AppTheme.danger
         }
@@ -371,7 +374,7 @@ private struct StatusGlyph: View {
     private var symbol: String {
         switch stage {
         case .connected: "checkmark.shield.fill"
-        case .connecting, .stopping: "bolt.horizontal.circle.fill"
+        case .preparing, .connecting, .stopping: "bolt.horizontal.circle.fill"
         case .error: "exclamationmark.triangle.fill"
         default: "shield"
         }
@@ -380,7 +383,7 @@ private struct StatusGlyph: View {
     private var color: Color {
         switch stage {
         case .connected: AppTheme.connected
-        case .connecting, .stopping: AppTheme.warning
+        case .preparing, .connecting, .stopping: AppTheme.warning
         case .error: AppTheme.danger
         default: AppTheme.accent
         }

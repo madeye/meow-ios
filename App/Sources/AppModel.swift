@@ -57,7 +57,7 @@ final class AppModel {
                 await self?.replaySelectedProxies()
             }
         }
-        await AssetSeeder.seedIfNeeded()
+        try? FileManager.default.createDirectory(at: AppGroup.mihomoConfigDir, withIntermediateDirectories: true)
         await vpnManager.refresh()
         ipcBridge.start()
         dailyTrafficAccumulator.start()

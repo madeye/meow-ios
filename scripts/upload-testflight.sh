@@ -116,9 +116,6 @@ fi
 if [[ "$SKIP_RUST_BUILD" -eq 0 ]]; then
     "$ROOT/scripts/build-rust.sh"
 fi
-if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
-    "$ROOT/scripts/fetch-geo-assets.sh"
-fi
 
 # destination=upload makes -exportArchive submit the IPA to App Store
 # Connect after exporting (Xcode 14+). method=app-store-connect (the

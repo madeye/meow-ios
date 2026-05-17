@@ -33,9 +33,11 @@
 "home.toggle.disconnect" = "Disconnect";
 "home.toggle.disconnecting" = "Disconnecting…";
 "home.badge.disconnected" = "Disconnected";
+"home.badge.preparing" = "Preparing…";
 "home.badge.connecting" = "Connecting";
 "home.badge.connected" = "Connected";
 "home.badge.disconnecting" = "Disconnecting";
+"home.toggle.preparing" = "Preparing…";
 "home.packet.ingress" = "Ingress";
 "home.packet.egress" = "Egress";
 "home.traffic.upload" = "Upload";

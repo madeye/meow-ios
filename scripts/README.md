@@ -26,8 +26,7 @@ but reads `$DEVELOPMENT_TEAM` if you want to override the default team
 Builds a Release IPA signed with the **Ad Hoc** App Store Connect
 distribution profile (`release-testing` method) and exports it to
 `build/export-adhoc/meow-ios.ipa` for Firebase App Distribution. Calls
-`build-rust.sh` and `fetch-geo-assets.sh` first unless `--skip-rust-build`
-is passed. Warns when the bundled provisioning profiles are within 30 days
+`build-rust.sh` first unless `--skip-rust-build` is passed. Warns when the bundled provisioning profiles are within 30 days
 of expiry. Env vars: `APP_PROFILE`, `PT_PROFILE` (UUIDs under
 `~/Library/MobileDevice/Provisioning Profiles/`), `DEVELOPMENT_TEAM`,
 `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_PATH`. Prerequisites: Xcode 16+,
@@ -73,14 +72,6 @@ Firebase, fetches the current ASC device list, and registers any UDIDs not
 already present. Re-runnable; safe to invoke after every batch of new
 testers. Env: App Store Connect API key (same path as above). Inputs: a
 Firebase CSV path passed positionally.
-
-## fetch-geo-assets.sh
-
-Fetches `Country.mmdb` from `MetaCubeX/meta-rules-dat`, verifies it
-against the pinned SHA-256, and stages it under `App/Resources/` so the
-build can embed it. Pinned by commit SHA + artifact hash because upstream
-only ships a rolling `latest` tag. Re-run when bumping the pin in the
-script. No env vars; requires `curl` and `shasum`.
 
 ## generate-app-icon.sh
 

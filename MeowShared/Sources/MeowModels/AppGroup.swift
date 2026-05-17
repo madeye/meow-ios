@@ -39,25 +39,6 @@ public enum AppGroup {
         containerURL.appending(path: "mihomo", directoryHint: .isDirectory)
     }
 
-    /// Location `mihomo-config::default_geoip_path()` resolves to once
-    /// `XDG_CONFIG_HOME=containerURL` is exported. Capital-C filename matches
-    /// the engine's lookup.
-    public static var countryMmdbURL: URL {
-        mihomoConfigDir.appending(path: "Country.mmdb")
-    }
-
-    /// CN IPv4 ranges consumed by `cn_iprange::load` in the Rust FFI. Seeded
-    /// from the app bundle at launch; produced offline by
-    /// `scripts/build-cn-iprange.py` from APNIC's delegated stats.
-    public static var cnIpv4URL: URL {
-        mihomoConfigDir.appending(path: "cn-ipv4.bin")
-    }
-
-    /// CN IPv6 ranges; companion to `cnIpv4URL`.
-    public static var cnIpv6URL: URL {
-        mihomoConfigDir.appending(path: "cn-ipv6.bin")
-    }
-
     /// UserDefaults suite shared between app and extension. Force-unwrap is
     /// safe once entitlements are wired — missing suite indicates a config bug
     /// that should fail loudly.

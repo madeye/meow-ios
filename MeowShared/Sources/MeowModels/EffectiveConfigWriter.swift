@@ -23,10 +23,14 @@ public enum EffectiveConfigWriter {
     public static let defaultExternalController = "127.0.0.1:9090"
 
     /// Matches the Android client's jsDelivr mirrors of the MetaCubeX databases.
+    /// `asn` is included so subscriptions with `IP-ASN,<num>,<group>` rules work
+    /// — without the `GeoLite2-ASN.mmdb` on disk, mihomo-rust errors out of
+    /// engine_start.
     public static let defaultGeoXURL: [String: String] = [
         "geoip": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
         "mmdb": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
         "geosite": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
+        "asn": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb",
     ]
 
     public static func write(

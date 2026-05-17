@@ -56,11 +56,18 @@ final class VpnManager {
     /// Kick off a connect. Caller should have already written the selected
     /// profile YAML into the App Group container. Re-enables on-demand if
     /// `disconnect` previously turned it off.
+    ///
+    /// Stages any missing GeoIP/ASN databases (`GeoAssetService.ensureFiles`)
+    /// before issuing `startVPNTunnel`. The badge surfaces this window as
+    /// `.preparing` so the UI doesn't lie about being "Connected" while the
+    /// engine would actually fail to start on a missing MMDB.
     func connect() async {
         lastError = nil
+        if manager == nil { await refresh() }
+        guard let manager else { return }
+        stage = .preparing
         do {
-            if manager == nil { await refresh() }
-            guard let manager else { return }
+            try await GeoAssetService.ensureFiles(prefs: Preferences.load(from: AppGroup.defaults))
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription
@@ -144,6 +151,11 @@ final class VpnManager {
     func applyConnectionStatus(_ status: NEVPNStatus) {
         let previous = stage
         let next = map(status)
+        // Hold `.preparing` until NE actually moves off `.disconnected` —
+        // otherwise the observer fire mid-`connect()` (cold attach edge,
+        // on-demand bounce) would flash the badge back to "Stopped" while
+        // the geo-asset download is still in flight.
+        if previous == .preparing, next == .stopped { return }
         stage = next
         if next == .connected, previous != .connected {
             onConnected?()

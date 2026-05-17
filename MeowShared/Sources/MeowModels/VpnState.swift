@@ -2,6 +2,12 @@ import Foundation
 
 public enum VpnStage: String, Codable, Sendable, CaseIterable {
     case idle
+    /// App-side pre-flight before `startVPNTunnel` — currently used while
+    /// `GeoAssetService` downloads any missing GeoIP/ASN databases declared
+    /// in the effective config's `geox-url` block. The system NEVPNStatus is
+    /// still `.disconnected` during this window; once preparation finishes
+    /// we issue the tunnel start and NE drives the rest of the transitions.
+    case preparing
     case connecting
     case connected
     case stopping

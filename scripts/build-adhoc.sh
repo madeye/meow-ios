@@ -84,7 +84,6 @@ rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR"
 if [[ "$SKIP_RUST_BUILD" -eq 0 ]]; then
     "$ROOT/scripts/build-rust.sh"
 fi
-"$ROOT/scripts/fetch-geo-assets.sh"
 
 cat >"$EXPORT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
