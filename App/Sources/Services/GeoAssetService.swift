@@ -31,6 +31,21 @@ enum GeoAssetService {
         }
     }
 
+    /// True when every URL in the user profile's `geox-url:` block already
+    /// has a non-empty file in `mihomoConfigDir`. Used to decide whether the
+    /// connect flow needs the proxy-bootstrap detour or can go straight to
+    /// `startVPNTunnel` with the production config.
+    static func allFilesPresent() -> Bool {
+        let urls = geoXURLs(prefs: Preferences.load(from: AppGroup.defaults))
+        guard !urls.isEmpty else { return true }
+        for (_, source) in urls {
+            let destination = AppGroup.mihomoConfigDir.appending(path: source.lastPathComponent)
+            let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? 0
+            if size <= 0 { return false }
+        }
+        return true
+    }
+
     /// Stage every URL listed in the effective config's `geox-url:` block —
     /// patched in-memory from the user's source profile so first connect
     /// works before the extension has ever written `effective-config.yaml`.
@@ -63,9 +78,19 @@ enum GeoAssetService {
 
     private static func download(name: String, from source: URL, to destination: URL) async throws {
         log.info("downloading \(name, privacy: .public) from \(source.absoluteString, privacy: .public)")
-        let (tempURL, response): (URL, URLResponse)
+        let session: URLSession = {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 60
+            config.timeoutIntervalForResource = 180
+            config.waitsForConnectivity = false
+            return URLSession(configuration: config)
+        }()
+        defer { session.invalidateAndCancel() }
+
+        let tempURL: URL
+        let response: URLResponse
         do {
-            (tempURL, response) = try await URLSession.shared.download(from: source)
+            (tempURL, response) = try await session.download(from: source)
         } catch {
             throw Failure.downloadFailed(name: name, underlying: error)
         }

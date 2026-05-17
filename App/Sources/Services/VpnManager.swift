@@ -67,12 +67,64 @@ final class VpnManager {
         guard let manager else { return }
         stage = .preparing
         do {
-            try await GeoAssetService.ensureFiles(prefs: Preferences.load(from: AppGroup.defaults))
+            if !GeoAssetService.allFilesPresent() {
+                try await bootstrapGeoDownload(manager: manager)
+            }
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription
             stage = .error
         }
+    }
+
+    /// Two-step bootstrap when the GeoIP/ASN databases aren't on disk yet:
+    ///
+    ///   1. Swap `configURL` for a `MinimalConfigBuilder` config that uses
+    ///      only the first proxy from the user profile + a `MATCH` rule.
+    ///   2. Start the tunnel, wait for `.connected`, and download the geo
+    ///      files via URLSession — the app's traffic is routed through the
+    ///      tunnel's TUN, so jsDelivr is reached *through* the proxy.
+    ///   3. Stop the tunnel, wait for `.disconnected`, restore the original
+    ///      `configURL`.
+    ///
+    /// The caller then issues `startVPNTunnel` against the restored config.
+    private func bootstrapGeoDownload(manager: NETunnelProviderManager) async throws {
+        let sourceYAML = try String(contentsOf: AppGroup.configURL, encoding: .utf8)
+        let minimal = try MinimalConfigBuilder.build(sourceYAML: sourceYAML)
+
+        try minimal.write(to: AppGroup.configURL, atomically: true, encoding: .utf8)
+        defer {
+            // Best-effort restore. If a crash happens between here and the
+            // restore line below, the user's next profile reselect will
+            // re-stamp the real config.
+            try? sourceYAML.write(to: AppGroup.configURL, atomically: true, encoding: .utf8)
+        }
+
+        try manager.connection.startVPNTunnel()
+        try await waitForStatus(manager: manager, target: .connected, timeout: 30)
+        do {
+            try await GeoAssetService.ensureFiles(prefs: Preferences.load(from: AppGroup.defaults))
+        } catch {
+            manager.connection.stopVPNTunnel()
+            try? await waitForStatus(manager: manager, target: .disconnected, timeout: 10)
+            throw error
+        }
+        manager.connection.stopVPNTunnel()
+        try await waitForStatus(manager: manager, target: .disconnected, timeout: 10)
+    }
+
+    private func waitForStatus(
+        manager: NETunnelProviderManager,
+        target: NEVPNStatus,
+        timeout: TimeInterval,
+    ) async throws {
+        if manager.connection.status == target { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            try await Task.sleep(for: .milliseconds(200))
+            if manager.connection.status == target { return }
+        }
+        throw URLError(.timedOut)
     }
 
     /// Disable on-demand first, then tear down the tunnel. iOS reclaims the NE
