@@ -81,7 +81,18 @@ final class SubscriptionService {
 
     private func fetchAndNormalize(url: String) async throws -> String {
         guard let remote = URL(string: url) else { throw SubscriptionError.invalidURL }
-        let (data, response) = try await session.data(from: remote)
+        var request = URLRequest(url: remote)
+        // Most subscription panels gate the served proxy list on User-Agent —
+        // generic clients see a CN-bypass-only YAML, Clash-family clients see
+        // the full SS/Trojan/VLESS upstream set. Match exactly what the
+        // embedded engine sends from its own subscription fetcher
+        // (mihomo-rust `crates/mihomo-config/src/subscription.rs`:
+        //   `concat!("clash.meta/", env!("CARGO_PKG_VERSION"))`),
+        // so app-side refresh and engine-side rule-provider / geodata pulls
+        // hit identical UA gates. Bumped together with the mihomo-rust tag
+        // in `core/rust/mihomo-ios-ffi/Cargo.toml`.
+        request.setValue("clash.meta/0.7.4", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200 ..< 300).contains(http.statusCode) {
             throw SubscriptionError.http(status: http.statusCode)
         }
