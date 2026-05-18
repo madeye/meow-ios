@@ -279,8 +279,19 @@ fn main() -> Result<()> {
             "stress: target={} conns={} hold={:?} duration={:?}",
             target, conns, hold, duration
         );
+        // When a finite stress duration is set, treat its expiry as the
+        // run's natural end: signal shutdown so the main park-loop unblocks
+        // and the engine + utun get stopped cleanly. Without this the
+        // harness keeps an idle engine alive indefinitely (rss_monitor
+        // continues ticking) until Ctrl-C, padding every stress run with
+        // post-load drift that the operator has to manually trim.
+        let exit_after_stress = duration.is_some();
         Some(thread::spawn(move || {
-            stress_loop(target, conns, hold, duration)
+            stress_loop(target, conns, hold, duration);
+            if exit_after_stress {
+                info!("stress: duration elapsed — signaling shutdown");
+                SHUTDOWN.store(true, Ordering::SeqCst);
+            }
         }))
     } else {
         None

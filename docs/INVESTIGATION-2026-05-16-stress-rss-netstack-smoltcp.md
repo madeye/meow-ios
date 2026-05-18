@@ -316,3 +316,128 @@ Artifacts from this run:
 * `/tmp/meow-stress.log` (host) — uninstrumented 20-minute curve
 * `/tmp/dhat-heap.json` (host) — 5-minute dhat profile
 * In-VM equivalents under `~/meow-stress.log`, `~/meow-dhat-out/dhat-heap.json`
+
+## Update — 2026-05-18 (accept-cap fix was illusory; leak is per-accepted-flow)
+
+Re-ran the harness against mihomo-rust v0.7.4 (post-bump from v0.7.3). The
+2026-05-16 "cap=32 plateaus at 38.62 MiB" result does **not** reproduce.
+Running a sweep across cap, DNS scheme, proxy mode, and connection rate
+shows the working-set growth is **per accepted TCP flow, not per
+in-flight flow**, and ~4–5 KiB of state is retained per accept for the
+process lifetime.
+
+### Sweep (all 32-conn × 200 ms unless noted, github.com:443, 180 s)
+
+| Variant                       | in-flight | total accepts | peak MiB | KiB/accept |
+| ----------------------------- | --------: | ------------: | -------: | ---------: |
+| Baseline                      |        32 |        45,187 |   200.0 |        3.7 |
+| Baseline (180s rerun)         |        32 |        27,031 |   140.3 |        4.0 |
+| `--tcp-accept-cap 8`          |   ≤8 cap  |        27,000 |   141.0 |        4.0 |
+| Do53 nameservers              |        32 |        26,933 |   140.3 |        4.0 |
+| `mode: direct`                |        32 |        19,137 |   110.3 |        4.0 |
+| `--stress-conns 4`            |         4 |         3,411 |    50.4 |        4.9 |
+| `--stress-conns 8 --hold 1000`|         8 |         1,424 |    40.7 |        4.7 |
+
+### What the sweep tells us
+
+* **Accept cap is not a memory lever.** cap=8 and cap=32 produce identical
+  curves under realistic stress because the stress workers cycle faster
+  than the cap can bind. The 2026-05-16 "cap=32 plateaus at 38.62 MiB"
+  number was an artifact of the workers being throttled at 56 conn/s by
+  *something other than the cap* (likely a DNS-bound bottleneck on the
+  prior v0.7.3 build), not the cap actually limiting peak working set.
+* **DNS scheme is not a lever.** Switching from DoH to Do53 nameservers
+  produced bit-identical RSS curves, so the new v0.7.4 in-tree DNS
+  client (which lacks the connection pooling hickory-resolver had) is
+  **not** the dominant retention site under this stress shape.
+* **Proxy outbound is not a lever.** `mode: direct` (which skips the
+  proxy dial / rustls handshake entirely) leaks ~4.0 KiB per accept,
+  same as `mode: rule`. The retention happens before, in, or around
+  `mihomo_tunnel::tcp::handle_tcp`'s scaffolding common to every mode.
+* **In-flight count is not the lever, accept count is.** The
+  `conns=8/hold=1000` row generates 1/19th the accepts as the baseline
+  and produces 1/3 the heap growth — proportional to accept count.
+  All RSS arithmetic lands at ~4–5 KiB/accept regardless of how those
+  accepts are spread over time.
+
+### Where the 4 KiB lives — narrowed but not pinpointed
+
+The investigation has eliminated:
+1. Per-flow buffer size — proven false 2026-05-16.
+2. Mihomo-tunnel `Statistics.connections` map — RAII `ConnectionGuard`
+   removes the entry on every exit path (verified by reading
+   `crates/mihomo-tunnel/src/tcp.rs`).
+3. DoH per-query TLS handshake state (the v0.7.4 in-tree DNS client
+   uses `Connection: close`, no pooling) — Do53 run had identical
+   growth.
+4. Proxy outbound rustls / WS / TLS session state — direct mode had
+   identical growth.
+5. FFI flow registry — `tcp_flows().remove(&flow_id)` runs on every
+   task exit (verified by reading `core/rust/mihomo-ios-ffi/src/tun2socks.rs:467-481`).
+
+What remains suspected (in descending priority):
+1. **netstack-smoltcp's per-socket retention through CLOSED / TIME_WAIT**
+   — the ~30% post-stress RSS drop (200 → 144 MiB) over ~600 s of idle
+   has the right shape for TIME_WAIT release. Need to read
+   `netstack_smoltcp::tcp::TcpListenerRunner` for what it keeps after
+   the user-facing stream is dropped.
+2. **An unbounded hashbrown table in mihomo-rust or mihomo-tunnel that
+   inserts per-flow and never evicts** — fits the durable ~70% (~2.4
+   KiB/accept) that does *not* reclaim post-stress. The 2026-05-16
+   dhat #2 row (70 MiB pre-sized hashbrown baseline, 4 tables) is the
+   natural place to start grepping.
+3. **Tokio task header retention** — every accept spawns one
+   `dispatch_tcp` task; if the runtime's task slot ring is allocating
+   without reclaiming, that fits "per-accept, durable." Tokio's
+   `tokio::runtime::scheduler::multi_thread::worker::Shared` does keep
+   a per-worker task injector queue; worth profiling.
+
+### Implication for the iOS ship
+
+The 40 MB self-restart threshold landed today (`PacketTunnelProvider.m`
+phys_footprint watchdog, PR #154) gives ~16 MB of headroom above the
+~24 MB cold-start baseline. At 4.5 KiB durable + ~1.5 KiB transient per
+flow, the extension self-restarts after roughly **3,000–3,500 cumulative
+TCP accepts**. For a typical foreground browsing session that's enough
+for tens of minutes; for a heavy multi-tab / many-CDN workload it's
+considerably less. The shipping cure is upstream — find the durable
+~2.4 KiB/accept and stop allocating it. Restart-on-pressure is the
+*safety net*, not the fix.
+
+### Suggested next steps
+
+1. **Read `netstack_smoltcp::tcp::TcpListenerRunner` source** for what
+   it retains after a stream is dropped — specifically whether the
+   accepted-connections map, the per-listener egress channel, or
+   smoltcp's `SocketSet` retains anything that doesn't get released on
+   smoltcp's CLOSED transition.
+2. **dhat-instrument a 90-second slow-hold run** (`conns=8 hold=1000`)
+   under realistic stress shape — the v0.7.3 dhat run was a connection
+   storm that suffocated the profiler. A slower, accept-bound shape
+   should let dhat capture meaningful "retained at sweep" rankings
+   that reflect the durable leak rather than allocator bookkeeping.
+3. **Move `Statistics.connections` to a connection-count tag rather
+   than a `DashMap<String, ConnectionInfo>`** — the entry is bounded
+   by RAII discipline today, but a smaller value type (or just a
+   counter) eliminates a ~400-byte per-flow allocation that has no
+   user-visible value once the connection is closed.
+
+### Reproducing this sweep
+
+The harness now self-shutdowns when `--stress-duration-secs` expires
+(commit on `chore/mihomo-rust-0.7.4` branch, since merged into v0.7.4
+bump PR #154). The Tart VM `meow-ios-dev` was used throughout; the
+helper script `/tmp/run-stress.sh` in the VM takes `CAP`, `CONNS`,
+`HOLD_MS`, `DURATION`, `CONFIG` as env vars.
+
+```bash
+# All runs are 180 s, default config unless `CONFIG=…` is set.
+DURATION=180 CAP=32 CONNS=32 HOLD_MS=200 /tmp/run-stress.sh   # baseline
+DURATION=180 CAP=8  CONNS=32 HOLD_MS=200 /tmp/run-stress.sh   # cap sweep
+DURATION=180 CAP=32 CONNS=4  HOLD_MS=200 /tmp/run-stress.sh   # low-conn
+DURATION=180 CAP=32 CONNS=8  HOLD_MS=1000 /tmp/run-stress.sh  # slow-hold
+DURATION=180 CAP=32 CONNS=32 CONFIG=~/meow-home/effective-config.do53.yaml \
+    /tmp/run-stress.sh                                          # Do53
+DURATION=180 CAP=32 CONNS=32 CONFIG=~/meow-home/effective-config.direct.yaml \
+    /tmp/run-stress.sh                                          # direct mode
+```
