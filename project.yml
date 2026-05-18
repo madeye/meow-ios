@@ -219,6 +219,9 @@ targets:
           - $(SRCROOT)/MeowCore/Frameworks
         OTHER_LDFLAGS:
           - -ObjC
+          # boring-sys (via mihomo-transport boring-tls feature) vendors
+          # BoringSSL C++ — link libc++ so std::__1 symbols resolve.
+          - -lc++
     dependencies:
       - framework: MeowCore/Frameworks/MihomoCore.xcframework
         embed: false
