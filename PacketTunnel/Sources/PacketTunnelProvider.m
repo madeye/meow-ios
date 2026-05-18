@@ -17,6 +17,13 @@ static const uint8_t kDiagTagUser       = 0x02;
 static const uint8_t kDiagTagMemory     = 0x03;
 static const uint8_t kProxyTagSelect    = 0x04;
 
+// Pre-emptive process restart threshold. iOS jetsam kills NE extensions
+// around 50 MB phys_footprint; we self-restart at 40 MB so the kill is
+// orderly (writes a state row, logs a reason) instead of a silent jetsam.
+// 10 MB headroom absorbs the burst between the check tick and exit().
+static const uint64_t kMemoryRestartThresholdBytes = 40ULL * 1024ULL * 1024ULL;
+static const uint64_t kMemoryWatchdogIntervalNsec  = 2ULL * NSEC_PER_SEC;
+
 static os_log_t gLog;
 
 @implementation PacketTunnelProvider {
@@ -25,6 +32,7 @@ static os_log_t gLog;
     nw_path_monitor_t   _pathMonitor;
     dispatch_queue_t    _pathQueue;
     dispatch_source_t   _pathDebounceTimer;
+    dispatch_source_t   _memoryWatchdog;
     BOOL                _havePath;
     BOOL                _lastSatisfied;
     nw_interface_type_t _lastInterfaceType;
@@ -76,6 +84,7 @@ static os_log_t gLog;
             self->_ipcListener = listener;
 
             [self startPathMonitor];
+            [self startMemoryWatchdog];
 
             [self writeState:@"connected" profileID:profileID errorMessage:nil];
             completionHandler(nil);
@@ -87,6 +96,7 @@ static os_log_t gLog;
            completionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "stopTunnel reason=%ld", (long)reason);
     [self stopPathMonitor];
+    [self stopMemoryWatchdog];
     [_engine stop];
     _engine = nil;
     [_ipcListener stop];
@@ -378,6 +388,75 @@ static os_log_t gLog;
                 errorMessage:@"reconnect after network change failed"];
         }
     }];
+}
+
+// MARK: - Memory watchdog
+//
+// Polls TASK_VM_INFO.phys_footprint (the same byte iOS jetsam compares against
+// the NE memory limit) on a background queue. When the footprint crosses
+// kMemoryRestartThresholdBytes, the extension restarts itself by calling
+// exit(0): NE respawns the process on the next packet / on-demand probe, and
+// the cumulative memory leaks (slab fragmentation, retained per-flow state,
+// rustls session caches) reset to a fresh baseline. Without this, growth
+// continues past 50 MB and iOS jetsam-kills the extension — silent from the
+// app's point of view, with no state row or log line.
+
+- (void)startMemoryWatchdog {
+    dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0);
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
+    dispatch_source_set_timer(timer,
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)kMemoryWatchdogIntervalNsec),
+        kMemoryWatchdogIntervalNsec,
+        100 * NSEC_PER_MSEC);
+
+    __weak __typeof__(self) weak = self;
+    dispatch_source_set_event_handler(timer, ^{
+        __strong __typeof__(weak) self = weak;
+        if (!self) return;
+        [self checkMemoryFootprint];
+    });
+    _memoryWatchdog = timer;
+    dispatch_resume(timer);
+}
+
+- (void)stopMemoryWatchdog {
+    if (_memoryWatchdog) {
+        dispatch_source_cancel(_memoryWatchdog);
+        _memoryWatchdog = nil;
+    }
+}
+
+- (void)checkMemoryFootprint {
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    kern_return_t kr = task_info(mach_task_self(),
+                                 TASK_VM_INFO,
+                                 (task_info_t)&info,
+                                 &count);
+    if (kr != KERN_SUCCESS) return;
+
+    uint64_t footprint = info.phys_footprint;
+    if (footprint < kMemoryRestartThresholdBytes) return;
+
+    os_log_fault(gLog,
+        "memory: phys_footprint=%llu bytes >= threshold=%llu bytes — restarting process",
+        footprint, kMemoryRestartThresholdBytes);
+
+    // Persist an audit row so the app can surface "restarted due to memory"
+    // on the next status read instead of presenting an unexplained
+    // disconnect. Tag is intentionally distinct from user-initiated "error".
+    [self writeState:@"error"
+           profileID:nil
+        errorMessage:[NSString stringWithFormat:
+                      @"restarted: memory %llu MB exceeded %llu MB cap",
+                      footprint / (1024ULL * 1024ULL),
+                      kMemoryRestartThresholdBytes / (1024ULL * 1024ULL)]];
+
+    // exit(0) is the only way to truly drop accumulated allocations. NE
+    // respawns the extension on the next demand (on-demand probe, app
+    // re-toggle). cancelTunnelWithError: would tear down the session but
+    // keep this same dirtied process alive for the next start cycle.
+    exit(0);
 }
 
 @end
