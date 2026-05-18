@@ -1,0 +1,42 @@
+Build 2026051801 (1.3.1)
+
+新特性
+• mihomo-rust 引擎 0.7.3 → 0.7.6,两项关键修复:
+  – iOS NE 下 ECH(Encrypted Client Hello)启动握手不再静默失败。
+    1.3.0 上,iOS bootstrap 阶段的 UDP/53 DNS 返回的是 5 字节
+    ECH GREASE 占位(`FE 0D FF FF FF`)而不是真实的 ECHConfigList,
+    BoringSSL 直接以 INVALID_ECH_CONFIG_LIST 拒绝拨号,所有标了
+    `ech-opts:` 的代理都握不上手。v0.7.6 校验 SvcParam #5 字节
+    形态,并在 UDP 路径失败时回退到 1.1.1.1 / 8.8.8.8 的 DoH
+    (TCP+TLS,防止中间盒篡改)。实际效果:ECH 保护的代理不再
+    明文暴露 SNI,显著降低上游服务器 IP 被封的概率。
+  – 单连接内存上限:mihomo-tunnel 加上了入站连接数上限和 WebSocket
+    缓冲区上限,配合 iOS NE 端的 accept-cap,让 PacketTunnel 在
+    长时间高负载下更稳定地保持在 iOS ~50 MB jetsam 红线之下。
+
+• 通过 `boring-tls` cargo feature 启用 BoringSSL TLS 后端。
+  这是新 ECH 路径生效的前提,顺带激活真正的 uTLS 指纹
+  (`client-fingerprint: chrome` 等),不再只打印一次警告。
+  PacketTunnel.appex 二进制磁盘体积 +1 MB(运行时内存不变)。
+
+• 订阅拉取改用 `User-Agent: clash.meta/<version>`,与内嵌引擎
+  保持一致。订阅面板按此 UA 返回完整的 SS/Trojan/VLESS 集合,
+  而不再退化成仅含国内直连的最小集。
+
+• PacketTunnel 扩展物理内存触达 40 MB 时主动重启。iOS 在 ~50 MB
+  附近静默 jetsam-kill NE 扩展;主动重启把这一过程转成有日志、
+  有状态行的有序恢复。
+
+• 高并发 TCP 内存攻击面排查:已排除 accept-cap、DNS 模式、代理
+  出栈作为主导增长来源,剩余 ~4 KiB/已建链 的增长记录在
+  `docs/INVESTIGATION-2026-05-16-stress-rss-netstack-smoltcp.md`
+  待跟进。v0.7.6 的 footprint cap 是上游侧的第一轮修复。
+
+已知问题
+• 非 DNS UDP 转发仍未支持(QUIC/HTTP3 降级到 TCP)。
+
+测试关注点
+• ECH 代理:1.3.0 上"已连接但无网络"的订阅(含 ECH 节点)在
+  1.3.1 应该可以正常使用。
+• 长时间会话:挂着 VPN 重度浏览数小时,确认扩展不会掉线。如果
+  掉了,请回报构建号 + 掉前持续了多久。
