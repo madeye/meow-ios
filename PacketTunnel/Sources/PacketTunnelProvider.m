@@ -371,23 +371,24 @@ static os_log_t gLog;
 }
 
 - (void)triggerReconnect {
-    MWTunnelEngine *engine = _engine;
-    if (!engine) return;
+    if (!_engine) return;
 
-    os_log_info(gLog, "path: triggering engine restart");
-    self.reasserting = YES;
-
-    __weak __typeof__(self) weak = self;
-    [engine restartWithCompletion:^(BOOL success) {
-        __strong __typeof__(weak) self = weak;
-        if (!self) return;
-        self.reasserting = NO;
-        os_log_info(gLog, "path: restart finished success=%d", success);
-        if (!success) {
-            [self writeState:@"error" profileID:nil
-                errorMessage:@"reconnect after network change failed"];
-        }
-    }];
+    // Light-touch network-change handling: keep the VPN connected, keep
+    // the TUN and engine running, and just abort every in-flight TCP
+    // flow in tun2socks. Mihomo-tunnel's `ConnectionGuard` drops the
+    // matching `Statistics.connections` entry on each task cancel, so
+    // its state stays in sync with our flow registry. The next packet
+    // from the app for any pre-flip flow opens a fresh dispatch and
+    // dials over the new uplink. Previously we toggled `reasserting`
+    // (which iOS surfaces as a "connecting" UI flicker) and restarted
+    // the entire engine — heavy, and unnecessary now that we have a
+    // targeted way to drop stale flows.
+    //
+    // UDP is intentionally not touched: it's connectionless from the
+    // app's perspective, mihomo's NAT entries time out on their own,
+    // and dropping them mid-flip would clobber in-flight DNS replies.
+    int32_t aborted = meow_tun_close_all_tcp_flows();
+    os_log_info(gLog, "path: closed %d TCP flows on network change", aborted);
 }
 
 // MARK: - Memory watchdog

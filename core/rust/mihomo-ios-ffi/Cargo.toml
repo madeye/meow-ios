@@ -83,6 +83,14 @@ mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" }
 # pins smoltcp 0.12, so a 0.13 bump would also need to fork netstack-smoltcp.
 [patch.crates-io]
 smoltcp = { git = "https://github.com/madeye/smoltcp", branch = "fix/reject-bytes-outside-recv-win" }
+# Aggressively recycle TIME_WAIT and closed-side CLOSE_WAIT / FIN_WAIT_2
+# sockets via `socket.abort()` instead of waiting through 2*MSL. The
+# default smoltcp state machine assumes a real network where stale
+# 4-tuple segments could arrive; on a logical TUN they cannot, so the
+# wait is pure memory overhead — which matters under the iOS NE ~50 MB
+# jetsam cap. Diff vs upstream is contained to the runner loop inside
+# `src/tcp.rs`.  Lift back to crates.io once the change lands upstream.
+netstack-smoltcp = { git = "https://github.com/madeye/netstack-smoltcp", branch = "feat/aggressive-recycle" }
 
 
 [build-dependencies]

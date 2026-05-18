@@ -49,7 +49,7 @@ use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::{mpsc, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{mpsc, Notify, OwnedSemaphorePermit, Semaphore};
 use tracing::{info, trace, warn};
 
 use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
@@ -247,7 +247,7 @@ fn sweep_idle_tcp_flows() -> usize {
 /// sweeper — dropping the `dispatch_tcp` future closes both halves of the
 /// relay. Returns the number of flows closed. Used by the registry watchdog
 /// when the live count exceeds `TCP_WATCHDOG_THRESHOLD`.
-fn close_all_tcp_flows() -> usize {
+pub fn close_all_tcp_flows() -> usize {
     let flows = tcp_flows();
     let mut closed: Vec<(u64, SocketAddr, SocketAddr)> = Vec::with_capacity(flows.len());
     flows.retain(|&id, rec| {
@@ -740,11 +740,49 @@ async fn dispatch_tcp(
         ..Default::default()
     };
 
+    let local_eof = Arc::new(Notify::new());
     let conn: Box<dyn ProxyConn> = Box::new(IdleTracking {
         inner: NetstackConn(stream),
         state,
+        local_eof: local_eof.clone(),
+        eof_fired: AtomicBool::new(false),
     });
-    mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata).await;
+
+    // Race the normal relay against a local-FIN watcher. The relay
+    // (`mihomo_tunnel::tcp::handle_tcp` → `copy_bidirectional_buf`)
+    // already RFC-correctly half-closes: on local EOF it calls
+    // `poll_shutdown` on the proxy outbound (sending FIN upstream) and
+    // then waits for the upstream to FIN back to terminate.  That wait
+    // hangs forever for long-poll / SSE / dead-peer flows and leaves
+    // the proxy session, rustls state, NAT entry, and our task stack
+    // alive until the idle sweeper evicts it minutes later.
+    //
+    // Instead: once the local read returns EOF, give the relay a brief
+    // grace window to flush its outbound `poll_shutdown` cleanly, then
+    // drop the future.  Dropping calls each transport layer's `Drop`,
+    // which is what closes rustls (sends close_notify alert), tears
+    // down the WebSocket framing, and drops the upstream TCP — clean
+    // close semantics on every layer, just not waiting for the peer.
+    //
+    // `Statistics.connections` stays in sync because mihomo-tunnel's
+    // `ConnectionGuard` is RAII and runs on the dropped future.
+    let fut = mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
+    tokio::pin!(fut);
+    tokio::select! {
+        biased;
+        _ = &mut fut => {}
+        _ = local_eof.notified() => {
+            // 250 ms is enough for the relay to land its
+            // `poll_shutdown` on the outbound write half (rustls
+            // writes close_notify + the encrypted record fits in
+            // one TCP segment) without holding the task indefinitely
+            // if the proxy peer is wedged.
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_millis(250),
+                &mut fut,
+            ).await;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -803,6 +841,18 @@ impl ProxyConn for NetstackConn {
 struct IdleTracking<T> {
     inner: T,
     state: Arc<FlowState>,
+    /// Fires once when the inner stream's read side returns EOF (smoltcp
+    /// transitioned to CLOSE_WAIT / CLOSED — the local endpoint sent FIN).
+    /// `dispatch_tcp` waits on this in parallel with the relay so it can
+    /// terminate the proxy outbound shortly after the local close instead
+    /// of waiting for the upstream proxy to FIN back — which it may never
+    /// do for long-poll / keepalive flows.
+    local_eof: Arc<Notify>,
+    /// Edge guard so we only fire `local_eof` once per stream lifetime,
+    /// even if the relay re-polls a closed read end (it shouldn't, but
+    /// `poll_read` returning `Ready(Ok(()))` with zero filled is the
+    /// idle-poll fixed point and we don't want a wake-storm).
+    eof_fired: AtomicBool,
 }
 
 impl<T> IdleTracking<T> {
@@ -819,8 +869,27 @@ impl<T: AsyncRead + Unpin> AsyncRead for IdleTracking<T> {
     ) -> Poll<io::Result<()>> {
         let before = buf.filled().len();
         let poll = Pin::new(&mut self.inner).poll_read(cx, buf);
-        if matches!(poll, Poll::Ready(Ok(()))) && buf.filled().len() > before {
-            self.touch();
+        match poll {
+            Poll::Ready(Ok(())) => {
+                let after = buf.filled().len();
+                if after > before {
+                    self.touch();
+                } else if !self.eof_fired.swap(true, Ordering::Relaxed) {
+                    // Zero-byte Ready means EOF (netstack-smoltcp signals
+                    // this once the local socket reaches CLOSED). Wake up
+                    // the dispatch_tcp select! arm that watches for it.
+                    self.local_eof.notify_waiters();
+                }
+            }
+            Poll::Ready(Err(_)) => {
+                // Read errors out of the netstack stream (RST received,
+                // smoltcp socket aborted, etc.) — treat the same as EOF
+                // for the purposes of tearing down the proxy side.
+                if !self.eof_fired.swap(true, Ordering::Relaxed) {
+                    self.local_eof.notify_waiters();
+                }
+            }
+            Poll::Pending => {}
         }
         poll
     }

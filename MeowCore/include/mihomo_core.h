@@ -197,6 +197,27 @@ int meow_tun_ingest(const uint8_t *data, uintptr_t len);
 void meow_tun_stop(void);
 
 /**
+ * Abort every in-flight TCP flow tracked by tun2socks. Used by the iOS
+ * PacketTunnel side when the underlying network interface changes
+ * (Wi-Fi → cellular, etc.) and we want to drop stale flows so they
+ * re-dial against the new uplink, **without** tearing down the engine
+ * or the TUN itself.
+ *
+ * Each abort cancels the dispatch_tcp future, which drops the netstack
+ * stream side and (via `ConnectionGuard::drop` inside mihomo-tunnel)
+ * removes the corresponding entry from `Statistics.connections` —
+ * keeping our flow registry and mihomo's state in sync.
+ *
+ * UDP flows are intentionally untouched: they're connectionless from
+ * the app's perspective, mihomo's NAT entries time out on their own,
+ * and aborting them mid-flight would pointlessly drop in-flight DNS
+ * replies during the interface flip.
+ *
+ * Returns the number of flows aborted.
+ */
+int meow_tun_close_all_tcp_flows(void);
+
+/**
  * Set the TCP accept-side cap. Bounds the number of concurrent
  * `dispatch_tcp` tasks live at once, which is the dominant factor in
  * peak FFI RSS under burst (1000+ concurrent dispatches each carrying
