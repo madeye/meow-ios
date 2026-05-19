@@ -57,10 +57,16 @@ urlencoding = "2"
 # tun2socks
 netstack-smoltcp = "0.2"
 
-# Embedded mihomo-rust engine. Pinned to a release tag; bump deliberately
-# rather than tracking main. Each crate is a workspace member of
-# madeye/mihomo-rust.
-mihomo-common = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" }
+# Embedded mihomo-rust engine. Pinned to a release tag normally; bump
+# deliberately rather than tracking main. Each crate is a workspace
+# member of madeye/mihomo-rust.
+#
+# Currently on a post-v0.7.6 `rev =` pin to pick up
+# `DirectAdapter::with_connect_timeout` (madeye/mihomo-rust#86), which
+# bounds `TcpStream::connect` to address the DIRECT-rule TCP hang
+# documented in docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md.
+# Restore to a tag once a v0.7.7+ release is cut.
+mihomo-common = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
 # `boring-tls` activates BoringSSL-backed TLS in mihomo-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -68,11 +74,11 @@ mihomo-common = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" 
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-mihomo-config = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6", features = ["boring-tls"] }
-mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" }
-mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" }
-mihomo-api = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" }
-mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", tag = "v0.7.6" }
+mihomo-config = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f", features = ["boring-tls"] }
+mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
+mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
+mihomo-api = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
+mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
 
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
