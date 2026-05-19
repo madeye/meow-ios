@@ -425,6 +425,10 @@ async fn run_tun2socks(
 ) -> io::Result<()> {
     logging::bridge_log("tun2socks: building netstack-smoltcp stack");
 
+    // MTU is hardcoded inside the fork at 1500 (see madeye/netstack-smoltcp
+    // `fix/ios-mtu-1500`) to match `NEPacketTunnelNetworkSettings.MTU`
+    // (`MWTunnelSettings.m`). The builder doesn't expose `mtu()` so we
+    // rely on the device-level default.
     let (mut stack, tcp_runner, udp_socket, tcp_listener) = StackBuilder::default()
         .enable_tcp(true)
         .enable_udp(true)
