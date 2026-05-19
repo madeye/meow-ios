@@ -240,6 +240,55 @@ int meow_tun_set_accept_cap(int cap);
 int meow_tun_accept_cap(void);
 
 /**
+ * Set the per-flow dial deadline, in milliseconds. Bounds the time
+ * `dispatch_tcp` waits for the relay's first byte of progress on the
+ * netstack stream before declaring the dial hung and dropping the
+ * future. See docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md
+ * for context.
+ *
+ * Default 10000 ms. Pass `0` to disable the watchdog (relies on the
+ * 30 s idle sweeper to reap stuck flows). Negative values are rejected.
+ *
+ * Takes effect on the next flow accepted; does not abort in-flight
+ * flows mid-wait.
+ *
+ * Returns 0 on success, -1 on invalid input.
+ */
+int meow_tun_set_dial_deadline_ms(int ms);
+
+/**
+ * Read the currently-configured per-flow dial deadline, in
+ * milliseconds. `0` means the watchdog is disabled.
+ */
+int meow_tun_dial_deadline_ms(void);
+
+/**
+ * Set the per-UDP-session first-reply deadline, in milliseconds. The
+ * symmetric counterpart to `meow_tun_set_dial_deadline_ms` for the UDP
+ * path — UDP doesn't connect, but iOS auto-bypass can silently drop
+ * the outbound sendto when the scoped-routing cache is stale, leaving
+ * the reply reader parked on `read_packet` forever. Bounding the
+ * *first* reply lets us evict a dead session so the next app datagram
+ * dispatches a fresh socket against a refreshed iOS route.
+ *
+ * Default 10000 ms. Pass `0` to disable the deadline (legacy unbounded
+ * behaviour — relies on mihomo's NAT-table TTL to reap idle sessions).
+ * Negative values are rejected.
+ *
+ * Takes effect on the next UDP session whose reply reader spawns;
+ * existing readers keep their captured deadline.
+ *
+ * Returns 0 on success, -1 on invalid input.
+ */
+int meow_tun_set_udp_first_reply_deadline_ms(int ms);
+
+/**
+ * Read the currently-configured UDP first-reply deadline, in
+ * milliseconds. `0` means the deadline is disabled.
+ */
+int meow_tun_udp_first_reply_deadline_ms(void);
+
+/**
  * Resident memory size of the FFI's containing process, in bytes. Same
  * number macOS jetsam compares against the 50 MiB PacketTunnel cap, so
  * Swift can poll this to chart the on-device RSS curve during a stress
