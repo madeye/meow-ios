@@ -26,7 +26,22 @@
     NEDNSSettings *dns = [[NEDNSSettings alloc] initWithServers:@[@"172.19.0.2"]];
     settings.DNSSettings = dns;
 
-    settings.MTU = @1500;
+    // Conservative MSS clamp for PMTU black-holes on the upstream side.
+    // The app's TCP stack derives MSS from this MTU (1400 - 40 = 1360),
+    // so all payloads entering the TUN are ≤1360 bytes. When mihomo
+    // re-emits them on a real upstream socket, the kernel's outbound
+    // segment fits inside even pathological path MTUs (1428 on some
+    // cellular carriers, 1380 on iCloud Private Relay-style paths, etc.)
+    // without needing PMTUD — which routinely black-holes on CN routes
+    // where ICMP Fragmentation Needed is filtered.
+    //
+    // 1400 matches the conservative default used by Surge / Quantumult X
+    // / Loon. The ~6% throughput overhead on Wi-Fi paths that didn't
+    // need the clamp is the price for not relying on PMTUD.
+    //
+    // Follow-up: dynamic clamping via NWPathMonitor + getifaddrs/
+    // SIOCGIFMTU on the primary interface — see investigation doc.
+    settings.MTU = @1400;
     return settings;
 }
 
