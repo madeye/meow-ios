@@ -171,6 +171,40 @@ pub fn dial_deadline_ms() -> u64 {
     DIAL_DEADLINE_MS.load(Ordering::Relaxed)
 }
 
+// Per-UDP-session first-reply deadline. The symmetric counterpart to
+// DIAL_DEADLINE_MS for the UDP path. UDP doesn't connect, so there's no
+// `TcpStream::connect` hang to bound — but iOS auto-bypass can silently
+// drop the outbound sendto when the kernel's scoped-routing cache is
+// stale, in which case the upstream never sees the datagram and the
+// reply reader sits forever on `session.conn.read_packet`. With this
+// deadline, a session that produces zero replies within the budget is
+// evicted from `nat_table` + `reply_readers`, so the next app datagram
+// dispatches a fresh socket against (hopefully) a refreshed iOS route.
+//
+// 10 s default to match TCP's `DIAL_DEADLINE_MS`. The cost for legit
+// no-reply UDP traffic (fire-and-forget telemetry, mDNS) is a
+// dispatch + bind churn every 10 s — negligible relative to even a
+// single round-trip's allocation cost. Tunable at runtime via
+// [`set_udp_first_reply_deadline_ms`] / `meow_tun_set_udp_first_reply_deadline_ms`;
+// set to 0 to opt out.
+const UDP_FIRST_REPLY_DEADLINE_MS_DEFAULT: u64 = 10_000;
+static UDP_FIRST_REPLY_DEADLINE_MS: AtomicU64 =
+    AtomicU64::new(UDP_FIRST_REPLY_DEADLINE_MS_DEFAULT);
+
+/// Set the per-UDP-session first-reply deadline, in milliseconds. `0`
+/// disables the deadline (legacy unbounded behaviour). Returns true
+/// unconditionally.
+pub fn set_udp_first_reply_deadline_ms(ms: u64) -> bool {
+    UDP_FIRST_REPLY_DEADLINE_MS.store(ms, Ordering::Relaxed);
+    true
+}
+
+/// Read the currently-configured UDP first-reply deadline, in
+/// milliseconds. `0` means the watchdog is disabled.
+pub fn udp_first_reply_deadline_ms() -> u64 {
+    UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed)
+}
+
 // Sweep window. Tightened from 90 / 30 s to 30 / 10 s: dead-flow state
 // holds for at most one sweep interval past the idle deadline, so the
 // post-burst tail (~50 s in the 10-min stress run) is what we're trying
@@ -1145,9 +1179,39 @@ fn spawn_udp_reply_reader(
         // 1500-MTU tun without fragmentation; oversized datagrams are
         // truncated at the read, which matches the on-wire reality.
         let mut buf = vec![0u8; 4 * 1024];
+        // First-reply deadline: see UDP_FIRST_REPLY_DEADLINE_MS docs.
+        // Only the *first* read is bounded — once a reply has come back
+        // we know the route is alive and we don't want to evict an
+        // active session on quiet idle periods (long-poll, NAT keepalive).
+        let first_reply_deadline_ms = UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed);
+        let mut had_first_reply = false;
         loop {
-            match session.conn.read_packet(&mut buf).await {
+            let read = if !had_first_reply && first_reply_deadline_ms > 0 {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(first_reply_deadline_ms),
+                    session.conn.read_packet(&mut buf),
+                )
+                .await
+                {
+                    Ok(res) => res,
+                    Err(_) => {
+                        warn!(
+                            "UDP first-reply deadline exceeded for {:?} after {} ms; evicting session",
+                            key, first_reply_deadline_ms,
+                        );
+                        logging::bridge_log(&format!(
+                            "tun2socks: UDP first-reply-deadline {:?} ({} ms)",
+                            key, first_reply_deadline_ms,
+                        ));
+                        break;
+                    }
+                }
+            } else {
+                session.conn.read_packet(&mut buf).await
+            };
+            match read {
                 Ok((n, _from)) => {
+                    had_first_reply = true;
                     // Reply injection: the IP frame handed back to the app
                     // must look like it came FROM the external peer (app_dst)
                     // TO the app (app_src). netstack's Sink builds the header
@@ -1874,5 +1938,19 @@ mod tests {
         // Restore so other parallel tests that may sample the knob see the
         // configured default.
         set_dial_deadline_ms(prev);
+    }
+
+    #[test]
+    fn udp_first_reply_deadline_ms_roundtrip_and_zero_disables() {
+        let prev = udp_first_reply_deadline_ms();
+        assert!(set_udp_first_reply_deadline_ms(4_200));
+        assert_eq!(udp_first_reply_deadline_ms(), 4_200);
+        assert!(set_udp_first_reply_deadline_ms(0));
+        assert_eq!(
+            udp_first_reply_deadline_ms(),
+            0,
+            "0 must be accepted to opt out"
+        );
+        set_udp_first_reply_deadline_ms(prev);
     }
 }

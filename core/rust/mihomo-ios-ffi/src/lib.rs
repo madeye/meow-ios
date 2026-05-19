@@ -671,6 +671,39 @@ pub extern "C" fn meow_tun_dial_deadline_ms() -> c_int {
     tun2socks::dial_deadline_ms() as c_int
 }
 
+/// Set the per-UDP-session first-reply deadline, in milliseconds. The
+/// symmetric counterpart to `meow_tun_set_dial_deadline_ms` for the UDP
+/// path — UDP doesn't connect, but iOS auto-bypass can silently drop
+/// the outbound sendto when the scoped-routing cache is stale, leaving
+/// the reply reader parked on `read_packet` forever. Bounding the
+/// *first* reply lets us evict a dead session so the next app datagram
+/// dispatches a fresh socket against a refreshed iOS route.
+///
+/// Default 10000 ms. Pass `0` to disable the deadline (legacy unbounded
+/// behaviour — relies on mihomo's NAT-table TTL to reap idle sessions).
+/// Negative values are rejected.
+///
+/// Takes effect on the next UDP session whose reply reader spawns;
+/// existing readers keep their captured deadline.
+///
+/// Returns 0 on success, -1 on invalid input.
+#[no_mangle]
+pub extern "C" fn meow_tun_set_udp_first_reply_deadline_ms(ms: c_int) -> c_int {
+    if ms < 0 {
+        set_error("udp first-reply deadline must be >= 0".into());
+        return -1;
+    }
+    tun2socks::set_udp_first_reply_deadline_ms(ms as u64);
+    0
+}
+
+/// Read the currently-configured UDP first-reply deadline, in
+/// milliseconds. `0` means the deadline is disabled.
+#[no_mangle]
+pub extern "C" fn meow_tun_udp_first_reply_deadline_ms() -> c_int {
+    tun2socks::udp_first_reply_deadline_ms() as c_int
+}
+
 /// Resident memory size of the FFI's containing process, in bytes. Same
 /// number macOS jetsam compares against the 50 MiB PacketTunnel cap, so
 /// Swift can poll this to chart the on-device RSS curve during a stress
