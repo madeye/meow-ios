@@ -137,6 +137,40 @@ pub fn accept_cap() -> usize {
     TCP_ACCEPT_CAP.load(Ordering::Relaxed)
 }
 
+// Per-flow dial deadline. Bounds the time `dispatch_tcp` waits for the
+// relay's first byte of progress on the netstack stream before declaring
+// the dial hung and dropping the future. See
+// docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md for the
+// failure mode: `DirectAdapter::dial_tcp` awaits `TcpStream::connect`
+// with no timeout, and an iOS reachability-cache / scoped-routing
+// transient can leave the connect hanging until the 30 s idle sweeper
+// reaps the flow. With the deadline, the app sees a RST in
+// `DIAL_DEADLINE_MS` ms instead of 30 s, the `tcp_accept_sem` permit is
+// released promptly, and `ConnectionGuard`'s Drop runs the mihomo
+// session cleanup on the discarded future.
+//
+// 10 s default: safely above cold cellular handshakes against distant
+// CN PoPs (~5-8 s observed) and below Mobile Safari's ~12 s
+// request-timeout floor, so the app's own retry loop kicks in.
+// Tunable at runtime via [`set_dial_deadline_ms`] /
+// `meow_tun_set_dial_deadline_ms` — set to 0 to disable the watchdog.
+const DIAL_DEADLINE_MS_DEFAULT: u64 = 10_000;
+static DIAL_DEADLINE_MS: AtomicU64 = AtomicU64::new(DIAL_DEADLINE_MS_DEFAULT);
+
+/// Set the per-flow dial deadline, in milliseconds. `0` disables the
+/// deadline (no watchdog — flows that hang in `dial_tcp` will only be
+/// reaped by the 30 s idle sweeper). Returns true unconditionally.
+pub fn set_dial_deadline_ms(ms: u64) -> bool {
+    DIAL_DEADLINE_MS.store(ms, Ordering::Relaxed);
+    true
+}
+
+/// Read the currently-configured dial deadline, in milliseconds. `0`
+/// means the watchdog is disabled.
+pub fn dial_deadline_ms() -> u64 {
+    DIAL_DEADLINE_MS.load(Ordering::Relaxed)
+}
+
 // Sweep window. Tightened from 90 / 30 s to 30 / 10 s: dead-flow state
 // holds for at most one sweep interval past the idle deadline, so the
 // post-burst tail (~50 s in the 10-min stress run) is what we're trying
@@ -740,6 +774,17 @@ async fn dispatch_tcp(
         ..Default::default()
     };
 
+    // Snapshot the FlowState's accept-time stamp before the relay future
+    // even runs. `IdleTracking::touch` rewrites `last_active_ms` on the
+    // first successful poll, which only happens after
+    // `mihomo_tunnel::tcp::handle_tcp` → `pre_handle_metadata` →
+    // `pre_resolve` → `proxy.dial_tcp` returns and `copy_bidirectional_buf`
+    // starts reading. So "`last_active_ms` is still equal to the snapshot"
+    // is a precise proxy for "the dial hasn't completed yet."
+    let accepted_at_ms = state.last_active_ms.load(Ordering::Relaxed);
+    let dial_deadline = DIAL_DEADLINE_MS.load(Ordering::Relaxed);
+    let watchdog_state = state.clone();
+
     let local_eof = Arc::new(Notify::new());
     let conn: Box<dyn ProxyConn> = Box::new(IdleTracking {
         inner: NetstackConn(stream),
@@ -768,6 +813,47 @@ async fn dispatch_tcp(
     // `ConnectionGuard` is RAII and runs on the dropped future.
     let fut = mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
     tokio::pin!(fut);
+
+    // Dial-deadline watchdog (see DIAL_DEADLINE_MS docs above). `0` opts
+    // out entirely. Otherwise the watchdog polls FlowState every 500 ms;
+    // once the relay starts (`last_active_ms` advances past
+    // `accepted_at_ms`), the watchdog parks forever and the relay future
+    // owns the lifetime. If the deadline expires with no progress, the
+    // watchdog resolves, the `select!` arm fires, and dropping `fut` runs
+    // `ConnectionGuard::Drop` (mihomo session cleanup) and releases the
+    // `tcp_accept_sem` permit through the spawned task's exit.
+    let dial_watchdog = {
+        let state = watchdog_state;
+        async move {
+            if dial_deadline == 0 {
+                std::future::pending::<()>().await;
+                return;
+            }
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_millis(dial_deadline);
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
+                    // Relay started — dial succeeded. Park; the relay
+                    // future now controls the task's lifetime.
+                    std::future::pending::<()>().await;
+                    return;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    // Final re-check to close the tick-to-deadline race:
+                    // touch() could have fired in the sleep wake-up
+                    // between the load above and the deadline check.
+                    if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
+                        std::future::pending::<()>().await;
+                        return;
+                    }
+                    return;
+                }
+            }
+        }
+    };
+    tokio::pin!(dial_watchdog);
+
     tokio::select! {
         biased;
         _ = &mut fut => {}
@@ -781,6 +867,18 @@ async fn dispatch_tcp(
                 std::time::Duration::from_millis(250),
                 &mut fut,
             ).await;
+        }
+        _ = &mut dial_watchdog => {
+            warn!(
+                "tun2socks: dial deadline exceeded for {} -> {} after {} ms; dropping flow",
+                src, dst, dial_deadline,
+            );
+            logging::bridge_log(&format!(
+                "tun2socks: TCP dial-deadline {} -> {} ({} ms)",
+                src, dst, dial_deadline,
+            ));
+            // Drop `fut` on exit → mihomo `ConnectionGuard` cleanup runs,
+            // accept_sem permit released via the spawned task's exit.
         }
     }
 }
@@ -1638,5 +1736,19 @@ mod tests {
         assert!(flows.is_empty(), "registry should be empty after close-all");
 
         flows.clear();
+    }
+
+    #[test]
+    fn dial_deadline_ms_roundtrip_and_zero_disables() {
+        let prev = dial_deadline_ms();
+        // Default initial value matches the documented threshold.
+        // (Other tests don't touch this knob, so the first read sees it.)
+        assert!(set_dial_deadline_ms(7_500));
+        assert_eq!(dial_deadline_ms(), 7_500);
+        assert!(set_dial_deadline_ms(0));
+        assert_eq!(dial_deadline_ms(), 0, "0 must be accepted to opt out");
+        // Restore so other parallel tests that may sample the knob see the
+        // configured default.
+        set_dial_deadline_ms(prev);
     }
 }

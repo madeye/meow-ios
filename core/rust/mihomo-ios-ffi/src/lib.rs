@@ -641,6 +641,36 @@ pub extern "C" fn meow_tun_accept_cap() -> c_int {
     tun2socks::accept_cap() as c_int
 }
 
+/// Set the per-flow dial deadline, in milliseconds. Bounds the time
+/// `dispatch_tcp` waits for the relay's first byte of progress on the
+/// netstack stream before declaring the dial hung and dropping the
+/// future. See docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md
+/// for context.
+///
+/// Default 10000 ms. Pass `0` to disable the watchdog (relies on the
+/// 30 s idle sweeper to reap stuck flows). Negative values are rejected.
+///
+/// Takes effect on the next flow accepted; does not abort in-flight
+/// flows mid-wait.
+///
+/// Returns 0 on success, -1 on invalid input.
+#[no_mangle]
+pub extern "C" fn meow_tun_set_dial_deadline_ms(ms: c_int) -> c_int {
+    if ms < 0 {
+        set_error("dial deadline must be >= 0".into());
+        return -1;
+    }
+    tun2socks::set_dial_deadline_ms(ms as u64);
+    0
+}
+
+/// Read the currently-configured per-flow dial deadline, in
+/// milliseconds. `0` means the watchdog is disabled.
+#[no_mangle]
+pub extern "C" fn meow_tun_dial_deadline_ms() -> c_int {
+    tun2socks::dial_deadline_ms() as c_int
+}
+
 /// Resident memory size of the FFI's containing process, in bytes. Same
 /// number macOS jetsam compares against the 50 MiB PacketTunnel cap, so
 /// Swift can poll this to chart the on-device RSS curve during a stress
