@@ -104,6 +104,12 @@ cbindgen = "0.28"
 # fixture MMDB directly and prove the env-derived path resolves correctly.
 tempfile = "3"
 maxminddb = "0.27"
+# `test-util` enables `#[tokio::test(start_paused = true)]`, which gives
+# the dial-watchdog regression tests virtual time. Without it the tests
+# would either block on real wall-clock sleeps (slow CI) or shrink their
+# budgets so far they'd flake under load. Dev-only — production builds
+# don't pull `test-util` so the time skew never reaches a real device.
+tokio = { version = "1", features = ["test-util", "macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [profile.release]
 # Shrink binary for the 50MB extension budget. mihomo-rust adds significant

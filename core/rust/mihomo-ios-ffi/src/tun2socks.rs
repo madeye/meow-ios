@@ -814,44 +814,9 @@ async fn dispatch_tcp(
     let fut = mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
     tokio::pin!(fut);
 
-    // Dial-deadline watchdog (see DIAL_DEADLINE_MS docs above). `0` opts
-    // out entirely. Otherwise the watchdog polls FlowState every 500 ms;
-    // once the relay starts (`last_active_ms` advances past
-    // `accepted_at_ms`), the watchdog parks forever and the relay future
-    // owns the lifetime. If the deadline expires with no progress, the
-    // watchdog resolves, the `select!` arm fires, and dropping `fut` runs
-    // `ConnectionGuard::Drop` (mihomo session cleanup) and releases the
-    // `tcp_accept_sem` permit through the spawned task's exit.
-    let dial_watchdog = {
-        let state = watchdog_state;
-        async move {
-            if dial_deadline == 0 {
-                std::future::pending::<()>().await;
-                return;
-            }
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_millis(dial_deadline);
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
-                    // Relay started — dial succeeded. Park; the relay
-                    // future now controls the task's lifetime.
-                    std::future::pending::<()>().await;
-                    return;
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    // Final re-check to close the tick-to-deadline race:
-                    // touch() could have fired in the sleep wake-up
-                    // between the load above and the deadline check.
-                    if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
-                        std::future::pending::<()>().await;
-                        return;
-                    }
-                    return;
-                }
-            }
-        }
-    };
+    // Dial-deadline watchdog (see DIAL_DEADLINE_MS docs above and
+    // `run_dial_watchdog` for the actual polling logic).
+    let dial_watchdog = run_dial_watchdog(watchdog_state, accepted_at_ms, dial_deadline);
     tokio::pin!(dial_watchdog);
 
     tokio::select! {
@@ -879,6 +844,57 @@ async fn dispatch_tcp(
             ));
             // Drop `fut` on exit → mihomo `ConnectionGuard` cleanup runs,
             // accept_sem permit released via the spawned task's exit.
+        }
+    }
+}
+
+/// Dial-deadline watchdog body. Resolves when the per-flow dial has been
+/// idle past the budget; parks forever once the relay starts so the
+/// `select!` arm in `dispatch_tcp` lets the relay future own the rest of
+/// the lifetime.
+///
+/// `dial_deadline_ms == 0` opts out (watchdog parks forever, behaviour
+/// matches the pre-fix pipeline that relied solely on the 30 s idle
+/// sweeper). Otherwise the watchdog ticks every 500 ms — fine grained
+/// enough to make sub-second `dial_deadline_ms` settings (used by tests)
+/// converge in <=2 ticks, coarse enough not to be a measurable wake-up
+/// cost under steady state.
+///
+/// Factored out of `dispatch_tcp` so unit tests can drive it without
+/// standing up the engine, netstack, and tcp-listener plumbing the
+/// real call site requires. See the `dial_watchdog_*` tests at the
+/// bottom of this file for the contract pinned in CI.
+async fn run_dial_watchdog(
+    state: Arc<FlowState>,
+    accepted_at_ms: u64,
+    dial_deadline_ms: u64,
+) {
+    if dial_deadline_ms == 0 {
+        std::future::pending::<()>().await;
+        return;
+    }
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(dial_deadline_ms);
+    loop {
+        // 500 ms is the longest a sub-second deadline can wait without
+        // overshooting the budget by more than one tick. Pick something
+        // smaller (say 100 ms) only if test flakiness from the 500 ms
+        // floor becomes a real issue.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
+            // Relay started — dial succeeded. Park; the relay future
+            // now controls the task's lifetime.
+            std::future::pending::<()>().await;
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            // Final re-check to close the tick-to-deadline race: touch()
+            // could have fired in the sleep wake-up between the load
+            // above and the deadline check.
+            if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
+                std::future::pending::<()>().await;
+                return;
+            }
+            return;
         }
     }
 }
@@ -1736,6 +1752,114 @@ mod tests {
         assert!(flows.is_empty(), "registry should be empty after close-all");
 
         flows.clear();
+    }
+
+    /// Tier 3 regression harness — see
+    /// `docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md`.
+    ///
+    /// Models the failure mode that operators reported as 断流: the
+    /// upstream relay never starts (e.g. `DirectAdapter::dial_tcp`'s
+    /// underlying `TcpStream::connect` is hung on a TEST-NET-1
+    /// black-hole / iOS routing-cache transient), so
+    /// `IdleTracking::touch` never runs and `FlowState.last_active_ms`
+    /// stays frozen at its accept-time value. The watchdog must reap
+    /// the flow within the configured `dial_deadline_ms` budget rather
+    /// than waiting on the 30 s idle sweeper.
+    #[tokio::test(start_paused = true)]
+    async fn dial_watchdog_fires_when_relay_never_starts() {
+        let now = now_ms();
+        let state = Arc::new(FlowState {
+            last_active_ms: AtomicU64::new(now),
+        });
+
+        let started = tokio::time::Instant::now();
+        // Run with a 750 ms deadline (chosen above the 500 ms tick floor
+        // so we hit exactly one tick before the deadline check) and
+        // assert it resolves within a generous bound.
+        let outer = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            run_dial_watchdog(state.clone(), now, 750),
+        )
+        .await;
+
+        assert!(
+            outer.is_ok(),
+            "watchdog did not resolve within outer 3 s guard — regression"
+        );
+        let elapsed = started.elapsed();
+        // Sub-1500 ms upper bound: the watchdog should fire after at most
+        // ⌈750 / 500⌉ = 2 sleep ticks (1000 ms) plus the final re-check.
+        assert!(
+            elapsed < std::time::Duration::from_millis(1_500),
+            "watchdog took {:?}, expected <1.5 s with a 750 ms deadline",
+            elapsed
+        );
+        // The watchdog must not mutate `last_active_ms` — that's the
+        // relay's job. Pin the contract so a future refactor can't
+        // accidentally trample the field and mask a dial-hang regression.
+        assert_eq!(state.last_active_ms.load(Ordering::Relaxed), now);
+    }
+
+    /// Mirror of the above for the "dial succeeded normally" case: the
+    /// relay advances `last_active_ms` before the deadline expires, and
+    /// the watchdog must park forever (i.e. not return) so the relay
+    /// future owns the rest of the flow's lifetime. Drives the same
+    /// `select!`-arm semantics as `dispatch_tcp` without standing up
+    /// the netstack.
+    #[tokio::test(start_paused = true)]
+    async fn dial_watchdog_parks_when_relay_starts_in_time() {
+        let now = now_ms();
+        let state = Arc::new(FlowState {
+            last_active_ms: AtomicU64::new(now),
+        });
+
+        // Bump `last_active_ms` after 200 ms — simulates the first
+        // `IdleTracking::touch()` once the relay reads the app's first
+        // payload. The watchdog should observe the advance on its first
+        // 500 ms tick and park.
+        let state_for_bump = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            state_for_bump
+                .last_active_ms
+                .store(now + 1, Ordering::Relaxed);
+        });
+
+        // 750 ms deadline; outer 2 s guard. If the watchdog mistakenly
+        // returns despite the bump, the outer timeout doesn't fire and
+        // `outer.is_err()` fails.
+        let outer = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_dial_watchdog(state, now, 750),
+        )
+        .await;
+        assert!(
+            outer.is_err(),
+            "watchdog returned despite the relay starting before the deadline — regression",
+        );
+    }
+
+    /// `dial_deadline_ms == 0` is the documented opt-out: the watchdog
+    /// must never fire, even if the relay never starts. Falls back to
+    /// the 30 s idle sweeper as the only line of defence.
+    #[tokio::test(start_paused = true)]
+    async fn dial_watchdog_zero_deadline_opts_out() {
+        let now = now_ms();
+        let state = Arc::new(FlowState {
+            last_active_ms: AtomicU64::new(now),
+        });
+
+        // 5 s outer guard with a 0 deadline: the watchdog should never
+        // resolve in that window.
+        let outer = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            run_dial_watchdog(state, now, 0),
+        )
+        .await;
+        assert!(
+            outer.is_err(),
+            "0-ms deadline must opt out of the watchdog (parked forever)",
+        );
     }
 
     #[test]
