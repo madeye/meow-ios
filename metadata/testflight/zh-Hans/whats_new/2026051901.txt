@@ -1,0 +1,48 @@
+Build 2026051901 (1.3.1)
+
+新特性
+• 修复长期存在的 DIRECT 规则下 TCP 断流问题(三次握手已完成,
+  应用挂起约 30 秒后报错)。排查记录见
+  docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md。
+  默认开启三层防御:
+  – TUN MTU 收紧到 1400。iOS 应用 TCP 栈在 SYN 阶段宣告
+    MSS=1360,所有进入 TUN 的负载体积都足够小,mihomo 在物理
+    出栈套接字上发出的段能塞进即使是病态的蜂窝路径 MTU
+    (1428、1380 等),不再依赖 PMTUD —— 而国内常见路径上的
+    ICMP Frag-Needed 经常被过滤,导致 PMTUD 黑洞。这是
+    Surge / Quantumult X / Loon 的常用默认值。也是本次用户实测
+    生效的关键修复。
+  – dispatch_tcp 引入每流拨号超时看门狗(默认 10 秒,可运行时
+    调整)。超时即丢弃中继 future,应用 10 秒内收到 RST,而不是
+    黑洞挂起 30 秒;mihomo 会话状态通过 ConnectionGuard::Drop
+    完整清理。
+  – 每 UDP 会话首包回复超时(默认 10 秒)。只约束新 UDP NAT
+    条目上的*首次* read_packet —— 这样,如果 iOS auto-bypass
+    在路由缓存陈旧时悄悄丢弃了首个 sendto,被困住的会话会被
+    驱逐,下一个数据报会在更新过的 iOS 路由上重新拨号。已
+    在收过数据的活跃会话(NAT keepalive、长轮询)不受影响。
+
+• mihomo-rust 钉到 v0.7.6 之后的 rev,引入 DirectAdapter::
+  with_connect_timeout(madeye/mihomo-rust#86)。API 已经编译
+  进二进制,但 YAML 配置链路尚未打通 —— 本版的防御由上述
+  FFI 看门狗承担。
+
+• netstack-smoltcp fork MTU 对齐到 1500(原本 1504,带一份
+  上游错误的"+4 for VLAN"余量)。
+
+已知问题
+• 非 DNS UDP 转发仍未支持(QUIC/HTTP3 降级到 TCP)。
+• 基于路径变化的动态 MTU 钳制(NWPathMonitor + getifaddrs/
+  SIOCGIFMTU)暂不实现,先观察静态 1400 钳制是否影响实际
+  Wi-Fi 吞吐。
+
+测试关注点
+• 重点回测之前出现"页面挂起约 30 秒后报错"的 DIRECT 规则
+  目标。如果仍然出现断流,请抓取 PacketTunnel 子系统的日志
+  (Console.app → 谓词 `subsystem == "io.github.madeye.meow"`),
+  关注是否有 `tun2socks: dial deadline exceeded` 或
+  `tun2socks: UDP first-reply-deadline` 行 —— 这能告诉我们
+  哪一层看门狗触发了。
+• 蜂窝 vs Wi-Fi:MTU=1400 钳制对两者一视同仁。如果 Wi-Fi
+  吞吐有明显回退(在不需要钳制的路径上,这个保守值可能损耗
+  约 6%),请回报,以决定是否优先落地动态 NWPathMonitor 方案。

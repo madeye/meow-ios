@@ -1,0 +1,54 @@
+Build 2026051901 (1.3.1)
+
+WHAT'S NEW
+• Fixes the long-standing DIRECT-rule TCP 断流 (3WHS completes, app
+  hangs ~30 s, then errors out). Investigation in
+  docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md.
+  Three-layer defence, all on by default:
+  – TUN MTU clamped to 1400. iOS app's TCP stack now advertises
+    MSS=1360 at the SYN boundary; all payloads entering the TUN
+    are small enough that mihomo's upstream socket emits segments
+    fitting inside even pathological cellular path MTUs (1428,
+    1380, etc.) without relying on PMTUD — which routinely
+    black-holes on CN routes where ICMP Frag-Needed is filtered.
+    Same conservative default as Surge / Quantumult X / Loon.
+    The actual fix in the user-reported reproduction.
+  – Per-flow dial-deadline watchdog in dispatch_tcp (default 10 s,
+    runtime-tunable). On expiry, drops the relay future so the app
+    sees a RST in 10 s instead of a 30 s black-hole hang; mihomo
+    session cleanup runs via ConnectionGuard's Drop.
+  – Per-UDP-session first-reply deadline (default 10 s). Bounds
+    only the *first* read_packet on a new UDP NAT entry, so a
+    session whose outbound sendto was silently dropped by iOS's
+    auto-bypass gets evicted and the next datagram dispatches a
+    fresh socket against a refreshed iOS route. Quiet-but-live
+    sessions (NAT keepalive, long-poll) are unaffected.
+
+• mihomo-rust pinned to a post-v0.7.6 rev to pick up
+  DirectAdapter::with_connect_timeout (madeye/mihomo-rust#86).
+  API compiles in but not yet wired through YAML — the FFI
+  watchdogs above are doing the work in this build.
+
+• netstack-smoltcp fork aligned to MTU=1500 (was 1504 with a
+  bogus "+4 for VLAN" allowance from upstream).
+
+KNOWN
+• Non-DNS UDP forwarding still pending (QUIC/HTTP3 degraded to TCP).
+• Path-change-driven dynamic MTU clamping (NWPathMonitor +
+  getifaddrs/SIOCGIFMTU) is deferred until we measure whether the
+  static 1400 clamp is leaving real Wi-Fi throughput on the table.
+
+FOR TESTERS
+• Specifically retry destinations that previously surfaced
+  "page hangs for ~30 s then errors" through DIRECT-routed flows.
+  If you still see 断流, please grab the log streamed from the
+  PacketTunnel subsystem (Console.app → predicate
+  `subsystem == "io.github.madeye.meow"`) and look for
+  `tun2socks: dial deadline exceeded` or
+  `tun2socks: UDP first-reply-deadline` lines — those tell us
+  which watchdog fired.
+• Cellular vs Wi-Fi: the MTU=1400 clamp is the same on both. If
+  Wi-Fi-side throughput regresses noticeably (the conservative
+  clamp can leave ~6% on the table on paths that didn't need it),
+  please report — that's the signal for prioritising the dynamic
+  NWPathMonitor work.
