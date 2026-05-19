@@ -1,0 +1,33 @@
+default_platform(:ios)
+
+API_KEY_PATH = "/Users/mlv/.appstoreconnect/api_key.json"
+
+platform :ios do
+  desc "Download current App Store metadata (text only) into ./fastlane/metadata"
+  lane :pull_metadata do
+    deliver(
+      api_key_path: API_KEY_PATH,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      run_precheck_before_submit: false,
+      force: true,
+      overwrite_screenshots: false,
+    )
+  end
+
+  desc "Upload metadata to App Store Connect (no binary, no screenshots)"
+  lane :push_metadata do
+    deliver(
+      api_key_path: API_KEY_PATH,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      automatic_release: false,
+    )
+  end
+end
