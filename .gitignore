@@ -88,3 +88,7 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output/
+
+# Firebase CLI debug log emitted by `firebase` commands during release
+firebase-debug.log
+firebase-debug.*.log
