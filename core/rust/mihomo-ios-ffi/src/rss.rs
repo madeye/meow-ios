@@ -95,8 +95,21 @@ mod tests {
     fn resident_mib_matches_resident_bytes() {
         match (resident_bytes(), resident_mib()) {
             (Some(b), Some(m)) => {
+                // `resident_bytes()` and `resident_mib()` each fire an
+                // independent `task_info` mach call, so the two samples can
+                // disagree by however much the resident set moved between
+                // them. Under `cargo test`'s default parallelism, sibling
+                // tests allocate concurrently and pages come/go in the
+                // window. Validate the conversion shape (≤ a few MiB drift)
+                // rather than bit-exact equality, which only held when the
+                // process happened to be quiescent.
                 let expected = b as f64 / (1024.0 * 1024.0);
-                assert!((m - expected).abs() < f64::EPSILON, "MiB conversion exact");
+                assert!(
+                    (m - expected).abs() < 4.0,
+                    "MiB conversion drift too large: bytes-derived={} mib-derived={}",
+                    expected,
+                    m,
+                );
             }
             (None, None) => {} // non-Apple platform, both return None
             (b, m) => panic!("inconsistent sampler: bytes={:?} mib={:?}", b, m),

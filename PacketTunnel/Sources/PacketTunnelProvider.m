@@ -197,6 +197,10 @@ static os_log_t gLog;
             if (completionHandler) completionHandler(nil);
             return;
         }
+        if (!group || !name) {
+            if (completionHandler) completionHandler(nil);
+            return;
+        }
         // The FFI is non-blocking (a parking_lot RwLock write inside
         // SelectorGroup) but we still hop off the main queue so the
         // tag-dispatch path stays uniform with the diagnostics handlers.

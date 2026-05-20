@@ -16,7 +16,7 @@ static os_log_t gLog;
 // recent iOS. Restart preemptively at 45 MiB so we drop allocator fragmentation
 // + Rust runtime state before the kernel kills us. Cooldown keeps us from
 // thrashing if the post-restart footprint is still hugging the cap.
-static const NSInteger kSoftCapFootprintMB    = 45;
+static const NSInteger kSoftCapFootprintMB    = 35;
 static const NSTimeInterval kRestartCooldownS = 60.0;
 
 @implementation MWTunnelEngine {
@@ -388,6 +388,12 @@ static const NSTimeInterval kRestartCooldownS = 60.0;
     }
 
     char *buf = (char *)malloc((size_t)(needed + 1));
+    if (!buf) {
+        if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
+                                                code:4
+                                            userInfo:@{NSLocalizedDescriptionKey: @"out of memory"}];
+        return NO;
+    }
     meow_patch_config(src, (int)prefs.mixedPort, buf, needed + 1);
     NSString *patched = [NSString stringWithUTF8String:buf];
     free(buf);

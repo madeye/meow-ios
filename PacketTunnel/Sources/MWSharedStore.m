@@ -6,10 +6,12 @@
 
 + (BOOL)writeDict:(NSDictionary *)dict toURL:(NSURL *)url error:(NSError **)error {
     NSURL *dir = [url URLByDeletingLastPathComponent];
-    [[NSFileManager defaultManager] createDirectoryAtURL:dir
-                             withIntermediateDirectories:YES
-                                              attributes:nil
-                                                   error:nil];
+    if (![[NSFileManager defaultManager] createDirectoryAtURL:dir
+                                 withIntermediateDirectories:YES
+                                                  attributes:nil
+                                                       error:error]) {
+        return NO;
+    }
     NSData *data = [NSJSONSerialization dataWithJSONObject:dict options:0 error:error];
     if (!data) return NO;
     return [data writeToURL:url options:NSDataWritingAtomic error:error];

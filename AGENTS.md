@@ -30,7 +30,7 @@ If a PR's diff touches only non-code paths, bypass CI regardless of local test s
 If a PR's diff touches code paths (Swift, Rust, project.yml, Podfile, etc.), bypass is permitted **only** when ALL of the following are true and the PR description explicitly attests to each:
 
 1. `swiftformat --lint .` ran locally at the repo root → 0 violations.
-2. `swiftlint` ran locally at the repo root → 0 violations.
+2. `swiftlint --strict` ran locally at the repo root → 0 violations.
 3. The `xcodebuild test` suites matching the diff ran locally on an iOS 26 simulator (e.g., iPhone 17) → all green. For Swift changes: at minimum `MeowTests`; add `MeowUITests` for UI diffs, `MeowIntegrationTests` for service-layer diffs. For Rust / FFI changes: add `scripts/build-rust.sh` + `cargo test` in `core/rust/mihomo-ios-ffi/`.
 4. `git diff origin/main...HEAD --stat` was verified — the file list matches what the PR intends to change and contains no accidental additions. (The PR #28 admin-with-code lesson: bypassing without checking the diff base is how unintended code ends up in a skip-CI merge.)
 5. PR description includes a checklist attesting to (1)-(4), with the concrete command lines that were run.

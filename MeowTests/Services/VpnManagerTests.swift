@@ -1,5 +1,6 @@
 import Foundation
 @testable import meow_ios
+import MeowModels
 import NetworkExtension
 import Testing
 
@@ -9,25 +10,34 @@ import Testing
 @Suite("VpnManager state mapping", .tags(.service))
 @MainActor
 struct VpnManagerTests {
-    @Test(.disabled("blocked on T4.2"))
+    @Test
     func `NEVPNStatus maps to VpnStage`() {
-        // .invalid → .idle
-        // .disconnected → .stopped
-        // .connecting → .connecting
-        // .connected → .connected
-        // .reasserting → .connecting
-        // .disconnecting → .stopping
+        let mgr = VpnManager()
+        mgr.applyConnectionStatus(.invalid)
+        #expect(mgr.stage == .idle)
+        mgr.applyConnectionStatus(.disconnected)
+        #expect(mgr.stage == .stopped)
+
+        mgr.applyConnectionStatus(.connecting)
+        #expect(mgr.stage == .connecting)
+
+        mgr.applyConnectionStatus(.connected)
+        #expect(mgr.stage == .connected)
+
+        mgr.applyConnectionStatus(.reasserting)
+        #expect(mgr.stage == .connecting)
+
+        mgr.applyConnectionStatus(.disconnecting)
+        #expect(mgr.stage == .stopping)
     }
 
-    @Test(.disabled("blocked on T4.2"))
-    func `connect while already connecting is a no-op`() {
-        // calling connect twice in a row should issue exactly one startVPNTunnel
-    }
-
-    @Test(.disabled("blocked on T4.2"))
+    @Test
     func `error stage populates errorMessage`() {
-        // extension writes state with stage=.error, message="dial timeout"
-        // VpnManager publishes state with same message
+        let mgr = VpnManager()
+        let state = VpnState(stage: .error, errorMessage: "dial timeout")
+        mgr.applyExtensionState(state)
+        #expect(mgr.stage == .error)
+        #expect(mgr.lastError == "dial timeout")
     }
 
     /// Regression guard for #59/#60 relaunch-into-connected trap: when the app

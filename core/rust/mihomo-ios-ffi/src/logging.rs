@@ -77,12 +77,33 @@ pub fn install_panic_hook() {
 /// (oslog doesn't render them anyway).
 pub struct LogForwardLayer;
 
+// Re-entrancy guard. If the global `log::Logger` is `tracing_log::LogTracer`
+// (intentionally avoided in `engine::install_tracing_subscriber`, but a
+// future dependency upgrade or a misordered init could re-introduce it),
+// the `log::log!` call below would round-trip back into this layer and
+// recurse until the stack guard page traps. The guard makes the cycle
+// impossible regardless of which `log::Logger` is global.
+thread_local! {
+    static IN_FORWARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for LogForwardLayer {
     fn on_event(
         &self,
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
+        if IN_FORWARD.with(|f| f.replace(true)) {
+            return;
+        }
+        struct ResetOnDrop;
+        impl Drop for ResetOnDrop {
+            fn drop(&mut self) {
+                IN_FORWARD.with(|f| f.set(false));
+            }
+        }
+        let _reset = ResetOnDrop;
+
         let level = match *event.metadata().level() {
             tracing::Level::TRACE => log::Level::Trace,
             tracing::Level::DEBUG => log::Level::Debug,

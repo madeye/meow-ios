@@ -19,6 +19,8 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.toggle.allowLan")
                 Toggle("settings.toggle.ipv6", isOn: binding(\.ipv6))
                     .accessibilityIdentifier("settings.toggle.ipv6")
+                Toggle("settings.toggle.onDemand", isOn: binding(\.onDemand))
+                    .accessibilityIdentifier("settings.toggle.onDemand")
                 Picker("settings.picker.logLevel", selection: binding(\.logLevel)) {
                     Text("settings.logLevel.debug").tag("debug")
                     Text("settings.logLevel.info").tag("info")
@@ -74,6 +76,13 @@ struct SettingsView: View {
             .onChange(of: preferences.allowLan) { _, _ in persist() }
             .onChange(of: preferences.ipv6) { _, _ in persist() }
             .onChange(of: preferences.logLevel) { _, _ in persist() }
+            .onChange(of: preferences.onDemand) { _, _ in
+                persist()
+                // Push the new isOnDemandEnabled value into the live NE
+                // profile; otherwise the toggle only takes effect on next
+                // app launch.
+                Task { await vpnManager.refresh() }
+            }
             .task { await pollMemory() }
     }
 

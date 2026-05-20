@@ -1,5 +1,4 @@
 import Foundation
-import MeowIPC
 import MeowModels
 import Observation
 import os

@@ -255,13 +255,18 @@ fn install_tracing_subscriber() {
             tx: log_broadcast_tx().clone(),
         }
         .with_filter(LevelFilter::INFO);
-        // `try_init` returns Err if another subscriber beat us to the global
-        // slot (unlikely in the FFI, but be defensive — panicking here would
-        // abort the extension).
-        let _ = tracing_subscriber::registry()
+        // Use `set_global_default` directly instead of
+        // `SubscriberInitExt::try_init`: the latter has a `tracing-log` side
+        // effect that installs `tracing_log::LogTracer` as the global
+        // `log::Logger`. Combined with our `LogForwardLayer` (tracing → log
+        // bridge for oslog), that creates a tracing → log → LogTracer →
+        // tracing cycle that blows the stack on the first event. We want
+        // exactly one direction: tracing → log. The `log` global stays
+        // owned by `oslog::OsLogger` (installed in `meow_core_init`).
+        let subscriber = tracing_subscriber::registry()
             .with(LogForwardLayer)
-            .with(log_layer)
-            .try_init();
+            .with(log_layer);
+        let _ = tracing::subscriber::set_global_default(subscriber);
     });
 }
 

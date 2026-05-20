@@ -1,5 +1,4 @@
 import FirebaseCore
-import MeowModels
 import SwiftData
 import SwiftUI
 

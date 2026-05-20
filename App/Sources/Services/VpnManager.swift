@@ -125,8 +125,12 @@ final class VpnManager {
         mgr.protocolConfiguration = proto
         mgr.localizedDescription = "meow"
         mgr.isEnabled = true
-        mgr.onDemandRules = []
-        mgr.isOnDemandEnabled = false
+        mgr.onDemandRules = [NEOnDemandRuleConnect()]
+        // On-demand auto-reconnects after iOS reclaims the NE under
+        // media/CPU/network pressure, but it also makes the VPN "sticky" in
+        // a way some users dislike (any network change resurrects the
+        // tunnel). Off by default; surfaced as a toggle in SettingsView.
+        mgr.isOnDemandEnabled = Preferences.load(from: AppGroup.defaults).onDemand
     }
 
     private func attach(_ mgr: NETunnelProviderManager) {
@@ -169,6 +173,14 @@ final class VpnManager {
         stage = next
         if next == .connected, previous != .connected {
             onConnected?()
+        }
+    }
+
+    /// Update state from the background extension's persisted state.
+    func applyExtensionState(_ state: VpnState) {
+        stage = state.stage
+        if let msg = state.errorMessage, !msg.isEmpty {
+            lastError = msg
         }
     }
 

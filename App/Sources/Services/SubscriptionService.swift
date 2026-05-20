@@ -120,10 +120,65 @@ enum SubscriptionError: Error {
     case conversionFailed(String)
 }
 
+enum SubscriptionFormat {
+    case clashYaml
+    case v2rayN
+}
+
 enum SubscriptionParser {
+    static func detectFormat(_ data: Data) -> SubscriptionFormat? {
+        if looksLikeClashYAML(data) { return .clashYaml }
+        if looksLikeV2RayN(data) { return .v2rayN }
+        return nil
+    }
+
     static func looksLikeClashYAML(_ data: Data) -> Bool {
         guard let text = String(data: data, encoding: .utf8) else { return false }
         let prefix = text.prefix(4096)
         return prefix.contains("proxies:") || prefix.contains("proxy-groups:")
     }
+
+    static func looksLikeV2RayN(_ data: Data) -> Bool {
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        let compact = text.filter { !$0.isWhitespace }
+        // STANDARD_NO_PAD equivalent in Swift is a bit tricky with Data(base64Encoded:),
+        // but it usually handles missing padding if we add it back.
+        var b64 = compact
+        while b64.count % 4 != 0 {
+            b64.append("=")
+        }
+        if let decodedData = Data(base64Encoded: b64),
+           let decodedText = String(data: decodedData, encoding: .utf8),
+           decodedText.contains("://")
+        {
+            return true
+        }
+        return text.contains("ss://") || text.contains("trojan://") ||
+            text.contains("vless://") || text.contains("vmess://")
+    }
+}
+
+enum YamlPatcher {
+    static func applyMixedPort(_ yaml: String, port: Int) throws -> String {
+        try yaml.withCString { src -> String in
+            let needed = meow_patch_config(src, Int32(port), nil, 0)
+            if needed < 0 {
+                throw SubscriptionError.conversionFailed(lastCoreError())
+            }
+            let cap = Int(needed) + 1
+            var buffer = [CChar](repeating: 0, count: cap)
+            let wrote = buffer.withUnsafeMutableBufferPointer { buf -> Int32 in
+                meow_patch_config(src, Int32(port), buf.baseAddress, Int32(cap))
+            }
+            if wrote < 0 {
+                throw SubscriptionError.conversionFailed(lastCoreError())
+            }
+            return String(cString: buffer)
+        }
+    }
+}
+
+private func lastCoreError() -> String {
+    if let cstr = meow_core_last_error() { return String(cString: cstr) }
+    return "unknown error"
 }

@@ -52,7 +52,9 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{mpsc, Notify, OwnedSemaphorePermit, Semaphore};
 use tracing::{info, trace, warn};
 
-use netstack_smoltcp::{udp::UdpMsg, AnyIpPktFrame, StackBuilder, TcpStream as NetstackTcpStream};
+type UdpMsg = (Vec<u8>, SocketAddr, SocketAddr);
+type AnyIpPktFrame = Vec<u8>;
+type NetstackTcpStream = lwip::TcpStream;
 
 /// Matches the cbindgen-emitted typedef in `mihomo_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
@@ -116,7 +118,7 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 // 147/s in the same stress harness). Acceptable for the foreground
 // page-load shape we actually need to serve; iOS NE's whole reason
 // for existing is to fit in 50 MB, not to win a benchmark.
-const TCP_ACCEPT_CAP_DEFAULT: usize = 32;
+const TCP_ACCEPT_CAP_DEFAULT: usize = 256;
 static TCP_ACCEPT_CAP: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(TCP_ACCEPT_CAP_DEFAULT);
 
@@ -423,23 +425,12 @@ async fn run_tun2socks(
     mut ingress_rx: mpsc::Receiver<Vec<u8>>,
     emitter: EgressEmitter,
 ) -> io::Result<()> {
-    logging::bridge_log("tun2socks: building netstack-smoltcp stack");
+    logging::bridge_log("tun2socks: building lwip netstack");
 
-    // MTU is hardcoded inside the fork at 1500 (see madeye/netstack-smoltcp
-    // `fix/ios-mtu-1500`) to match `NEPacketTunnelNetworkSettings.MTU`
-    // (`MWTunnelSettings.m`). The builder doesn't expose `mtu()` so we
-    // rely on the device-level default.
-    let (mut stack, tcp_runner, udp_socket, tcp_listener) = StackBuilder::default()
-        .enable_tcp(true)
-        .enable_udp(true)
-        .stack_buffer_size(1024)
-        .tcp_buffer_size(512)
-        .build()?;
+    let (mut stack, mut tcp_listener, udp_socket) = lwip::NetStack::with_buffer_size(1024, 256)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    let tcp_runner = tcp_runner.expect("TCP runner");
-    let mut tcp_listener = tcp_listener.expect("TCP listener");
-    let udp_socket = udp_socket.expect("UDP socket");
-    let (mut udp_read, udp_write) = udp_socket.split();
+    let (udp_write, mut udp_read) = udp_socket.split();
 
     let (udp_reply_tx, mut udp_reply_rx) = mpsc::channel::<UdpMsg>(256);
     // NAT key mirrors mihomo-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
@@ -454,12 +445,6 @@ async fn run_tun2socks(
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
     let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
     let tcp_accept_sem = Arc::new(Semaphore::new(accept_cap()));
-
-    let runner_handle = tokio::spawn(async move {
-        if let Err(e) = tcp_runner.await {
-            logging::bridge_log(&format!("tun2socks: TCP runner error: {}", e));
-        }
-    });
 
     let egress_tx_stack = egress_tx.clone();
     let stack_handle = tokio::spawn(async move {
@@ -606,9 +591,9 @@ async fn run_tun2socks(
     // Single writer task owns `UdpWriteHalf`; per-session readers feed it via
     // `udp_reply_tx`. Using an mpsc serializer avoids an Arc<Mutex<WriteHalf>>.
     let udp_writer_handle = tokio::spawn(async move {
-        let mut udp_write = udp_write;
+        let udp_write = udp_write;
         while let Some(msg) = udp_reply_rx.recv().await {
-            if let Err(e) = udp_write.send(msg).await {
+            if let Err(e) = udp_write.send_to(&msg.0, &msg.1, &msg.2) {
                 logging::bridge_log(&format!("tun2socks: UDP reply send error: {}", e));
                 break;
             }
@@ -733,7 +718,6 @@ async fn run_tun2socks(
         }
     }
 
-    runner_handle.abort();
     stack_handle.abort();
     tcp_accept_handle.abort();
     idle_sweeper_handle.abort();
