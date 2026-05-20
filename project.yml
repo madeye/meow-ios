@@ -48,13 +48,10 @@ targets:
         CFBundleDisplayName: meow
         CFBundleShortVersionString: "1.1.4"
         CFBundleVersion: "2026051901"
-        LSRequiresIPhoneOS: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
           UIColorName: LaunchBackground
-        UIRequiredDeviceCapabilities:
-          - arm64
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UISupportedInterfaceOrientations~ipad:
@@ -86,6 +83,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.madeye.meow
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator macosx"
         CODE_SIGN_ENTITLEMENTS: App/App.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: App/Sources/BridgingHeader.h
         GENERATE_INFOPLIST_FILE: NO

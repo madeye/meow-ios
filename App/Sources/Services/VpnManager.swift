@@ -26,6 +26,7 @@ final class VpnManager {
     }
 
     private var manager: NETunnelProviderManager?
+    private let bootstrapEngine = BootstrapEngine()
     // nonisolated(unsafe): written only from attach() on MainActor, read from
     // deinit (which is nonisolated). NotificationCenter.removeObserver is
     // thread-safe, so a torn read here is harmless.
@@ -54,13 +55,14 @@ final class VpnManager {
     }
 
     /// Kick off a connect. Caller should have already written the selected
-    /// profile YAML into the App Group container. Re-enables on-demand if
-    /// `disconnect` previously turned it off.
+    /// profile YAML into the App Group container.
     ///
-    /// Stages any missing GeoIP/ASN databases (`GeoAssetService.ensureFiles`)
-    /// before issuing `startVPNTunnel`. The badge surfaces this window as
-    /// `.preparing` so the UI doesn't lie about being "Connected" while the
-    /// engine would actually fail to start on a missing MMDB.
+    /// When GeoIP/ASN files are missing, runs an in-process mihomo engine
+    /// (no TUN) so URLSession can download through the user's first proxy
+    /// over `127.0.0.1:<port>` — see ADR-005. The `.preparing` badge covers
+    /// the engine boot + download window; `startVPNTunnel` only fires once
+    /// the files are on disk, so the tunnel only transitions
+    /// `.disconnected → .connecting → .connected` once.
     func connect() async {
         lastError = nil
         if manager == nil { await refresh() }
@@ -68,63 +70,24 @@ final class VpnManager {
         stage = .preparing
         do {
             if !GeoAssetService.allFilesPresent() {
-                try await bootstrapGeoDownload(manager: manager)
+                let port = try await bootstrapEngine.start()
+                do {
+                    let proxy = URL(string: "http://127.0.0.1:\(port)")
+                    try await GeoAssetService.ensureFiles(
+                        prefs: Preferences.load(from: AppGroup.defaults),
+                        throughProxy: proxy,
+                    )
+                } catch {
+                    await bootstrapEngine.stop()
+                    throw error
+                }
+                await bootstrapEngine.stop()
             }
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription
             stage = .error
         }
-    }
-
-    /// Two-step bootstrap when the GeoIP/ASN databases aren't on disk yet:
-    ///
-    ///   1. Swap `configURL` for a `MinimalConfigBuilder` config that uses
-    ///      only the first proxy from the user profile + a `MATCH` rule.
-    ///   2. Start the tunnel, wait for `.connected`, and download the geo
-    ///      files via URLSession — the app's traffic is routed through the
-    ///      tunnel's TUN, so jsDelivr is reached *through* the proxy.
-    ///   3. Stop the tunnel, wait for `.disconnected`, restore the original
-    ///      `configURL`.
-    ///
-    /// The caller then issues `startVPNTunnel` against the restored config.
-    private func bootstrapGeoDownload(manager: NETunnelProviderManager) async throws {
-        let sourceYAML = try String(contentsOf: AppGroup.configURL, encoding: .utf8)
-        let minimal = try MinimalConfigBuilder.build(sourceYAML: sourceYAML)
-
-        try minimal.write(to: AppGroup.configURL, atomically: true, encoding: .utf8)
-        defer {
-            // Best-effort restore. If a crash happens between here and the
-            // restore line below, the user's next profile reselect will
-            // re-stamp the real config.
-            try? sourceYAML.write(to: AppGroup.configURL, atomically: true, encoding: .utf8)
-        }
-
-        try manager.connection.startVPNTunnel()
-        try await waitForStatus(manager: manager, target: .connected, timeout: 30)
-        do {
-            try await GeoAssetService.ensureFiles(prefs: Preferences.load(from: AppGroup.defaults))
-        } catch {
-            manager.connection.stopVPNTunnel()
-            try? await waitForStatus(manager: manager, target: .disconnected, timeout: 10)
-            throw error
-        }
-        manager.connection.stopVPNTunnel()
-        try await waitForStatus(manager: manager, target: .disconnected, timeout: 10)
-    }
-
-    private func waitForStatus(
-        manager: NETunnelProviderManager,
-        target: NEVPNStatus,
-        timeout: TimeInterval,
-    ) async throws {
-        if manager.connection.status == target { return }
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            try await Task.sleep(for: .milliseconds(200))
-            if manager.connection.status == target { return }
-        }
-        throw URLError(.timedOut)
     }
 
     /// Disable on-demand first, then tear down the tunnel. iOS reclaims the NE
@@ -203,11 +166,6 @@ final class VpnManager {
     func applyConnectionStatus(_ status: NEVPNStatus) {
         let previous = stage
         let next = map(status)
-        // Hold `.preparing` until NE actually moves off `.disconnected` —
-        // otherwise the observer fire mid-`connect()` (cold attach edge,
-        // on-demand bounce) would flash the badge back to "Stopped" while
-        // the geo-asset download is still in flight.
-        if previous == .preparing, next == .stopped { return }
         stage = next
         if next == .connected, previous != .connected {
             onConnected?()

@@ -24,6 +24,14 @@ public enum MinimalConfigBuilder {
     }
 
     public static func build(sourceYAML: String) throws -> String {
+        try build(sourceYAML: sourceYAML, mixedPort: nil)
+    }
+
+    /// Bootstrap-friendly overload: when `mixedPort` is non-nil, that port
+    /// replaces the default and the `external-controller` line is omitted —
+    /// the bootstrap engine doesn't need a REST API and skipping it avoids
+    /// 9090 collisions with a lingering PacketTunnel extension engine.
+    public static func build(sourceYAML: String, mixedPort: Int?) throws -> String {
         let loaded = try Yams.load(yaml: sourceYAML)
         let root = (loaded as? [String: Any]) ?? [:]
         let proxies = (root["proxies"] as? [[String: Any]]) ?? []
@@ -31,13 +39,15 @@ public enum MinimalConfigBuilder {
             throw BuildError.noProxies
         }
 
-        let minimal: [String: Any] = [
-            "mixed-port": EffectiveConfigWriter.defaultMixedPort,
-            "external-controller": EffectiveConfigWriter.defaultExternalController,
+        var minimal: [String: Any] = [
+            "mixed-port": mixedPort ?? EffectiveConfigWriter.defaultMixedPort,
             "log-level": "warning",
             "proxies": [first],
             "rules": ["MATCH,\(name)"],
         ]
+        if mixedPort == nil {
+            minimal["external-controller"] = EffectiveConfigWriter.defaultExternalController
+        }
         return try Yams.dump(object: minimal, sortKeys: true)
     }
 }

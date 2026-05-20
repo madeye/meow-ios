@@ -1,7 +1,7 @@
 # ADR-005: Download geoip via in-process mihomo proxy, not via a bootstrap tunnel
 
-- **Status:** Proposed
-- **Date:** 2026-05-19
+- **Status:** Accepted
+- **Date:** 2026-05-19 (proposed), 2026-05-20 (accepted)
 - **Author:** Claude Opus 4.7 driven by max.c.lv@gmail.com
 - **Builds on:** `INVESTIGATION-2026-05-19-geoip-download-tls-failure.md`
 - **Supersedes (if accepted):** the bootstrap-tunnel approach in commit

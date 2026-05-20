@@ -51,18 +51,85 @@ enum GeoAssetService {
     /// works before the extension has ever written `effective-config.yaml`.
     /// Falls back to `defaultGeoXURL` when no source config exists yet
     /// (Settings → "Connect (no profile required)" debug path).
-    static func ensureFiles(prefs: Preferences) async throws {
+    ///
+    /// `throughProxy` (when non-nil) routes the HTTPS download through a
+    /// loopback proxy via `URLSession.connectionProxyDictionary`. Used by the
+    /// in-process `BootstrapEngine`; see ADR-005.
+    static func ensureFiles(prefs: Preferences, throughProxy proxy: URL? = nil) async throws {
         let urls = geoXURLs(prefs: prefs)
         guard !urls.isEmpty else { return }
 
         try FileManager.default.createDirectory(at: AppGroup.mihomoConfigDir, withIntermediateDirectories: true)
 
+        let userOverridesGeoXURL = userProfileHasGeoXURL()
+
         for (name, sourceURL) in urls {
             let destination = AppGroup.mihomoConfigDir.appending(path: sourceURL.lastPathComponent)
             let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? 0
             if size > 0 { continue }
-            try await download(name: name, from: sourceURL, to: destination)
+
+            let mirrors: [URL] = if userOverridesGeoXURL {
+                [sourceURL]
+            } else {
+                (EffectiveConfigWriter.geoXMirrors[name] ?? [sourceURL.absoluteString]).compactMap(URL.init(string:))
+            }
+            try await downloadWithMirrors(name: name, mirrors: mirrors, to: destination, throughProxy: proxy)
         }
+    }
+
+    private static func userProfileHasGeoXURL() -> Bool {
+        let source = (try? String(contentsOf: AppGroup.configURL, encoding: .utf8)) ?? ""
+        let parsed = (try? Yams.load(yaml: source)) as? [String: Any]
+        return parsed?["geox-url"] != nil
+    }
+
+    /// Recoverable URLError categories — connection-class failures we want to
+    /// retry against the next mirror. Anything else (cancel, bad URL, server
+    /// 5xx) propagates immediately.
+    private static let mirrorRetryableCodes: Set<URLError.Code> = [
+        .secureConnectionFailed,
+        .cannotConnectToHost,
+        .timedOut,
+        .networkConnectionLost,
+        .notConnectedToInternet,
+        .dnsLookupFailed,
+    ]
+
+    private static func downloadWithMirrors(
+        name: String,
+        mirrors: [URL],
+        to destination: URL,
+        throughProxy proxy: URL?,
+    ) async throws {
+        var lastError: Error?
+        for (index, source) in mirrors.enumerated() {
+            do {
+                try await download(name: name, from: source, to: destination, throughProxy: proxy)
+                if index > 0 {
+                    log.notice("downloaded \(name, privacy: .public) from mirror #\(index, privacy: .public)")
+                }
+                return
+            } catch let Failure.downloadFailed(_, underlying) where shouldRetry(underlying) {
+                lastError = Failure.downloadFailed(name: name, underlying: underlying)
+                continue
+            } catch let httpError as Failure {
+                if case .httpStatus = httpError {
+                    lastError = httpError
+                    continue
+                }
+                throw httpError
+            } catch {
+                throw error
+            }
+        }
+        throw lastError ?? Failure.downloadFailed(name: name, underlying: URLError(.unknown))
+    }
+
+    private static func shouldRetry(_ error: Error) -> Bool {
+        if let urlError = error as? URLError, mirrorRetryableCodes.contains(urlError.code) {
+            return true
+        }
+        return false
     }
 
     private static func geoXURLs(prefs: Preferences) -> [(name: String, url: URL)] {
@@ -76,13 +143,34 @@ enum GeoAssetService {
         }
     }
 
-    private static func download(name: String, from source: URL, to destination: URL) async throws {
+    private static func download(
+        name: String,
+        from source: URL,
+        to destination: URL,
+        throughProxy proxy: URL? = nil,
+    ) async throws {
         log.info("downloading \(name, privacy: .public) from \(source.absoluteString, privacy: .public)")
         let session: URLSession = {
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = 60
             config.timeoutIntervalForResource = 180
             config.waitsForConnectivity = false
+            if let proxy, let host = proxy.host, let port = proxy.port {
+                // iOS has supported HTTPS-via-HTTP-proxy (CONNECT) since iOS 10.
+                // The `HTTPSEnable/HTTPSProxy/HTTPSPort` keys are macOS-only in
+                // SDK headers but are honored at runtime via untyped CFNetwork
+                // string keys — the documented iOS workaround.
+                // `NSAllowsLocalNetworking: true` in project.yml permits the
+                // loopback hop.
+                config.connectionProxyDictionary = [
+                    kCFNetworkProxiesHTTPEnable as String: true,
+                    kCFNetworkProxiesHTTPProxy as String: host,
+                    kCFNetworkProxiesHTTPPort as String: port,
+                    "HTTPSEnable": true,
+                    "HTTPSProxy": host,
+                    "HTTPSPort": port,
+                ]
+            }
             return URLSession(configuration: config)
         }()
         defer { session.invalidateAndCancel() }
