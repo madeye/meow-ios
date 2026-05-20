@@ -180,12 +180,50 @@ fn load_stripped_config(config_path: &str) -> Result<Config> {
 }
 
 /// Same strip as `load_stripped_config` but for in-memory YAML (editor
-/// validation). No cache_dir involved, so we skip the temp-file dance
-/// and feed the stripped string straight to `load_config_from_str`.
+/// validation). No cache_dir involved, so we skip the temp-file dance.
+///
+/// Two safety hops vs the engine-start path:
+///
+/// 1. Strip `rule-providers:` in addition to listener fields. Upstream
+///    `mihomo_config::rule_provider::load_providers` synchronously
+///    `block_on`s its own `Runtime::new()`; calling that from inside any
+///    other tokio runtime panics in `enter_runtime` ("Cannot start a
+///    runtime from within a runtime"). Editor validation cares about
+///    YAML grammar + proxy/rule shape, not whether provider URLs resolve,
+///    so dropping the section is harmless.
+///
+/// 2. Drive `load_config_from_str` from `spawn_blocking` + `futures::executor`
+///    rather than the FFI's shared `get_runtime()`. The spawn_blocking
+///    hop lifts us off any tokio worker; `futures::executor::block_on`
+///    is a non-tokio driver and therefore does not install an
+///    `EnterGuard`. If any upstream callsite ever block_on's its own
+///    runtime the way `load_providers` does, we won't nest.
 fn load_stripped_config_from_str(yaml: &str) -> Result<Config> {
-    let stripped = strip_listener_fields(yaml)?;
-    let cfg = crate::get_runtime().block_on(load_config_from_str(&stripped))?;
-    Ok(cfg)
+    let stripped = strip_for_validation(yaml)?;
+    crate::get_runtime().block_on(async move {
+        tokio::task::spawn_blocking(move || {
+            futures::executor::block_on(load_config_from_str(&stripped))
+                .context("load_config_from_str (validation)")
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("validator join error: {e}"))?
+    })
+}
+
+/// Editor-only variant of [`strip_listener_fields`]: also drops
+/// `rule-providers:`. See `load_stripped_config_from_str` doc comment
+/// for the nested-runtime rationale. The engine-start path keeps
+/// rule-providers — the engine actually needs them at runtime, and on
+/// that path `load_providers` runs against a non-nested context
+/// (file-backed `load_config` uses a different load path).
+fn strip_for_validation(yaml: &str) -> Result<String> {
+    let listener_stripped = strip_listener_fields(yaml)?;
+    let mut doc: serde_yaml::Value =
+        serde_yaml::from_str(&listener_stripped).context("parsing stripped YAML for validation")?;
+    if let serde_yaml::Value::Mapping(m) = &mut doc {
+        m.remove(serde_yaml::Value::String("rule-providers".into()));
+    }
+    serde_yaml::to_string(&doc).context("serializing validation YAML")
 }
 
 /// Process-wide log broadcast channel. Registered into the tracing subscriber
@@ -489,6 +527,83 @@ proxies:
         let once = strip_listener_fields(yaml).expect("strip ok");
         let twice = strip_listener_fields(&once).expect("strip ok");
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn strip_for_validation_drops_rule_providers() {
+        let yaml = r#"
+mixed-port: 7890
+rule-providers:
+  reject:
+    type: http
+    behavior: domain
+    url: https://example.test/reject.txt
+    path: ./reject.txt
+proxies:
+  - name: p1
+    type: direct
+rules:
+  - MATCH,p1
+"#;
+        let out = super::strip_for_validation(yaml).expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        let m = doc.as_mapping().unwrap();
+        assert!(!m.contains_key(serde_yaml::Value::String("rule-providers".into())));
+        assert!(m.contains_key(serde_yaml::Value::String("proxies".into())));
+        assert!(m.contains_key(serde_yaml::Value::String("rules".into())));
+    }
+
+    /// Regression for the iOS 1.1.4 (2026051901) TestFlight crash:
+    /// `meow_engine_validate_config` panicked in
+    /// `tokio::runtime::context::runtime::enter_runtime` whenever the user's
+    /// YAML carried `rule-providers:`. Verifies the validate FFI returns
+    /// success (not panic) on a YAML that previously crashed.
+    #[test]
+    fn validate_does_not_panic_on_rule_providers() {
+        let yaml = r#"
+mixed-port: 7890
+rule-providers:
+  reject:
+    type: http
+    behavior: domain
+    url: https://example.test/reject.txt
+    path: ./reject.txt
+    interval: 86400
+proxies:
+  - name: p1
+    type: direct
+rules:
+  - MATCH,p1
+"#;
+        super::validate(yaml).expect("validate must not panic on rule-providers");
+    }
+
+    /// Regression for the same crash, exercised through the C ABI surface
+    /// the iOS app actually calls (`meow_engine_validate_config`). Confirms
+    /// the rc=0 contract holds end-to-end for a config with rule-providers.
+    #[test]
+    fn ffi_validate_returns_zero_on_rule_providers() {
+        use std::ffi::CString;
+        let yaml = r#"
+mixed-port: 7890
+rule-providers:
+  reject:
+    type: http
+    behavior: domain
+    url: https://example.test/reject.txt
+    path: ./reject.txt
+    interval: 86400
+proxies:
+  - name: p1
+    type: direct
+rules:
+  - MATCH,p1
+"#;
+        let cstr = CString::new(yaml).unwrap();
+        let rc = unsafe {
+            crate::meow_engine_validate_config(cstr.as_ptr(), yaml.len() as std::os::raw::c_int)
+        };
+        assert_eq!(rc, 0, "FFI validate must succeed on rule-providers YAML");
     }
 }
 
