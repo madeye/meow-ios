@@ -1,0 +1,72 @@
+Build 2026052004 (1.1.4)
+
+WHAT'S NEW
+• Tunnel memory: swapped the in-process TCP/IP stack
+  (netstack-smoltcp → lwip) so the PacketTunnel extension's
+  resident set plateaus at ~50 MiB instead of climbing
+  through 140-200 MiB under sustained TCP churn. The iOS NE
+  jetsam cap is ~50 MB, so the old curve drove avoidable
+  extension restarts under heavy traffic; the new curve has
+  margin. Background and stress-test data:
+  docs/INVESTIGATION-2026-05-16-stress-rss-netstack-smoltcp.md.
+
+• On-demand VPN: now OFF by default. New toggle in
+  Settings → General → "Connect On Demand". When on, iOS will
+  auto-resurrect the tunnel after the extension is reclaimed
+  (memory/CPU pressure, etc.); when off, the VPN stays down
+  until you flip the switch in this app. The previous build
+  forced it on for everyone, which surprised some users.
+
+• Launch crash fix: a logger init order bug created a
+  tracing → log → tracing recursion loop that blew the host
+  app's stack on launch in some configurations
+  (BA547B1D-5D66 incident). Replaced try_init with explicit
+  set_global_default + thread-local re-entrancy guard so the
+  cycle is structurally impossible.
+
+• Internal: TCP accept cap raised 32 → 256 to match the lwip
+  listener's queue depth — under burst, the old cap was the
+  binding limit; now lwip's internal queue is.
+
+WHAT TO TEST
+1. Launch / relaunch on a real device
+   • App opens to the main screen without crashing. (Specifically
+     the bug fixed above showed up as an instant SIGSEGV on launch
+     for some testers on the prior build.)
+
+2. Settings → General → "Connect On Demand"
+   • Fresh install / first launch: toggle should be OFF.
+   • Flip it ON, kill the app, reopen. In iOS Settings →
+     General → VPN & Device Management → meow, "Connect On
+     Demand" should be ON, and after a deliberate Wi-Fi flap
+     the tunnel should auto-reconnect.
+   • Flip it OFF, manually disconnect via the toggle. Confirm
+     the tunnel does NOT auto-resurrect on network change.
+
+3. Sustained-traffic memory headroom
+   • Use the tunnel for a heavy session: multi-tab browsing,
+     video streaming, or repeated speed tests. Watch
+     Settings → About → Memory (refreshes every 5s while
+     connected).
+   • Expected: memory stays in the 30-60 MiB band and does NOT
+     climb monotonically. If you see it cross ~45 MiB and keep
+     rising, please grab the value at peak and the duration
+     since connect.
+
+4. General regression pass
+   • Connect / disconnect / switch proxy groups / refresh
+     subscriptions. No new crashes or hangs.
+
+KNOWN
+• Non-DNS UDP forwarding still pending (QUIC/HTTP3 falls back
+  to TCP HTTP/2; usually transparent).
+• Cellular vs Wi-Fi throughput is the same as 2026051901 —
+  MTU clamp behaviour is unchanged.
+
+FOR TESTERS
+• If the launch crash from the prior build still reproduces
+  for you on 2026052004, please file a TestFlight Feedback
+  with the device model and iOS version. Include the timing:
+  "instant on launch" vs "after first connect attempt" — they
+  point at different code paths.
+• Issues: https://github.com/madeye/meow-ios/issues
