@@ -43,6 +43,10 @@
 "home.traffic.upload" = "Upload";
 "home.traffic.download" = "Download";
 "home.traffic.total %@" = "Total %@";
+"home.routeMode.title" = "Route Mode";
+"home.routeMode.rule" = "Rule";
+"home.routeMode.all" = "All";
+"home.routeMode.direct" = "Direct";
 "home.proxyGroups.header" = "Proxy Groups";
 "home.proxyGroups.placeholder.connected" = "Loading groups…";
 "home.proxyGroups.placeholder.connecting" = "Connecting — groups appear when the engine is up.";

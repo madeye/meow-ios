@@ -51,6 +51,17 @@ final class MihomoAPI: @unchecked Sendable {
         try await get("/proxies")
     }
 
+    func getConfigs() async throws -> ConfigsResponse {
+        try await get("/configs")
+    }
+
+    /// Updates the routing mode in the running engine. Accepts the mihomo
+    /// wire values: `rule`, `global`, `direct`. Persists across the engine
+    /// lifetime only — engine restarts reset to the YAML default.
+    func setMode(_ mode: String) async throws {
+        try await patch("/configs", body: ["mode": mode])
+    }
+
     /// Switch the active member of a `type: select` proxy group.
     ///
     /// Prefers the in-process IPC path (`ProxyControlIPC` over
@@ -247,6 +258,20 @@ final class MihomoAPI: @unchecked Sendable {
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         #if DEBUG
             log.info("HTTP PUT \(url.absoluteString, privacy: .public)")
+        #endif
+        let (data, resp) = try await session.data(for: req)
+        logResponse(resp, body: data, url: url)
+        try throwIfHTTPError(resp)
+    }
+
+    private func patch(_ path: String, body: [String: String]) async throws {
+        let url = baseURL.appending(path: path)
+        var req = request(for: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        #if DEBUG
+            log.info("HTTP PATCH \(url.absoluteString, privacy: .public)")
         #endif
         let (data, resp) = try await session.data(for: req)
         logResponse(resp, body: data, url: url)

@@ -49,6 +49,10 @@
 "home.traffic.upload" = "上传";
 "home.traffic.download" = "下载";
 "home.traffic.total %@" = "合计 %@";
+"home.routeMode.title" = "路由模式";
+"home.routeMode.rule" = "规则";
+"home.routeMode.all" = "全局";
+"home.routeMode.direct" = "直连";
 "home.proxyGroups.header" = "代理组";
 "home.proxyGroups.placeholder.connected" = "正在载入代理组…";
 "home.proxyGroups.placeholder.connecting" = "正在连接 — 引擎启动后将显示代理组。";

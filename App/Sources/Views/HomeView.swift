@@ -10,6 +10,7 @@ struct HomeView: View {
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
     @State private var groupCount: Int = 0
+    @State private var routeMode: RouteMode = .rule
 
     var body: some View {
         ScrollView {
@@ -19,6 +20,7 @@ struct HomeView: View {
                 }
                 primaryCard
                 trafficRow
+                routeModeRow
                 proxyGroupsRow
                 auxiliaryNavSection
             }
@@ -29,6 +31,7 @@ struct HomeView: View {
         .navigationTitle("home.nav.title")
         .task(id: vpnManager.stage) {
             await refreshGroupCount()
+            await refreshRouteMode()
         }
         // The stage-keyed task above fires on the `.connected` edge and races
         // `AppModel.replaySelectedProxies`; the pre-replay fetch caches YAML
@@ -37,8 +40,12 @@ struct HomeView: View {
         // replay pass finishes (success, probe timeout, or no-op alike).
         .task(id: appModel.replayGeneration) {
             await refreshGroupCount()
+            await refreshRouteMode()
         }
-        .refreshable { await refreshGroupCount() }
+        .refreshable {
+            await refreshGroupCount()
+            await refreshRouteMode()
+        }
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -146,6 +153,47 @@ struct HomeView: View {
                 rate: ipcBridge.currentTraffic.downloadRate,
                 systemImage: "arrow.down",
             )
+        }
+    }
+
+    // MARK: - Route mode
+
+    /// Custom binding so the picker's set-path issues the PATCH and the
+    /// get-path stays in sync with the @State value. Setting `routeMode`
+    /// directly via `.onChange` re-triggered the PATCH whenever
+    /// `refreshRouteMode()` synced from the server.
+    private var routeModeBinding: Binding<RouteMode> {
+        Binding(
+            get: { routeMode },
+            set: { new in
+                guard new != routeMode else { return }
+                routeMode = new
+                Task { await applyRouteMode(new) }
+            },
+        )
+    }
+
+    private var routeModeRow: some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.swap")
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 24)
+                Text("home.routeMode.title")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Picker("home.routeMode.title", selection: routeModeBinding) {
+                    ForEach(RouteMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(!isConnected)
+                .frame(maxWidth: 220)
+                .accessibilityIdentifier("home.routeMode.picker")
+            }
         }
     }
 
@@ -296,6 +344,28 @@ private extension HomeView {
         }
     }
 
+    func refreshRouteMode() async {
+        guard vpnManager.stage == .connected else { return }
+        do {
+            let resp = try await mihomoAPI.getConfigs()
+            if let mode = RouteMode(wire: resp.mode) {
+                routeMode = mode
+            }
+        } catch {
+            // Leave the picker at its last known value — re-syncs on next refresh.
+        }
+    }
+
+    func applyRouteMode(_ mode: RouteMode) async {
+        guard vpnManager.stage == .connected else { return }
+        do {
+            try await mihomoAPI.setMode(mode.wire)
+        } catch {
+            // Re-fetch to revert the segmented control if the engine rejected it.
+            await refreshRouteMode()
+        }
+    }
+
     func refreshGroupCount() async {
         guard vpnManager.stage == .connected else {
             groupCount = 0
@@ -306,6 +376,46 @@ private extension HomeView {
             groupCount = ProxyGroupModel.build(from: resp.proxies).count
         } catch {
             groupCount = 0
+        }
+    }
+}
+
+// MARK: - Route mode
+
+enum RouteMode: String, CaseIterable, Identifiable {
+    case rule
+    case all
+    case direct
+
+    var id: String {
+        rawValue
+    }
+
+    /// Wire value sent to mihomo's `PATCH /configs`. Mihomo calls the
+    /// "send everything through proxies" mode `global`; the UI uses `All`
+    /// to match how users describe it in this app.
+    var wire: String {
+        switch self {
+        case .rule: "rule"
+        case .all: "global"
+        case .direct: "direct"
+        }
+    }
+
+    init?(wire: String) {
+        switch wire.lowercased() {
+        case "rule": self = .rule
+        case "global": self = .all
+        case "direct": self = .direct
+        default: return nil
+        }
+    }
+
+    var label: LocalizedStringKey {
+        switch self {
+        case .rule: "home.routeMode.rule"
+        case .all: "home.routeMode.all"
+        case .direct: "home.routeMode.direct"
         }
     }
 }

@@ -83,6 +83,10 @@ struct ProvidersResponse: Decodable {
     let providers: [String: Provider]
 }
 
+struct ConfigsResponse: Decodable {
+    let mode: String
+}
+
 struct LogEntry: Decodable {
     let type: String
     let payload: String
