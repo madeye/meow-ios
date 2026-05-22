@@ -99,7 +99,7 @@ the screenshot captured:
 3. `GeoAssetService.allFilesPresent()` returns `false` — at least one of
    `geoip.metadb`, `country.mmdb`, `geosite.dat`,
    `GeoLite2-ASN.mmdb` is missing from
-   `AppGroup.mihomoConfigDir`
+   `AppGroup.meowConfigDir`
    (`App/Sources/Services/GeoAssetService.swift:38-47`).
 4. `bootstrapGeoDownload(manager:)` runs
    (`App/Sources/Services/VpnManager.swift:91-114`):
@@ -114,13 +114,13 @@ the screenshot captured:
      `waitForStatus(.connected, timeout: 30)`
      (`App/Sources/Services/VpnManager.swift:103-104`). This is when the
      14/12 in/out byte counters in the screenshot started ticking —
-     mihomo-rust booted, the TUN attached, the first proxy was dialed.
+     meow-rs booted, the TUN attached, the first proxy was dialed.
    * `GeoAssetService.ensureFiles(prefs:)` iterates the effective
      `geox-url` block and downloads each missing file via an ephemeral
      `URLSession` (60 s request / 180 s resource timeout,
      `App/Sources/Services/GeoAssetService.swift:81-87`). Per-URL
      packets are routed through the iOS routing table → into the TUN we
-     just brought up → into mihomo-rust → MATCH → first proxy →
+     just brought up → into meow-rs → MATCH → first proxy →
      upstream → `cdn.jsdelivr.net`.
 5. On `geoip` (the first key iterated, in dictionary order over
    `defaultGeoXURL` — order matters for which file's name appears in
@@ -168,7 +168,7 @@ cert-chain-specific cause we could pinpoint without packet capture.
 
 Because the request rides the tunnel, the TLS handshake observed by
 URLSession is between **the iOS device and `cdn.jsdelivr.net`** —
-mihomo-rust just forwards encrypted bytes through the first proxy. The
+meow-rs just forwards encrypted bytes through the first proxy. The
 proxy can't "fail" the TLS handshake itself (it has no key for jsDelivr),
 but it can:
 
@@ -188,7 +188,7 @@ The screenshot's 5G cellular context is the highest-prior hypothesis: a
 cellular operator middlebox (or upstream-of-proxy network) interfering
 with the jsDelivr handshake. The bytes-flowed counters (14/12) say the
 proxy did dial something — but they don't say it dialed the right
-endpoint, and we have no log of what error mihomo-rust internally
+endpoint, and we have no log of what error meow-rs internally
 recorded (the MATCH path doesn't surface dial-level errors to the app;
 URLSession sees only the eventual handshake outcome).
 
@@ -217,12 +217,12 @@ Ruled **out**:
 * Bundled-geoip regression: there is no bundled `geoip.metadb` anymore
   (`e442d7b feat(geo): lazy-download GeoIP/ASN databases on connect`
   removed it). Every fresh install hits this path.
-* Engine-side download (mihomo-rust honoring `geox-url` itself):
+* Engine-side download (meow-rs honoring `geox-url` itself):
   it does **not**. `GeoAssetService` comment is explicit —
-  "mihomo-rust does NOT itself honor `geox-url` for lazy fetching"
+  "meow-rs does NOT itself honor `geox-url` for lazy fetching"
   (`App/Sources/Services/GeoAssetService.swift:8-10`). The app stages
   files; the engine reads them off disk. So this failure can't be
-  attributed to anything in `core/rust/mihomo-ios-ffi/`.
+  attributed to anything in `core/rust/meow-ios-ffi/`.
 
 Not yet determinable without more data:
 
@@ -316,10 +316,10 @@ whether we want to **avoid** the failure, **recover** from it, or
    requiring this whole investigation each time. Cheap, fully app-side,
    doesn't change failure rate but reduces investigation cost.
 
-5. **Bridge mihomo-rust's dial-level error to URLSession's view.**
+5. **Bridge meow-rs's dial-level error to URLSession's view.**
    When the first proxy fails its upstream dial mid-TLS, the app today
    sees only `URLError(.secureConnectionFailed)`. If we exposed a
-   shared-store breadcrumb (`SharedStore.readState()`) from mihomo-rust
+   shared-store breadcrumb (`SharedStore.readState()`) from meow-rs
    for "last dial outcome on the bootstrap config," the
    `bootstrapGeoDownload` catch path could include it in the rethrown
    error and the banner would say something like "proxy dial failed:

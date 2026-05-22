@@ -3,18 +3,18 @@ import MeowIPC
 import NetworkExtension
 import os
 
-/// REST client for the mihomo external-controller that runs inside the
+/// REST client for the meow external-controller that runs inside the
 /// packet-tunnel extension on `127.0.0.1:9090`. The URLSession requests are
 /// issued from the main app process; iOS routes loopback traffic correctly
 /// even when the tunnel is active.
 @Observable
-final class MihomoAPI: @unchecked Sendable {
+final class MeowAPI: @unchecked Sendable {
     private let baseURL: URL
     private let secret: String
     private let session: URLSession
     // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
     // Mirrors the ingress-instrumentation pattern kept around #54.
-    private let log = Logger(subsystem: "io.github.madeye.meow.app", category: "mihomo-api")
+    private let log = Logger(subsystem: "io.github.madeye.meow.app", category: "meow-api")
 
     private enum URLBuildError: Error {
         case invalidComponents(endpoint: URL)
@@ -55,7 +55,7 @@ final class MihomoAPI: @unchecked Sendable {
         try await get("/configs")
     }
 
-    /// Updates the routing mode in the running engine. Accepts the mihomo
+    /// Updates the routing mode in the running engine. Accepts the meow
     /// wire values: `rule`, `global`, `direct`. Persists across the engine
     /// lifetime only — engine restarts reset to the YAML default.
     func setMode(_ mode: String) async throws {
@@ -76,10 +76,10 @@ final class MihomoAPI: @unchecked Sendable {
     /// Falls back to the loopback `PUT /proxies/{group}` if no provider
     /// session is available — typically when the tunnel isn't running
     /// (and the IPC would have failed anyway, but the HTTP path returns
-    /// a clearer error). Set `MihomoIPCDisabled = YES` in UserDefaults
+    /// a clearer error). Set `MeowIPCDisabled = YES` in UserDefaults
     /// to force the HTTP path for debugging.
     func selectProxy(group: String, name: String) async throws {
-        let ipcDisabled = UserDefaults.standard.bool(forKey: "MihomoIPCDisabled")
+        let ipcDisabled = UserDefaults.standard.bool(forKey: "MeowIPCDisabled")
         if !ipcDisabled, let session = await Self.tunnelSession() {
             try await selectProxyViaIPC(session: session, group: group, name: name)
             return
@@ -88,7 +88,7 @@ final class MihomoAPI: @unchecked Sendable {
     }
 
     /// Single-shot request/response over `NETunnelProviderSession`.
-    /// Errors here surface as `MihomoAPIError.proxyControl` so the UI can
+    /// Errors here surface as `MeowAPIError.proxyControl` so the UI can
     /// distinguish "engine not running" / "name not in selector" from a
     /// transport failure.
     private func selectProxyViaIPC(
@@ -104,7 +104,7 @@ final class MihomoAPI: @unchecked Sendable {
             do {
                 try session.sendProviderMessage(payload) { data in
                     guard let data else {
-                        cont.resume(throwing: MihomoAPIError.proxyControl(reason: "no response from extension"))
+                        cont.resume(throwing: MeowAPIError.proxyControl(reason: "no response from extension"))
                         return
                     }
                     do {
@@ -119,7 +119,7 @@ final class MihomoAPI: @unchecked Sendable {
                         // or a non-JSON status line.
                         let bytes = data.count
                         let preview = String(data: data.prefix(120), encoding: .utf8) ?? "<non-utf8>"
-                        cont.resume(throwing: MihomoAPIError.proxyControl(
+                        cont.resume(throwing: MeowAPIError.proxyControl(
                             reason: "IPC reply not decodable (\(bytes) B): \(preview)",
                         ))
                     }
@@ -129,7 +129,7 @@ final class MihomoAPI: @unchecked Sendable {
             }
         }
         guard response.success else {
-            throw MihomoAPIError.proxyControl(reason: response.errorReason ?? "unknown (code \(response.code ?? -99))")
+            throw MeowAPIError.proxyControl(reason: response.errorReason ?? "unknown (code \(response.code ?? -99))")
         }
     }
 
@@ -175,7 +175,7 @@ final class MihomoAPI: @unchecked Sendable {
         try await get("/providers/proxies")
     }
 
-    /// Triggers mihomo's bulk health-check for every proxy in a provider
+    /// Triggers meow's bulk health-check for every proxy in a provider
     /// (`GET /providers/proxies/{name}/healthcheck`). The endpoint returns
     /// 204 on success; fresh delays are surfaced on the next `getProviders()`.
     func healthCheckProvider(name: String) async throws {
@@ -189,7 +189,7 @@ final class MihomoAPI: @unchecked Sendable {
         try throwIfHTTPError(resp)
     }
 
-    /// Stream mihomo logs via WebSocket. Caller owns the AsyncStream — it
+    /// Stream meow logs via WebSocket. Caller owns the AsyncStream — it
     /// stops when the task is cancelled.
     func streamLogs(level: String = "info") -> AsyncThrowingStream<LogEntry, Error> {
         AsyncThrowingStream { continuation in
@@ -314,12 +314,12 @@ final class MihomoAPI: @unchecked Sendable {
     private func throwIfHTTPError(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { return }
         guard (200 ..< 300).contains(http.statusCode) else {
-            throw MihomoAPIError.http(status: http.statusCode)
+            throw MeowAPIError.http(status: http.statusCode)
         }
     }
 }
 
-enum MihomoAPIError: Error {
+enum MeowAPIError: Error {
     case http(status: Int)
     case malformed
     case proxyControl(reason: String)

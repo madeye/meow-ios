@@ -46,7 +46,7 @@ struct VpnManagerTests {
     /// initial status inside `attach(_:)` is not an observed
     /// `.NEVPNStatusDidChange` edge. Without firing `onConnected` on that
     /// synthetic edge, the proxy-selection replay in `AppModel` never runs
-    /// and the UI shows mihomo's YAML defaults instead of the user's picks.
+    /// and the UI shows meow's YAML defaults instead of the user's picks.
     @Test
     func `applyConnectionStatus fires onConnected on idle to connected edge`() {
         let mgr = VpnManager()

@@ -1,5 +1,5 @@
 #import "MWDiagnosticsRunner.h"
-#import "mihomo_core.h"
+#import "meow_core.h"
 #import <mach/mach.h>
 
 static const NSInteger kMemPassLimitMB = 14;

@@ -25,7 +25,7 @@ struct RuleEditorSheet: View {
     @State private var payload: String
     @State private var proxy: String
     @State private var noResolve: Bool
-    /// Flags other than `no-resolve` are preserved verbatim (mihomo gains
+    /// Flags other than `no-resolve` are preserved verbatim (meow gains
     /// flags faster than we model them; round-tripping the rest avoids
     /// silently dropping a `src` flag we don't know about yet).
     @State private var otherFlags: [String]

@@ -8,9 +8,9 @@ meow-ios collects only minimal anonymous usage analytics via Firebase Analytics,
 
 ## What the app does
 
-meow-ios is a native iOS proxy / VPN client. When you enable the VPN toggle, the app installs a Network Extension packet tunnel that routes your device traffic through a proxy engine (Mihomo) running locally inside the extension sandbox.
+meow-ios is a native iOS proxy / VPN client. When you enable the VPN toggle, the app installs a Network Extension packet tunnel that routes your device traffic through a proxy engine (meow-rs) running locally inside the extension sandbox.
 
-Where your traffic goes from there is entirely determined by the proxy configuration **you** provide — usually a Clash/Mihomo YAML subscription URL. meow-ios does not operate proxy servers, and it does not know or record the contents of your subscription.
+Where your traffic goes from there is entirely determined by the proxy configuration **you** provide — usually a Clash YAML subscription URL. meow-ios does not operate proxy servers, and it does not know or record the contents of your subscription.
 
 ## Data we collect
 
@@ -66,7 +66,7 @@ meow-ios links one third-party SDK that transmits data off-device:
 No advertising SDKs, attribution SDKs, A/B-testing SDKs, or session-replay /
 behavioral-analytics SDKs are embedded.
 
-Open-source on-device dependencies (the Mihomo proxy core, Yams YAML parser,
+Open-source on-device dependencies (the meow-rs proxy core, Yams YAML parser,
 and other libraries listed in the project manifest) run entirely on-device and
 do not phone home.
 

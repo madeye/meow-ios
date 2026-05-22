@@ -1,10 +1,10 @@
 //! os_log-backed logger. Replaces the Android `android_logger` crate.
 //!
-//! mihomo-rust uses `tracing` throughout; our oslog bridge sits on `log`.
+//! meow-rs uses `tracing` throughout; our oslog bridge sits on `log`.
 //! `LogForwardLayer` is a `tracing_subscriber::Layer` that forwards every
 //! tracing event to `log::log!` so engine output reaches the Apple unified
 //! log through the same pipe as our own `logging::bridge_log` calls. Installed
-//! from `engine::start` alongside `mihomo_api::log_stream::LogBroadcastLayer`
+//! from `engine::start` alongside `meow_api::log_stream::LogBroadcastLayer`
 //! (the latter powers the REST `/logs` WebSocket).
 
 use log::info;
@@ -70,7 +70,7 @@ pub fn install_panic_hook() {
 // tracing → log bridge
 // ---------------------------------------------------------------------------
 
-/// Forwards every tracing event to `log::log!` so mihomo-rust's
+/// Forwards every tracing event to `log::log!` so meow-rs's
 /// `tracing::{info,warn,error,debug,trace}!` calls reach the oslog bridge.
 /// Field-recording matches `LogBroadcastLayer::MessageVisitor` — only the
 /// `message` field becomes the log line; structured fields are dropped

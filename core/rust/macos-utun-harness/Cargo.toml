@@ -3,7 +3,7 @@ name = "macos-utun-harness"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Developer-only macOS end-to-end harness for mihomo-ios-ffi — wires a real utun device into the same C-ABI surface the iOS PacketTunnelProvider drives."
+description = "Developer-only macOS end-to-end harness for meow-ios-ffi — wires a real utun device into the same C-ABI surface the iOS PacketTunnelProvider drives."
 
 [[bin]]
 name = "meow-utun"
@@ -17,7 +17,7 @@ all = { level = "warn", priority = -1 }
 needless_return = "allow"
 
 [dependencies]
-mihomo-ios-ffi = { path = "../mihomo-ios-ffi" }
+meow-ios-ffi = { path = "../meow-ios-ffi" }
 libc = "0.2"
 anyhow = "1"
 tracing = "0.1"

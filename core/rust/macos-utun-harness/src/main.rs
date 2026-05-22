@@ -1,5 +1,5 @@
 //! `meow-utun` — developer-only macOS end-to-end test harness for the
-//! `mihomo-ios-ffi` crate.
+//! `meow-ios-ffi` crate.
 //!
 //! Bridges the same C-ABI surface the iOS PacketTunnelProvider drives
 //! (`meow_core_*`, `meow_engine_*`, `meow_tun_*`) into a real macOS `utun`
@@ -43,13 +43,13 @@ use utun::Utun;
 // Pull the FFI surface in as normal Rust items via the rlib. The same
 // symbols are exported with C linkage from the staticlib that iOS links,
 // so we are exercising the exact bytes the PacketTunnel extension runs.
-use mihomo_ios_ffi::{
+use meow_ios_ffi::{
     meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
     meow_engine_stop, meow_tun_ingest, meow_tun_set_accept_cap, meow_tun_start, meow_tun_stop, rss,
 };
 
 #[derive(Parser, Debug)]
-#[command(name = "meow-utun", about = "macOS utun harness for mihomo-ios-ffi")]
+#[command(name = "meow-utun", about = "macOS utun harness for meow-ios-ffi")]
 struct Args {
     /// Path to an iOS-style effective-config.yaml. The same file the
     /// PacketTunnel extension hands to `meow_engine_start`; produced by
@@ -58,7 +58,7 @@ struct Args {
     config: String,
 
     /// Home directory used as XDG_CONFIG_HOME (the engine reads
-    /// `<home>/mihomo/Country.mmdb`, `<home>/mihomo/cn-ipv*.bin`, etc.).
+    /// `<home>/meow/Country.mmdb`, `<home>/meow/cn-ipv*.bin`, etc.).
     /// Mirror the AppGroup container layout.
     #[arg(long)]
     home: String,
@@ -266,7 +266,7 @@ fn main() -> Result<()> {
     // see (it has no engine + no real outbound). The connections
     // originate from this process; with the standard
     // `route add -net 0.0.0.0/1 172.19.0.2` they enter the tun and walk
-    // the dispatch path mihomo's PacketTunnel exercises on-device.
+    // the dispatch path meow's PacketTunnel exercises on-device.
     let stress_thread = if let Some(target) = args.stress_target.clone() {
         let conns = args.stress_conns.max(1);
         let hold = std::time::Duration::from_millis(args.stress_hold_ms);

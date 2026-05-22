@@ -4,7 +4,7 @@ import MeowModels
 import Network
 import os
 
-/// In-process mihomo engine used to fetch GeoIP/ASN databases through the
+/// In-process meow engine used to fetch GeoIP/ASN databases through the
 /// user's first proxy without bringing `NEPacketTunnelProvider` up. Replaces
 /// the bootstrap-tunnel detour formerly in `VpnManager.bootstrapGeoDownload`
 /// — see `docs/adr/ADR-005-geoip-download-via-in-process-proxy.md`.
@@ -45,7 +45,7 @@ final class BootstrapEngine {
         runningPort != nil
     }
 
-    /// Bring up the engine-only mihomo against a minimal config and return the
+    /// Bring up the engine-only meow against a minimal config and return the
     /// loopback port URLSession should route through. Idempotent: returns the
     /// existing port if already started.
     func start() async throws -> Int {

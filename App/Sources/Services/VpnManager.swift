@@ -15,7 +15,7 @@ final class VpnManager {
     /// Fires each time `stage` transitions into `.connected`, including the
     /// synthetic attach-time edge when the tunnel is already connected on
     /// app relaunch. Wired by `AppModel` to replay persisted proxy-group
-    /// selections — mihomo-rust resets group state on every engine start,
+    /// selections — meow-rs resets group state on every engine start,
     /// so the app owns persistence.
     var onConnected: (@MainActor () -> Void)?
 
@@ -57,7 +57,7 @@ final class VpnManager {
     /// Kick off a connect. Caller should have already written the selected
     /// profile YAML into the App Group container.
     ///
-    /// When GeoIP/ASN files are missing, runs an in-process mihomo engine
+    /// When GeoIP/ASN files are missing, runs an in-process meow engine
     /// (no TUN) so URLSession can download through the user's first proxy
     /// over `127.0.0.1:<port>` — see ADR-005. The `.preparing` badge covers
     /// the engine boot + download window; `startVPNTunnel` only fires once

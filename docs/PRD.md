@@ -5,9 +5,9 @@
 **Author:** Architecture Team  
 **Status:** Draft  
 **Changelog:**
-- v1.1 — Dropped Go mihomo core; replaced with pure-Rust mihomo-rust engine (single `MihomoCore.xcframework`). iOS NetworkExtension 50 MB memory limit motivation documented.
+- v1.1 — Dropped Go meow core; replaced with pure-Rust meow-rs engine (single `MeowCore.xcframework`). iOS NetworkExtension 50 MB memory limit motivation documented.
 - v1.2 — Added §4.4 Diagnostics Surface Contract (OCR-stable label format for QA nightly harness). Memory budget tightened to TEST_STRATEGY v1.2: Extension ≤40 MB / 50 MB hard-fail; xcframework ≤8 MB.
-- v1.3 — Removed `mihomo-listener` crate from Rust dependency list (not needed in in-process path). Noted subscription conversion (`src/subscription.rs`) and diagnostics (`src/diagnostics.rs`) as Rust-native replacements for old Go paths. Added non-DNS UDP gap as MVP known limitation and new risk row.
+- v1.3 — Removed `meow-listener` crate from Rust dependency list (not needed in in-process path). Noted subscription conversion (`src/subscription.rs`) and diagnostics (`src/diagnostics.rs`) as Rust-native replacements for old Go paths. Added non-DNS UDP gap as MVP known limitation and new risk row.
 - v1.4 — Automated E2E scope retired per user directive 2026-04-18: vphone-cli nightly harness, tart-in-harness topology, and LocalE2ETests (Option 2 seeder + NE-error-surface) all dropped in favor of manual device verification on user's iPhone. §4.4 retitled to reflect manual-QA framing (label format stays useful for on-device readability; OCR contract removed). M1.5 milestone rewritten from "Nightly Gate Unblocked" to "Manual Smoke Passes".
 
 ---
@@ -16,17 +16,17 @@
 
 ### 1.1 What is meow-ios?
 
-meow-ios is a native iOS VPN/proxy client that ports the Android "meow" app to Apple platforms. It provides a full-featured proxy management experience — Clash-protocol subscriptions, Shadowsocks / Trojan / VLESS outbounds (the protocol set shipped by mihomo-rust v0.6.1), rule-based traffic routing, and DNS-over-HTTPS — wrapped in a SwiftUI material UI.
+meow-ios is a native iOS VPN/proxy client that ports the Android "meow" app to Apple platforms. It provides a full-featured proxy management experience — Clash-protocol subscriptions, Shadowsocks / Trojan / VLESS outbounds (the protocol set shipped by meow-rs v0.6.1), rule-based traffic routing, and DNS-over-HTTPS — wrapped in a SwiftUI material UI.
 
 ### 1.2 Target Audience
 
 - Privacy-conscious iOS users who need reliable, configurable proxy access
-- Power users managing Clash/mihomo subscriptions with custom YAML configurations
+- Power users managing Clash/meow-rs subscriptions with custom YAML configurations
 - Technical users who need per-connection visibility, rule editing, and diagnostics
 
 ### 1.3 Value Proposition
 
-meow-ios offers the full power of the mihomo proxy engine in a native iOS app with:
+meow-ios offers the full power of the meow-rs proxy engine in a native iOS app with:
 - **Zero-config subscriptions:** paste a URL, meow fetches and converts automatically
 - **Transparent VPN:** all system traffic routed through the proxy without per-app configuration
 - **Real-time visibility:** live connection table, traffic charts, rule matching logs
@@ -51,11 +51,11 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
 └─────────────────────┬───────────────────────────────────┘
                       │ C FFI (cbindgen header)
           ┌───────────▼──────────────────────────────────┐
-          │              MihomoCore.xcframework            │
+          │              MeowCore.xcframework            │
           │         (single Rust static library)           │
           │                                                │
           │  ┌─────────────────┐  ┌─────────────────────┐ │
-          │  │  tun2socks       │  │  mihomo-rust engine  │ │
+          │  │  tun2socks       │  │  meow-rs engine  │ │
           │  │  (netstack-      │  │  (proxy engine,      │ │
           │  │   smoltcp)       │  │   REST controller,   │ │
           │  │  DoH client      │  │   rules, DNS)        │ │
@@ -63,7 +63,7 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
           └──────────────────────────────────────────────┘
 ```
 
-> **Why pure Rust?** iOS NetworkExtension processes are jetsam-killed at ~50 MB resident memory. The previous design included a Go-compiled mihomo engine (~20–30 MB stripped binary plus the Go runtime overhead and mihomo's per-flow state), which left almost no headroom for the netstack and per-flow allocations once traffic arrived. Replacing it with [mihomo-rust](https://github.com/madeye/mihomo-rust) — a pure-Rust reimplementation of the mihomo proxy kernel — yields a single static library that fits within the memory constraint while eliminating the Go toolchain dependency entirely.
+> **Why pure Rust?** iOS NetworkExtension processes are jetsam-killed at ~50 MB resident memory. The previous design included a Go-compiled meow engine (~20–30 MB stripped binary plus the Go runtime overhead and meow's per-flow state), which left almost no headroom for the netstack and per-flow allocations once traffic arrived. Replacing it with [meow-rs](https://github.com/madeye/meow-rs) — a pure-Rust reimplementation of the meow-rs proxy kernel — yields a single static library that fits within the memory constraint while eliminating the Go toolchain dependency entirely.
 
 ### 2.2 Layer Responsibilities
 
@@ -72,7 +72,7 @@ meow-ios offers the full power of the mihomo proxy engine in a native iOS app wi
 | UI | SwiftUI + iOS 17+ | All screens, navigation, state presentation |
 | App ↔ Extension IPC | CFNotificationCenter + App Group container | Commands (connect/disconnect) and state/traffic events |
 | Packet Tunnel Provider | NEPacketTunnelProvider | VPN lifecycle, TUN fd management |
-| MihomoCore (Rust) | Rust, cbindgen C header, single XCFramework | tun2socks (netstack-smoltcp), DoH, full proxy engine (mihomo-rust), REST controller at 127.0.0.1:9090 |
+| MeowCore (Rust) | Rust, cbindgen C header, single XCFramework | tun2socks (netstack-smoltcp), DoH, full proxy engine (meow-rs), REST controller at 127.0.0.1:9090 |
 | Persistence | SwiftData | Profiles, daily traffic history |
 | Preferences | UserDefaults (App Group shared) | Port, DoH server, per-app mode |
 
@@ -84,10 +84,10 @@ iOS Network Stack
 TUN interface (utun*)
       ↓  packets via packetFlow.readPackets() → Unix socket pair → Rust
 netstack-smoltcp (Rust tun2socks)
-      ↓  TCP streams  →  mihomo_tunnel::tcp::handle_tcp()   (in-process Tokio channel)
+      ↓  TCP streams  →  meow_tunnel::tcp::handle_tcp()   (in-process Tokio channel)
       ↓  UDP:53       →  DoH client  (short-circuit, in-process)
       ↓  UDP non-DNS  →  ⚠ NOT YET FORWARDED (see §3.3 and §8)
-mihomo-rust engine  ←→  REST API (127.0.0.1:9090 inside extension)
+meow-rs engine  ←→  REST API (127.0.0.1:9090 inside extension)
       ↓  upstream proxy protocol (SS / Trojan / VLESS — see §8 protocol coverage)
 Remote proxy server
 ```
@@ -95,26 +95,26 @@ Remote proxy server
 ### 2.4 FFI Strategy
 
 **Single Swift → Rust C bridge:**
-- The `mihomo-ios-ffi` Cargo workspace crate links against mihomo-rust workspace crates as Rust dependencies
+- The `meow-ios-ffi` Cargo workspace crate links against meow-rs workspace crates as Rust dependencies
 - The combined crate exports a flat C ABI via `#[no_mangle] pub extern "C"` functions
-- `cbindgen` generates `MeowCore/include/mihomo_core.h`
+- `cbindgen` generates `MeowCore/include/meow_core.h`
 - Swift calls these functions through `PacketTunnel/BridgingHeader.h`
 
 **Rust dependency list** (as confirmed by Dev, commit `dd3d44a`):
 
 | Crate | Role |
 |-------|------|
-| `mihomo-common` | Core traits and types |
-| `mihomo-proxy` | Proxy protocol implementations |
-| `mihomo-rules` | Rule matching engine |
-| `mihomo-dns` | DNS resolver and DoH |
-| `mihomo-tunnel` | Central routing engine (`tcp::handle_tcp`, `udp::handle_udp` — UDP path pending T2.9) |
-| `mihomo-config` | YAML parsing; also backs `src/subscription.rs` (node list → Clash YAML conversion) |
-| `mihomo-api` | REST controller (Axum) |
-| ~~`mihomo-listener`~~ | ~~Inbound protocol handlers~~ — **removed**: not needed in in-process path (no loopback listener) |
+| `meow-common` | Core traits and types |
+| `meow-proxy` | Proxy protocol implementations |
+| `meow-rules` | Rule matching engine |
+| `meow-dns` | DNS resolver and DoH |
+| `meow-tunnel` | Central routing engine (`tcp::handle_tcp`, `udp::handle_udp` — UDP path pending T2.9) |
+| `meow-config` | YAML parsing; also backs `src/subscription.rs` (node list → Clash YAML conversion) |
+| `meow-api` | REST controller (Axum) |
+| ~~`meow-listener`~~ | ~~Inbound protocol handlers~~ — **removed**: not needed in in-process path (no loopback listener) |
 
 **Rust-native replacement for old Go paths** (implemented in `dd3d44a`):
-- `src/subscription.rs` — subscription conversion (was `convert.go` in Go core); uses `mihomo-config` crate
+- `src/subscription.rs` — subscription conversion (was `convert.go` in Go core); uses `meow-config` crate
 - `src/diagnostics.rs` — TCP/proxy/DNS diagnostic tests (was `diagnostics.go` in Go core)
 
 **Complete C API surface:**
@@ -141,7 +141,7 @@ void  meow_tun_stop(void);
 int   meow_tun_last_error(char *dst, int cap);
 ```
 
-**No Go toolchain required.** One XCFramework (`MihomoCore.xcframework`) contains everything.
+**No Go toolchain required.** One XCFramework (`MeowCore.xcframework`) contains everything.
 
 ### 2.5 IPC Between App and Extension
 
@@ -186,13 +186,13 @@ This avoids XPC complexity while remaining within Apple's sandbox restrictions.
 | Providers view | GET /providers | GET /providers | MVP |
 | Proxy delay test | GET /proxies/{name}/delay | GET /proxies/{name}/delay | MVP |
 | GeoIP/Geosite bundled assets | bundled in APK assets | bundled in app bundle | MVP |
-| TCP proxying | Android VpnService + tun2socks | netstack-smoltcp → mihomo_tunnel::tcp::handle_tcp | MVP |
+| TCP proxying | Android VpnService + tun2socks | netstack-smoltcp → meow_tunnel::tcp::handle_tcp | MVP |
 
 ### 3.2 Post-MVP Features
 
 | Feature | Notes |
 |---------|-------|
-| Non-DNS UDP forwarding | mihomo-rust UDP reverse-pump not yet wired for netstack-smoltcp integration. Tracked as T2.9. Forces QUIC/HTTP3 to fall back to TCP HTTP/2 and breaks UDP-only apps. See §3.3 and §8. |
+| Non-DNS UDP forwarding | meow-rs UDP reverse-pump not yet wired for netstack-smoltcp integration. Tracked as T2.9. Forces QUIC/HTTP3 to fall back to TCP HTTP/2 and breaks UDP-only apps. See §3.3 and §8. |
 | Per-app routing | iOS NEPacketTunnelProvider does not support per-app allow/deny lists. Post-MVP: explore NEAppRule (MDM only) or DNS-based workaround. |
 | Widget (traffic display) | WidgetKit extension showing current traffic rates |
 | Siri shortcuts | "Start VPN" shortcut via AppIntents |
@@ -467,7 +467,7 @@ Key prefix: `com.meow.`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `mixedPort` | Int | 7890 | mihomo mixed-port |
+| `mixedPort` | Int | 7890 | meow-rs mixed-port |
 | `localDnsPort` | Int | 1053 | local DNS listener |
 | `dohServer` | String | "" | DoH URL override |
 | `logLevel` | String | "info" | debug/info/warning/error/silent |
@@ -493,52 +493,52 @@ App Group ID: `group.io.github.madeye.meow`
 
 ## 6. Build & Integration Plan
 
-### 6.1 Rust (mihomo-ios-ffi — unified crate)
+### 6.1 Rust (meow-ios-ffi — unified crate)
 
 A Cargo workspace at `core/rust/` contains:
 
 ```
 core/rust/
 ├── Cargo.toml          # workspace manifest
-├── mihomo-ios-ffi/     # C-ABI wrapper crate
-│   ├── Cargo.toml      # depends on mihomo-rust workspace crates (see §2.4)
+├── meow-ios-ffi/     # C-ABI wrapper crate
+│   ├── Cargo.toml      # depends on meow-rs workspace crates (see §2.4)
 │   ├── src/
 │   │   ├── lib.rs      # #[no_mangle] C exports
-│   │   ├── engine.rs   # wraps mihomo-rust engine lifecycle
+│   │   ├── engine.rs   # wraps meow-rs engine lifecycle
 │   │   ├── tun2socks.rs # netstack-smoltcp TUN handler
 │   │   ├── doh_client.rs
 │   │   ├── subscription.rs  # node list → Clash YAML (was Go convert.go)
 │   │   └── diagnostics.rs   # TCP/proxy/DNS tests (was Go diagnostics.go)
 │   └── cbindgen.toml
-└── vendor/mihomo-rust/ # git submodule: github.com/madeye/mihomo-rust
+└── vendor/meow-rs/ # git submodule: github.com/madeye/meow-rs
 ```
 
 **Cross-compilation:**
 ```bash
 # iOS device (arm64)
-cargo build --target aarch64-apple-ios --release -p mihomo-ios-ffi
+cargo build --target aarch64-apple-ios --release -p meow-ios-ffi
 
 # iOS Simulator fat binary
-cargo build --target aarch64-apple-ios-sim --release -p mihomo-ios-ffi
-cargo build --target x86_64-apple-ios --release -p mihomo-ios-ffi
+cargo build --target aarch64-apple-ios-sim --release -p meow-ios-ffi
+cargo build --target x86_64-apple-ios --release -p meow-ios-ffi
 lipo -create \
-  target/aarch64-apple-ios-sim/release/libmihomo_ios_ffi.a \
-  target/x86_64-apple-ios/release/libmihomo_ios_ffi.a \
-  -output libmihomo_ios_ffi_sim.a
+  target/aarch64-apple-ios-sim/release/libmeow_ios_ffi.a \
+  target/x86_64-apple-ios/release/libmeow_ios_ffi.a \
+  -output libmeow_ios_ffi_sim.a
 
 # Generate header
-cbindgen --config cbindgen.toml --output MeowCore/include/mihomo_core.h
+cbindgen --config cbindgen.toml --output MeowCore/include/meow_core.h
 
 # XCFramework
 xcodebuild -create-xcframework \
-  -library target/aarch64-apple-ios/release/libmihomo_ios_ffi.a \
+  -library target/aarch64-apple-ios/release/libmeow_ios_ffi.a \
   -headers MeowCore/include/ \
-  -library libmihomo_ios_ffi_sim.a \
+  -library libmeow_ios_ffi_sim.a \
   -headers MeowCore/include/ \
-  -output MeowCore/Frameworks/MihomoCore.xcframework
+  -output MeowCore/Frameworks/MeowCore.xcframework
 ```
 
-**Output:** `MihomoCore.xcframework` — one framework, all functionality, target ≤8 MB stripped.
+**Output:** `MeowCore.xcframework` — one framework, all functionality, target ≤8 MB stripped.
 
 ### 6.2 Xcode Project Structure
 
@@ -561,7 +561,7 @@ meow-ios/
 │   ├── ViewModels/
 │   ├── Services/
 │   │   ├── VpnManager.swift
-│   │   ├── MihomoAPI.swift
+│   │   ├── MeowAPI.swift
 │   │   ├── SubscriptionService.swift
 │   │   └── IPCBridge.swift
 │   ├── Models/
@@ -574,16 +574,16 @@ meow-ios/
 │   ├── TunnelEngine.swift
 │   ├── DiagnosticsPanel.swift    # UIViewController for manual on-device smoke (§4.4)
 │   ├── IPCListener.swift
-│   └── BridgingHeader.h           # #import "mihomo_core.h"
+│   └── BridgingHeader.h           # #import "meow_core.h"
 ├── MeowCore/
 │   ├── include/
-│   │   └── mihomo_core.h          # cbindgen output (single header)
+│   │   └── meow_core.h          # cbindgen output (single header)
 │   └── Frameworks/
-│       └── MihomoCore.xcframework
+│       └── MeowCore.xcframework
 ├── core/rust/
 │   ├── Cargo.toml
-│   ├── mihomo-ios-ffi/
-│   └── vendor/mihomo-rust/
+│   ├── meow-ios-ffi/
+│   └── vendor/meow-rs/
 └── docs/
     ├── PRD.md
     └── PROJECT_PLAN.md
@@ -605,11 +605,11 @@ Both app target and PacketTunnel extension must share:
 - App Group, entitlements, signing configured
 - CI pipeline (Xcode Cloud or GitHub Actions) building both targets
 - Rust toolchain configured for iOS cross-compilation
-- mihomo-rust added as git submodule; `mihomo-ios-ffi` workspace scaffolded
+- meow-rs added as git submodule; `meow-ios-ffi` workspace scaffolded
 
 ### Milestone 1: Native Core Running (Weeks 2–3)
-- `MihomoCore.xcframework` (single Rust library) builds successfully; stripped size ≤ 8 MB
-- PacketTunnelProvider can load config.yaml, start mihomo-rust engine, start tun2socks
+- `MeowCore.xcframework` (single Rust library) builds successfully; stripped size ≤ 8 MB
+- PacketTunnelProvider can load config.yaml, start meow-rs engine, start tun2socks
 - TCP traffic flows end-to-end through extension on device
 - DoH DNS working (UDP:53 short-circuit)
 - **Known limitation at M1:** non-DNS UDP not forwarded (QUIC/HTTP3 degraded to TCP); disclosed in release notes
@@ -641,7 +641,7 @@ Both app target and PacketTunnel extension must share:
 ### Milestone 5: Traffic History, UDP Patch & Polish (Weeks 9–10)
 - Daily traffic accumulation in SwiftData
 - Traffic screen with Swift Charts
-- **T2.9 (non-DNS UDP):** wire netstack-smoltcp UDP → `mihomo_tunnel::udp::handle_udp` (pending upstream API maturity)
+- **T2.9 (non-DNS UDP):** wire netstack-smoltcp UDP → `meow_tunnel::udp::handle_udp` (pending upstream API maturity)
 - SwiftUI material UI polish pass
 - Dark mode, Dynamic Type, accessibility audit
 - App icons, launch screen
@@ -659,10 +659,10 @@ Both app target and PacketTunnel extension must share:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Network Extension memory limit | High | Critical | **Budget (TEST_STRATEGY v1.2):** Extension resident ≤ 40 MB PASS / ≥ 50 MB hard-fail; MihomoCore.xcframework stripped ≤ 8 MB. Both enforced as CI gates (T1.4 size check; T6.4 runtime measure). Rust release profile: `lto = "fat"`, `opt-level = "z"`, `strip = "symbols"`. Profile with Instruments Memory Graph in M1. |
-| **Non-DNS UDP not forwarded (M0/M1 gap)** | **Confirmed** | **Medium** | **QUIC/HTTP3 degrades to TCP HTTP/2 (usually transparent); UDP-only apps break silently. Disclosed in M0 release notes. Patched in M1 via T2.9 (wire netstack-smoltcp UDP → `mihomo_tunnel::udp::handle_udp`). Prerequisite: upstream mihomo-rust UDP API maturity check.** |
-| mihomo-rust protocol coverage | Resolved | Low | Audit complete: mihomo-rust v0.6.1 ships SS / Trojan / VLESS outbounds (plus HTTP / SOCKS5 / Direct / Reject). VMess, WireGuard, TUIC, Hysteria 2 are out of scope for M1 — defer or upstream-contribute post-M1. |
-| Rust binary size with all mihomo-rust crates | Medium | Medium | Use `cargo bloat`; enable LTO + `opt-level = "z"`; disable unused feature flags; CI hard-fails if xcframework > 8 MB |
+| Network Extension memory limit | High | Critical | **Budget (TEST_STRATEGY v1.2):** Extension resident ≤ 40 MB PASS / ≥ 50 MB hard-fail; MeowCore.xcframework stripped ≤ 8 MB. Both enforced as CI gates (T1.4 size check; T6.4 runtime measure). Rust release profile: `lto = "fat"`, `opt-level = "z"`, `strip = "symbols"`. Profile with Instruments Memory Graph in M1. |
+| **Non-DNS UDP not forwarded (M0/M1 gap)** | **Confirmed** | **Medium** | **QUIC/HTTP3 degrades to TCP HTTP/2 (usually transparent); UDP-only apps break silently. Disclosed in M0 release notes. Patched in M1 via T2.9 (wire netstack-smoltcp UDP → `meow_tunnel::udp::handle_udp`). Prerequisite: upstream meow-rs UDP API maturity check.** |
+| meow-rs protocol coverage | Resolved | Low | Audit complete: meow-rs v0.6.1 ships SS / Trojan / VLESS outbounds (plus HTTP / SOCKS5 / Direct / Reject). VMess, WireGuard, TUIC, Hysteria 2 are out of scope for M1 — defer or upstream-contribute post-M1. |
+| Rust binary size with all meow-rs crates | Medium | Medium | Use `cargo bloat`; enable LTO + `opt-level = "z"`; disable unused feature flags; CI hard-fails if xcframework > 8 MB |
 | tun2socks in-process Tokio channel coupling | Medium | High | T1.2 prototype before Phase 2; fallback to SOCKS5 loopback (127.0.0.1:7890) if coupling is too complex |
 | Apple review rejection for VPN apps | Medium | High | Ensure app description clearly states legitimate use; include privacy policy; avoid keywords that trigger review flags |
 | iOS Network Extension sandbox restricts file I/O paths | Medium | High | All file I/O must use App Group container path; verify early in M1 |

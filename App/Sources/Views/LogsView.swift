@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LogsView: View {
-    @Environment(MihomoAPI.self) private var api
+    @Environment(MeowAPI.self) private var api
     @State private var entries: [LogEntry] = []
     @State private var level = "info"
     @State private var autoScroll = true

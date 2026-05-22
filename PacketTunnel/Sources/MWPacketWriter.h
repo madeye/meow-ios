@@ -1,7 +1,7 @@
 #pragma once
 #import <Foundation/Foundation.h>
 #import <NetworkExtension/NetworkExtension.h>
-#import "mihomo_core.h"
+#import "meow_core.h"
 
 @interface MWPacketWriter : NSObject
 - (instancetype)initWithFlow:(NEPacketTunnelFlow *)flow;

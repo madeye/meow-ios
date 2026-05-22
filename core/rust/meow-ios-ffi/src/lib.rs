@@ -1,22 +1,22 @@
 //! Rust half of the meow-ios native stack — unified into a single C ABI that
 //! the PacketTunnel extension and the main app both link against via
-//! `MihomoCore.xcframework`.
+//! `MeowCore.xcframework`.
 //!
-//! Embeds the mihomo-rust proxy engine and the tun2socks layer in one static
+//! Embeds the meow-rs proxy engine and the tun2socks layer in one static
 //! library. Both TCP and UDP flows are dispatched in-process:
 //!
-//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ⇆ mihomo_tunnel::{tcp,udp}::handle_*
+//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ⇆ meow_tunnel::{tcp,udp}::handle_*
 //!                                                              ↓
 //!                                          rules / proxies / DNS / REST API
 //!
 //! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
 //! owns a single tokio runtime that both halves share. DNS is delegated
-//! end-to-end to mihomo's resolver running in fake-IP mode: the tun2socks
+//! end-to-end to meow's resolver running in fake-IP mode: the tun2socks
 //! UDP/53 intercept hands every in-TUN DNS datagram straight to
-//! `mihomo_dns::DnsServer::handle_query`, which synthesises the fake-IP, owns
+//! `meow_dns::DnsServer::handle_query`, which synthesises the fake-IP, owns
 //! the reverse mapping, and answers AAAA / hosts / NXDOMAIN consistently.
 //! The TCP and UDP dispatch paths then pass the literal fake-IP destination
-//! to `mihomo_tunnel`, whose `pre_handle_metadata` reverses it back to the
+//! to `meow_tunnel`, whose `pre_handle_metadata` reverses it back to the
 //! original hostname before rule matching. The FFI no longer carries its
 //! own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH cache, or
 //! in-FFI TCP-DNS client.
@@ -107,9 +107,9 @@ pub extern "C" fn meow_core_init() {
 /// Set the app-group container path where config.yaml and cache files live.
 /// `dir` may be NULL or empty.
 ///
-/// Also exports `$XDG_CONFIG_HOME=<dir>` into the process env so `mihomo-config`
-/// finds its GeoIP database at `<dir>/mihomo/Country.mmdb` (upstream mihomo's
-/// resolution order is `$XDG_CONFIG_HOME/mihomo/` → `$HOME/.config/mihomo/`).
+/// Also exports `$XDG_CONFIG_HOME=<dir>` into the process env so `meow-config`
+/// finds its GeoIP database at `<dir>/meow/Country.mmdb` (upstream meow's
+/// resolution order is `$XDG_CONFIG_HOME/meow/` → `$HOME/.config/meow/`).
 /// iOS sandbox HOME has no `.config`, so the env var is how the bundled Country.mmdb
 /// lands on the engine's load path.
 ///
@@ -141,10 +141,10 @@ pub extern "C" fn meow_core_last_error() -> *const c_char {
 }
 
 // ---------------------------------------------------------------------------
-// Engine (mihomo-rust) — lifecycle + config
+// Engine (meow-rs) — lifecycle + config
 // ---------------------------------------------------------------------------
 
-/// Start the mihomo-rust engine using the YAML at `config_path`. Idempotent.
+/// Start the meow-rs engine using the YAML at `config_path`. Idempotent.
 /// Returns 0 on success, -1 on error (inspect `meow_core_last_error`).
 ///
 /// # Safety
@@ -165,7 +165,7 @@ pub unsafe extern "C" fn meow_engine_start(config_path: *const c_char) -> c_int 
     }
 }
 
-/// Stop the mihomo-rust engine. Idempotent.
+/// Stop the meow-rs engine. Idempotent.
 #[no_mangle]
 pub extern "C" fn meow_engine_stop() {
     logging::bridge_log("meow_engine_stop");
@@ -423,7 +423,7 @@ pub unsafe extern "C" fn meow_proxy_select(group: *const c_char, name: *const c_
     };
     let Some(selector) = proxy
         .as_any()
-        .and_then(|a| a.downcast_ref::<mihomo_proxy::SelectorGroup>())
+        .and_then(|a| a.downcast_ref::<meow_proxy::SelectorGroup>())
     else {
         set_error(format!("'{group_name}' is not a select-type group"));
         return -3;
@@ -592,12 +592,12 @@ pub extern "C" fn meow_tun_stop() {
 /// or the TUN itself.
 ///
 /// Each abort cancels the dispatch_tcp future, which drops the netstack
-/// stream side and (via `ConnectionGuard::drop` inside mihomo-tunnel)
+/// stream side and (via `ConnectionGuard::drop` inside meow-tunnel)
 /// removes the corresponding entry from `Statistics.connections` —
-/// keeping our flow registry and mihomo's state in sync.
+/// keeping our flow registry and meow's state in sync.
 ///
 /// UDP flows are intentionally untouched: they're connectionless from
-/// the app's perspective, mihomo's NAT entries time out on their own,
+/// the app's perspective, meow's NAT entries time out on their own,
 /// and aborting them mid-flight would pointlessly drop in-flight DNS
 /// replies during the interface flip.
 ///
@@ -612,7 +612,7 @@ pub extern "C" fn meow_tun_close_all_tcp_flows() -> c_int {
 /// Set the TCP accept-side cap. Bounds the number of concurrent
 /// `dispatch_tcp` tasks live at once, which is the dominant factor in
 /// peak FFI RSS under burst (1000+ concurrent dispatches each carrying
-/// per-flow Metadata, Box<dyn ProxyConn>, mihomo outbound dial state,
+/// per-flow Metadata, Box<dyn ProxyConn>, meow outbound dial state,
 /// and netstack ring buffers can push the extension past the 50 MiB
 /// jetsam cap). Default 128.
 ///
@@ -680,7 +680,7 @@ pub extern "C" fn meow_tun_dial_deadline_ms() -> c_int {
 /// dispatches a fresh socket against a refreshed iOS route.
 ///
 /// Default 10000 ms. Pass `0` to disable the deadline (legacy unbounded
-/// behaviour — relies on mihomo's NAT-table TTL to reap idle sessions).
+/// behaviour — relies on meow's NAT-table TTL to reap idle sessions).
 /// Negative values are rejected.
 ///
 /// Takes effect on the next UDP session whose reply reader spawns;

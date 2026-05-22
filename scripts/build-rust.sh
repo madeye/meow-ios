@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Build mihomo-ios-ffi for iOS device + simulator and pack into an XCFramework.
+# Build meow-ios-ffi for iOS device + simulator and pack into an XCFramework.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CRATE_DIR="$ROOT/core/rust/mihomo-ios-ffi"
+CRATE_DIR="$ROOT/core/rust/meow-ios-ffi"
 OUT_DIR="$ROOT/MeowCore/Frameworks"
-HEADER_SRC="$CRATE_DIR/include/mihomo_core.h"
-HEADER_DST="$ROOT/MeowCore/include/mihomo_core.h"
+HEADER_SRC="$CRATE_DIR/include/meow_core.h"
+HEADER_DST="$ROOT/MeowCore/include/meow_core.h"
 
 TARGETS_REQUIRED=(aarch64-apple-ios aarch64-apple-ios-sim)
 PROFILE="release"
@@ -31,8 +31,8 @@ cargo build --release --target aarch64-apple-ios
 echo "==> cargo build --target aarch64-apple-ios-sim (simulator)"
 cargo build --release --target aarch64-apple-ios-sim
 
-DEVICE_LIB="$CRATE_DIR/target/aarch64-apple-ios/$PROFILE/libmihomo_ios_ffi.a"
-SIM_LIB="$CRATE_DIR/target/aarch64-apple-ios-sim/$PROFILE/libmihomo_ios_ffi.a"
+DEVICE_LIB="$CRATE_DIR/target/aarch64-apple-ios/$PROFILE/libmeow_ios_ffi.a"
+SIM_LIB="$CRATE_DIR/target/aarch64-apple-ios-sim/$PROFILE/libmeow_ios_ffi.a"
 
 if [[ ! -f "$DEVICE_LIB" || ! -f "$SIM_LIB" ]]; then
     echo "error: expected static libs missing" >&2
@@ -40,21 +40,23 @@ if [[ ! -f "$DEVICE_LIB" || ! -f "$SIM_LIB" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
-rm -rf "$OUT_DIR/MihomoCore.xcframework"
+rm -rf "$OUT_DIR/MeowCore.xcframework" "$OUT_DIR/MihomoCore.xcframework"
 
 # Ensure the header we ship to Swift matches what cbindgen emitted.
 if [[ -f "$HEADER_SRC" ]]; then
     cp "$HEADER_SRC" "$HEADER_DST"
 fi
+# Drop the old header path if a stale copy lingers from before the rename.
+rm -f "$ROOT/MeowCore/include/mihomo_core.h"
 
 HEADERS_STAGE="$(mktemp -d)"
-cp "$HEADER_DST" "$HEADERS_STAGE/mihomo_core.h"
+cp "$HEADER_DST" "$HEADERS_STAGE/meow_core.h"
 
 echo "==> xcodebuild -create-xcframework"
 xcodebuild -create-xcframework \
     -library "$DEVICE_LIB" -headers "$HEADERS_STAGE" \
     -library "$SIM_LIB" -headers "$HEADERS_STAGE" \
-    -output "$OUT_DIR/MihomoCore.xcframework"
+    -output "$OUT_DIR/MeowCore.xcframework"
 
 rm -rf "$HEADERS_STAGE"
-echo "==> wrote $OUT_DIR/MihomoCore.xcframework"
+echo "==> wrote $OUT_DIR/MeowCore.xcframework"

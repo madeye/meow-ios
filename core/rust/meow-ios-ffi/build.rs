@@ -19,7 +19,7 @@ fn main() {
 
     let out = PathBuf::from(&crate_dir)
         .join("include")
-        .join("mihomo_core.h");
+        .join("meow_core.h");
     std::fs::create_dir_all(out.parent().unwrap()).ok();
 
     if let Ok(bindings) = cbindgen::Builder::new()

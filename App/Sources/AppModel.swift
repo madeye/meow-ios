@@ -12,7 +12,7 @@ private let replayLog = Logger(subsystem: "io.github.madeye.meow.app", category:
 @Observable
 final class AppModel {
     let vpnManager: VpnManager
-    let mihomoAPI: MihomoAPI
+    let meowAPI: MeowAPI
     let subscriptionService: SubscriptionService
     let ipcBridge: AppIPCBridge
     let dailyTrafficAccumulator: DailyTrafficAccumulator
@@ -29,7 +29,7 @@ final class AppModel {
 
     init() {
         // Export XDG_CONFIG_HOME before any FFI callsite that might resolve
-        // GEOIP rules (e.g. YamlEditorView's MihomoConfigValidator →
+        // GEOIP rules (e.g. YamlEditorView's MeowConfigValidator →
         // meow_engine_validate_config). std::env::set_var is per-process, so
         // each of {App, PacketTunnel} needs its own call — PacketTunnel does
         // the same in TunnelEngine.start.
@@ -37,7 +37,7 @@ final class AppModel {
 
         let defaults = AppGroup.defaults
         vpnManager = VpnManager()
-        mihomoAPI = MihomoAPI(port: 9090, secret: defaults.string(forKey: PreferenceKey.apiSecret) ?? "")
+        meowAPI = MeowAPI(port: 9090, secret: defaults.string(forKey: PreferenceKey.apiSecret) ?? "")
         subscriptionService = SubscriptionService(
             modelContext: AppModelContainer.shared.container.mainContext,
         )
@@ -56,14 +56,14 @@ final class AppModel {
                 await self?.replaySelectedProxies()
             }
         }
-        try? FileManager.default.createDirectory(at: AppGroup.mihomoConfigDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: AppGroup.meowConfigDir, withIntermediateDirectories: true)
         await vpnManager.refresh()
         ipcBridge.start()
         dailyTrafficAccumulator.start()
     }
 
     /// Re-issues the active profile's persisted `selectedProxies` each time
-    /// the tunnel transitions into `.connected`. mihomo-rust keeps group
+    /// the tunnel transitions into `.connected`. meow-rs keeps group
     /// state in-memory only, so every engine.start resets it to the YAML
     /// defaults — without this the UI would show defaults instead of what
     /// the user last picked.
@@ -76,7 +76,7 @@ final class AppModel {
     /// User can re-pick if they want; stale entries are otherwise harmless.
     private func replaySelectedProxies() async {
         defer { replayGeneration &+= 1 }
-        let api = mihomoAPI
+        let api = meowAPI
         // Cold-connect readiness probe. `meow_engine_start` returns before
         // the spawned api_server task binds :9090, so a replay fired on the
         // `.connected` edge can race it. 1s cap (100ms × 10) is plenty on

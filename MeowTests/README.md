@@ -13,7 +13,7 @@ See `docs/TEST_STRATEGY.md` §3 for the full plan.
 - `Parsing/` — Clash YAML, v2rayN nodelist, and YAML patcher tests.
 - `Models/` — SwiftData model and migration tests.
 - `Services/` — `SubscriptionService`, `VpnManager`, `TrafficAccumulator`.
-- `API/` — `MihomoAPI` REST client with `URLProtocolStub`.
+- `API/` — `MeowAPI` REST client with `URLProtocolStub`.
 - `IPC/` — `SharedStore` and `DarwinBridge` coverage beyond `MeowSharedTests`.
 - `Security/` — Keychain, URL validation, YAML sanitization.
 - `Fixtures/` — checked-in YAML + nodelist inputs.

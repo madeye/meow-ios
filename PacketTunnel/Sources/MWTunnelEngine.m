@@ -4,7 +4,7 @@
 #import "MWPacketWriter.h"
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
-#import "mihomo_core.h"
+#import "meow_core.h"
 #import <stdatomic.h>
 #import <os/log.h>
 #import <mach/mach.h>

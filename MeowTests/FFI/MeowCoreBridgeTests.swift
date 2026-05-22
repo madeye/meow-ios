@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 
-/// Thin smoke tests for the unified Rust `mihomo-ios-ffi` static library
-/// exposed via `MihomoCore.xcframework`. The app target links the same
+/// Thin smoke tests for the unified Rust `meow-ios-ffi` static library
+/// exposed via `MeowCore.xcframework`. The app target links the same
 /// library as the PacketTunnel extension, but this suite only exercises
 /// the pure-function / read-only subset — it never calls
 /// `meow_engine_start` or `meow_tun_start`, both of which belong to the
@@ -16,8 +16,8 @@ import Testing
 /// `.serialized` is mandatory: `meow_core_set_home_dir` writes to a process
 /// singleton and the last-error pointer is thread-local. Running these in
 /// parallel would race.
-@Suite("mihomo-core Swift bridge", .tags(.ffi), .serialized)
-struct MihomoCoreBridgeTests {
+@Suite("meow-core Swift bridge", .tags(.ffi), .serialized)
+struct MeowCoreBridgeTests {
     @Test
     func `meow_core_init is callable and idempotent`() {
         meow_core_init()

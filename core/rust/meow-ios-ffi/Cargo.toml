@@ -1,8 +1,8 @@
 [package]
-name = "mihomo-ios-ffi"
+name = "meow-ios-ffi"
 version = "0.1.0"
 edition = "2021"
-description = "mihomo-rust engine + tun2socks for meow-ios — C ABI, no Go, no JNI. DNS is delegated in-process to mihomo's resolver in fake-IP mode."
+description = "meow-rs engine + tun2socks for meow-ios — C ABI, no Go, no JNI. DNS is delegated in-process to meow's resolver in fake-IP mode."
 
 [lib]
 # `staticlib` is the iOS xcframework consumer; `rlib` exists so the
@@ -24,9 +24,9 @@ needless_return = "allow"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }
 parking_lot = "0.12"
 futures = "0.3"
-# Explicit pin — transitive through mihomo-tunnel, but engine.rs builds
+# Explicit pin — transitive through meow-tunnel, but engine.rs builds
 # `DashMap<String, Arc<ProxyProvider>>` for ApiServer::new and tun2socks.rs
-# uses the same NAT-key concrete type as mihomo-tunnel. Match upstream's 6.x.
+# uses the same NAT-key concrete type as meow-tunnel. Match upstream's 6.x.
 dashmap = "6"
 
 # Logging
@@ -36,9 +36,9 @@ log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
 # `rustls` is declared so `engine::start` can install the ring crypto
-# provider once at process init for any HTTPS the mihomo engine itself
+# provider once at process init for any HTTPS the meow engine itself
 # opens (subscription fetch, HTTPS outbound, …). The tun2socks UDP/53
-# intercept defers parse/serialize to `mihomo_dns::DnsServer::handle_query`,
+# intercept defers parse/serialize to `meow_dns::DnsServer::handle_query`,
 # so this is the only direct rustls consumer.
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
@@ -57,28 +57,26 @@ urlencoding = "2"
 # tun2socks
 lwip = "0.3"
 
-# Embedded mihomo-rust engine. Pinned to a release tag normally; bump
-# deliberately rather than tracking main. Each crate is a workspace
-# member of madeye/mihomo-rust.
+# Embedded meow-rs engine (formerly mihomo-rust, renamed upstream). Pinned
+# to a release tag normally; bump deliberately rather than tracking main.
+# Each crate is a workspace member of madeye/meow-rs.
 #
-# Currently on a post-v0.7.6 `rev =` pin to pick up
-# `DirectAdapter::with_connect_timeout` (madeye/mihomo-rust#86), which
-# bounds `TcpStream::connect` to address the DIRECT-rule TCP hang
-# documented in docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md.
-# Restore to a tag once a v0.7.7+ release is cut.
-mihomo-common = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
-# `boring-tls` activates BoringSSL-backed TLS in mihomo-transport so ECH
+# Currently on a post-rename `rev =` pin to pick up the crate-name rename
+# (madeye/meow-rs commit 105eacfe7f) plus subsequent fixes. Restore to a
+# tag once a v0.7.7+ release is cut.
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
+# `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
 # rejected at `TlsLayer::new` with `TransportError::Config` and the
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-mihomo-config = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f", features = ["boring-tls"] }
-mihomo-dns = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
-mihomo-tunnel = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
-mihomo-api = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
-mihomo-proxy = { git = "https://github.com/madeye/mihomo-rust", rev = "0b98528739cde500a9bf92858f95bdf2cff92c7f" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
 
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
@@ -96,9 +94,9 @@ smoltcp = { git = "https://github.com/madeye/smoltcp", branch = "fix/reject-byte
 cbindgen = "0.28"
 
 [dev-dependencies]
-# `xdg_home_dir_tests` probes the env-var wire-up via mihomo-config's GeoIP
+# `xdg_home_dir_tests` probes the env-var wire-up via meow-config's GeoIP
 # load path. No FFI-side GeoIP / CN-range table is loaded at runtime any
-# longer — mihomo's resolver owns the GEOIP rule path — but the test keeps
+# longer — meow's resolver owns the GEOIP rule path — but the test keeps
 # `maxminddb` (dev-only, zero shipping impact) so it can also open the
 # fixture MMDB directly and prove the env-derived path resolves correctly.
 tempfile = "3"
@@ -111,7 +109,7 @@ maxminddb = "0.27"
 tokio = { version = "1", features = ["test-util", "macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [profile.release]
-# Shrink binary for the 50MB extension budget. mihomo-rust adds significant
+# Shrink binary for the 50MB extension budget. meow-rs adds significant
 # weight; LTO + size-optimized codegen keeps us within the NE resident-memory
 # ceiling.
 opt-level = "z"

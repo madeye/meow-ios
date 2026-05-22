@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 
 struct RulesView: View {
-    @Environment(MihomoAPI.self) private var api
+    @Environment(MeowAPI.self) private var api
     /// The user's active profile drives the editor — that's where the
     /// authoritative `rules:` block lives. The Edit button stays disabled
     /// while no profile is selected (matches `ProxyGroupsView`'s pattern).

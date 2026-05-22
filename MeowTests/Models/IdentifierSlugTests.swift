@@ -7,7 +7,7 @@ import Testing
 /// (e.g. `home.group.<slug>`, `home.proxy.<group>.<proxy>`).
 ///
 /// `App/Sources/Views/HomeView.swift` renders the identifier with the
-/// slug applied to the Mihomo group / proxy display name. If the slug
+/// slug applied to the Meow group / proxy display name. If the slug
 /// rule drifts, this file fails — which is preferable to silently-
 /// mismatched identifiers surfacing as "element not found" in XCUITest.
 @Suite("identifierSlug — home.group / home.proxy slug contract", .tags(.model))

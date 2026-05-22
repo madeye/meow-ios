@@ -1,5 +1,5 @@
 //! Regression test for `meow_core_set_home_dir` wiring `$XDG_CONFIG_HOME` so
-//! `mihomo-config`'s `default_geoip_path()` resolves to the caller-supplied
+//! `meow-config`'s `default_geoip_path()` resolves to the caller-supplied
 //! directory (iOS app-group container in production).
 //!
 //! Lives as a `#[cfg(test)]` module in `src/` rather than under `tests/` because
@@ -14,8 +14,8 @@
 //!    `env::var("XDG_CONFIG_HOME")` returns `tmp`.
 //! 2. Engine load path — `meow_engine_validate_config` on a YAML containing a
 //!    `GEOIP` rule succeeds only if the MMDB at
-//!    `$XDG_CONFIG_HOME/mihomo/Country.mmdb` was actually read. Without the
-//!    env-var write this falls back to `$HOME/.config/mihomo/…` and fails.
+//!    `$XDG_CONFIG_HOME/meow/Country.mmdb` was actually read. Without the
+//!    env-var write this falls back to `$HOME/.config/meow/…` and fails.
 //! 3. Probe-IP proof — open the MMDB directly from the env-derived path and
 //!    resolve `214.78.120.1 → US` per MaxMind's documented test data.
 
@@ -36,9 +36,9 @@ rules:
 #[test]
 fn set_home_dir_wires_xdg_config_home_into_geoip_load_path() {
     let tmp = tempfile::tempdir().expect("create tmp dir");
-    let mihomo_dir = tmp.path().join("mihomo");
-    std::fs::create_dir_all(&mihomo_dir).expect("mkdir mihomo/");
-    std::fs::write(mihomo_dir.join("Country.mmdb"), FIXTURE_MMDB)
+    let meow_dir = tmp.path().join("meow");
+    std::fs::create_dir_all(&meow_dir).expect("mkdir meow/");
+    std::fs::write(meow_dir.join("Country.mmdb"), FIXTURE_MMDB)
         .expect("stage fixture Country.mmdb");
 
     let tmp_path = tmp.path().to_str().expect("tmp path is utf-8").to_owned();
@@ -53,7 +53,7 @@ fn set_home_dir_wires_xdg_config_home_into_geoip_load_path() {
     );
 
     // (2) Engine load path — validate a YAML with a GEOIP rule, which forces
-    //     mihomo-config to read `default_geoip_path()` = `$XDG_CONFIG_HOME/mihomo/Country.mmdb`.
+    //     meow-config to read `default_geoip_path()` = `$XDG_CONFIG_HOME/meow/Country.mmdb`.
     let yaml_cstr = CString::new(YAML_WITH_GEOIP_RULE).unwrap();
     let rc = unsafe {
         meow_engine_validate_config(yaml_cstr.as_ptr(), YAML_WITH_GEOIP_RULE.len() as c_int)
@@ -79,7 +79,7 @@ fn set_home_dir_wires_xdg_config_home_into_geoip_load_path() {
     let probe_path = std::path::PathBuf::from(
         std::env::var_os("XDG_CONFIG_HOME").expect("XDG_CONFIG_HOME still set"),
     )
-    .join("mihomo")
+    .join("meow")
     .join("Country.mmdb");
     let reader = maxminddb::Reader::open_readfile(&probe_path)
         .expect("open fixture MMDB via env-derived path");

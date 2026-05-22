@@ -1,9 +1,9 @@
 import Foundation
 import Testing
 
-/// Exercises the mihomo-rust engine lifecycle through the C ABI — boot,
+/// Exercises the meow-rs engine lifecycle through the C ABI — boot,
 /// idempotent start/stop, config validation, and traffic counters. These
-/// call the real `MihomoCore.xcframework` rather than mocking, so they
+/// call the real `MeowCore.xcframework` rather than mocking, so they
 /// verify that Dev's `TunnelEngine.start()` pipeline (write effective
 /// config → init → start → is_running) actually works against the linked
 /// library.
@@ -15,7 +15,7 @@ import Testing
 ///
 /// `.serialized` is required — the engine is a process singleton, so
 /// parallel start/stop would race.
-@Suite("mihomo-rust engine lifecycle", .tags(.engine), .serialized)
+@Suite("meow-rs engine lifecycle", .tags(.engine), .serialized)
 struct EngineBootTests {
     @Test
     func `engine start toggles is_running and stop unwinds it`() throws {
@@ -114,7 +114,7 @@ extension Tag {
 }
 
 /// Scratch directory + minimal valid Clash YAML for boot tests. Uses
-/// non-default ports to avoid colliding with a real mihomo instance on
+/// non-default ports to avoid colliding with a real meow instance on
 /// the same host; `mixed-port` and `external-controller` are both
 /// picked well outside the 7890/9090 defaults the extension uses in
 /// production.

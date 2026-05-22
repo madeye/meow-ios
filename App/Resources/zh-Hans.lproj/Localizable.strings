@@ -9,7 +9,7 @@
    Style:
      - Verbs in toolbar / button positions use 2-character imperatives where
        possible: 添加 / 取消 / 保存 / 关闭 / 删除 / 测试 / 重试.
-     - "Proxy" → 代理; "Direct" stays "DIRECT" (literal rule type from mihomo,
+     - "Proxy" → 代理; "Direct" stays "DIRECT" (literal rule type from meow-rs,
        not prose). Same for "MATCH", "DOMAIN-SUFFIX", etc. — they are rule
        identifiers, not translation candidates.
      - Ellipsis is the single character "…" (U+2026), matching en.lproj. */

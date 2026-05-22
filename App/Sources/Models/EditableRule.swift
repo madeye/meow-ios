@@ -4,7 +4,7 @@ import Foundation
 /// editor. Parsed from / serialized to its on-wire string form via
 /// [`rawLine`].
 ///
-/// Mihomo rule lines come in three shapes:
+/// Meow rule lines come in three shapes:
 ///
 ///   - `MATCH,PROXY`                  — the final fallback (type=MATCH)
 ///   - `TYPE,PAYLOAD,PROXY`           — the common case
@@ -12,7 +12,7 @@ import Foundation
 ///                                      `src`, …
 ///
 /// `flags` preserves the trailing-flag section verbatim so round-tripping
-/// a rule we don't recognise (a new flag mihomo adds upstream) is lossless.
+/// a rule we don't recognise (a new flag meow adds upstream) is lossless.
 struct EditableRule: Identifiable, Equatable, Hashable {
     /// Stable identity for SwiftUI list mutation. Decoupled from the
     /// rule's textual content so renaming a payload doesn't re-issue the
@@ -36,7 +36,7 @@ struct EditableRule: Identifiable, Equatable, Hashable {
     /// load rather than producing a partially-initialised row that the
     /// user might accidentally save back).
     init?(rawLine: String) {
-        // Mihomo trims whitespace around each comma-separated field; mirror
+        // Meow trims whitespace around each comma-separated field; mirror
         // that here so a YAML rule written `"DOMAIN-SUFFIX , x.com , DIRECT"`
         // round-trips into the canonical compact form.
         let parts = rawLine.split(separator: ",", omittingEmptySubsequences: false)
@@ -72,7 +72,7 @@ struct EditableRule: Identifiable, Equatable, Hashable {
 }
 
 /// Canonical Clash rule types surfaced in the editor's type picker. The
-/// list is an editorial subset — mihomo accepts more (`AND`, `OR`, `NOT`,
+/// list is an editorial subset — meow accepts more (`AND`, `OR`, `NOT`,
 /// `SUB-RULE`, …) but those nest other rules and don't fit the single-line
 /// editor model; users authoring them stay on the raw YAML editor instead.
 ///
@@ -104,7 +104,7 @@ enum EditableRuleType: String, CaseIterable, Identifiable {
         self != .match
     }
 
-    /// Whether this rule type accepts the `no-resolve` flag. Mihomo
+    /// Whether this rule type accepts the `no-resolve` flag. Meow
     /// rejects `no-resolve` on domain-family rules (it's only meaningful
     /// for IP-family rules where deciding requires a DNS resolve first).
     var supportsNoResolve: Bool {

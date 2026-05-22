@@ -8,7 +8,7 @@ To save GitHub Actions minutes and keep the red-main failure mode from coming ba
 
 - Before `git push` on any Swift / Rust / YAML change, run the local equivalents of the CI jobs your diff touches:
   - **Swift:** `xcodebuild test -project meow-ios.xcodeproj -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` against the relevant test bundles (`MeowTests`, `MeowUITests`, `MeowIntegrationTests`).
-  - **Rust:** `scripts/build-rust.sh`, plus `cargo test` in `core/rust/mihomo-ios-ffi/` where relevant.
+  - **Rust:** `scripts/build-rust.sh`, plus `cargo test` in `core/rust/meow-ios-ffi/` where relevant.
   - **Swift lint:** `swiftlint` **and** `swiftformat --lint .` at the repo root. CI's `lint` job runs both and fails if either does — passing one is not sufficient. The two tools have non-overlapping rule sets: swiftlint catches style/API-usage issues, swiftformat catches formatting/structural ones (`redundantSelf`, spacing, ordering, etc.). Install via `brew install swiftlint swiftformat` if missing.
 - If a local run fails, fix it before pushing. Do not push "to see what CI says."
 - Docs / infra-only changes (no Swift / Rust / YAML touched) don't need the full suite — skip what isn't relevant.
@@ -31,7 +31,7 @@ If a PR's diff touches code paths (Swift, Rust, project.yml, Podfile, etc.), byp
 
 1. `swiftformat --lint .` ran locally at the repo root → 0 violations.
 2. `swiftlint --strict` ran locally at the repo root → 0 violations.
-3. The `xcodebuild test` suites matching the diff ran locally on an iOS 26 simulator (e.g., iPhone 17) → all green. For Swift changes: at minimum `MeowTests`; add `MeowUITests` for UI diffs, `MeowIntegrationTests` for service-layer diffs. For Rust / FFI changes: add `scripts/build-rust.sh` + `cargo test` in `core/rust/mihomo-ios-ffi/`.
+3. The `xcodebuild test` suites matching the diff ran locally on an iOS 26 simulator (e.g., iPhone 17) → all green. For Swift changes: at minimum `MeowTests`; add `MeowUITests` for UI diffs, `MeowIntegrationTests` for service-layer diffs. For Rust / FFI changes: add `scripts/build-rust.sh` + `cargo test` in `core/rust/meow-ios-ffi/`.
 4. `git diff origin/main...HEAD --stat` was verified — the file list matches what the PR intends to change and contains no accidental additions. (The PR #28 admin-with-code lesson: bypassing without checking the diff base is how unintended code ends up in a skip-CI merge.)
 5. PR description includes a checklist attesting to (1)-(4), with the concrete command lines that were run.
 

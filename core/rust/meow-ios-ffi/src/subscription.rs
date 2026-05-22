@@ -8,7 +8,7 @@
 //!   3. A plain-text URI list (already newline-separated).
 //!
 //! Supported URI schemes: `ss://`, `trojan://`, `vless://`, `vmess://`. Others
-//! are skipped with a log message — upstream mihomo-rust has no URI parser, so
+//! are skipped with a log message — upstream meow-rs has no URI parser, so
 //! this is a focused port of the subset meow profiles rely on. Unknown schemes
 //! are intentionally ignored rather than aborting the whole conversion so a
 //! mixed subscription still produces a usable profile.

@@ -105,8 +105,8 @@ struct SettingsView: View {
     }
 
     /// Asks the PacketTunnel extension for its current physical memory
-    /// footprint via the `DiagnosticsIPC` `0x03` channel. mihomo's `/memory`
-    /// REST endpoint is WebSocket-only in mihomo-rust, so the previous
+    /// footprint via the `DiagnosticsIPC` `0x03` channel. meow's `/memory`
+    /// REST endpoint is WebSocket-only in meow-rs, so the previous
     /// `api.getMemory()` path always 400'd. This IPC reads
     /// `task_info(TASK_VM_INFO).phys_footprint` inside the extension — the
     /// same metric iOS jetsam compares against the NE memory limit and that

@@ -2,7 +2,7 @@ import MeowModels
 import SwiftUI
 
 struct ProvidersView: View {
-    @Environment(MihomoAPI.self) private var api
+    @Environment(MeowAPI.self) private var api
     @State private var providers: [Provider] = []
     @State private var errorMessage: String?
 

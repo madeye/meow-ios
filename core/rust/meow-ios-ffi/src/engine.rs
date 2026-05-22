@@ -1,14 +1,14 @@
-//! Embedded mihomo-rust engine. Owns the REST API task and holds the
+//! Embedded meow-rs engine. Owns the REST API task and holds the
 //! `Tunnel` used directly (in-process) by `tun2socks` — there is no local
 //! SOCKS listener; TCP flows hop Rust-to-Rust through a shared
 //! `Arc<TunnelInner>` rather than through a loopback socket.
 //!
-//! DNS is delegated end-to-end to mihomo's resolver. The pinned `dns:` block
+//! DNS is delegated end-to-end to meow's resolver. The pinned `dns:` block
 //! injected below puts the resolver in fake-IP mode with the FFI's chosen
 //! CIDR (`28.0.0.0/8`) and no listening socket (`listen: ""`). The tun2socks
 //! UDP/53 intercept hands every in-TUN DNS datagram straight to
-//! `mihomo_dns::DnsServer::handle_query`, which both synthesises the fake-IP
-//! answer and owns the reverse mapping that `mihomo_tunnel::pre_handle_metadata`
+//! `meow_dns::DnsServer::handle_query`, which both synthesises the fake-IP
+//! answer and owns the reverse mapping that `meow_tunnel::pre_handle_metadata`
 //! consults on the TCP/UDP dispatch path. The engine spawns no separate DNS
 //! task and binds no DNS socket.
 //!
@@ -20,10 +20,10 @@
 //! (`EADDRINUSE`).
 use anyhow::{Context, Result};
 use dashmap::DashMap;
-use mihomo_api::log_stream::{LogBroadcastLayer, LogMessage};
-use mihomo_api::ApiServer;
-use mihomo_config::{load_config, load_config_from_str, Config};
-use mihomo_tunnel::{Statistics, Tunnel};
+use meow_api::log_stream::{LogBroadcastLayer, LogMessage};
+use meow_api::ApiServer;
+use meow_config::{load_config, load_config_from_str, Config};
+use meow_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -53,11 +53,11 @@ fn install_tls_provider() {
 
 /// Strip the shorthand listener ports and explicit `listeners:` array from a
 /// raw config YAML. iOS dispatches TCP flows in-process via the netstack →
-/// `mihomo_tunnel` Rust-to-Rust hop (no SOCKS loopback) and answers DNS
+/// `meow_tunnel` Rust-to-Rust hop (no SOCKS loopback) and answers DNS
 /// inline by handing every in-TUN UDP/53 datagram to
-/// `mihomo_dns::DnsServer::handle_query` (no bound resolver port); there is
+/// `meow_dns::DnsServer::handle_query` (no bound resolver port); there is
 /// no loopback listener and no bound port. Upstream's `build_named_listeners`
-/// (mihomo-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
+/// (meow-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
 /// Class A) — e.g. "port 7890 already used by listener 'mixed'" — so a
 /// user YAML combining `mixed-port: 7890` with a listeners entry on the
 /// same port would fail parse-time validation even though iOS never
@@ -79,7 +79,7 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
             "mixed-port",
             "tproxy-port",
             "listeners",
-            // Drop the entire `sniffer:` block. mihomo's
+            // Drop the entire `sniffer:` block. meow's
             // `pre_handle_metadata` reverses each fake-IP destination back
             // to the qname recorded by the resolver before rule matching,
             // so SNI/ALPN sniffing is redundant — and when enabled it would
@@ -109,30 +109,30 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
 }
 
-/// Pinned DNS block injected into every engine config. Configures mihomo's
+/// Pinned DNS block injected into every engine config. Configures meow's
 /// resolver in fake-IP mode with the FFI's chosen CIDR; the tun2socks
 /// UDP/53 intercept then hands every in-TUN datagram straight to
-/// `mihomo_dns::DnsServer::handle_query`, so this block is the single source
+/// `meow_dns::DnsServer::handle_query`, so this block is the single source
 /// of truth for synthesis, reverse mapping, AAAA / hosts / NXDOMAIN, and
 /// upstream nameserver selection.
 ///
-/// The nameserver set is restricted to CN-side resolvers because mihomo's
+/// The nameserver set is restricted to CN-side resolvers because meow's
 /// `query_pool` races every entry in parallel ("first response wins"), and
 /// mixing a global anycast resolver into the same pool lets it win the race
 /// from outside CN — returning the global / SG / HK PoP for split-horizon
 /// hosts like xiaohongshu.com, which then misses the GEOIP-driven CN bypass
-/// inside mihomo's rule engine.
+/// inside meow's rule engine.
 ///
 ///   * 119.29.29.29 (DNSPod / Tencent) — fast inside CN, also reachable
 ///     externally; primary for split-horizon hosts that need the CN view.
 ///   * 223.5.5.5    (Alibaba PublicDNS) — secondary CN-side nameserver.
 ///
 /// If a global fallback is ever needed for sites the CN resolvers refuse to
-/// answer, the right place to wire it is mihomo-rust's `fallback:` block
+/// answer, the right place to wire it is meow-rs's `fallback:` block
 /// (which only runs when the primary pool yields nothing or the answer
 /// trips `fallback-filter`), not the primary `nameserver:` pool.
 ///
-/// `listen: ""` keeps mihomo from binding its own UDP/53 socket — the FFI
+/// `listen: ""` keeps meow from binding its own UDP/53 socket — the FFI
 /// owns the in-TUN intercept and calls `DnsServer::handle_query` directly.
 fn pinned_dns_block() -> serde_yaml::Value {
     let yaml = r#"
@@ -185,7 +185,7 @@ fn load_stripped_config(config_path: &str) -> Result<Config> {
 /// Two safety hops vs the engine-start path:
 ///
 /// 1. Strip `rule-providers:` in addition to listener fields. Upstream
-///    `mihomo_config::rule_provider::load_providers` synchronously
+///    `meow_config::rule_provider::load_providers` synchronously
 ///    `block_on`s its own `Runtime::new()`; calling that from inside any
 ///    other tokio runtime panics in `enter_runtime` ("Cannot start a
 ///    runtime from within a runtime"). Editor validation cares about
@@ -305,7 +305,7 @@ pub fn start(config_path: &str) -> Result<()> {
     let log_tx = log_broadcast_tx().clone();
 
     // No FFI-side fake-IP pool, no FFI-side CN-IP table, no resolver hand-off:
-    // mihomo's own fake-IP pool (configured by `pinned_dns_block`) owns
+    // meow's own fake-IP pool (configured by `pinned_dns_block`) owns
     // synthesis + reverse mapping, and the tun2socks UDP/53 intercept fetches
     // the resolver lazily through `engine::tunnel()?.resolver()`.
 
@@ -328,7 +328,7 @@ pub fn start(config_path: &str) -> Result<()> {
         })
     });
 
-    info!("mihomo-rust engine running (in-process dispatch)");
+    info!("meow-rs engine running (in-process dispatch)");
 
     *slot().lock() = Some(EngineState {
         stats,
@@ -356,7 +356,7 @@ pub fn stop() {
     }
     // DNS owns no background task — `DnsServer::handle_query` runs inline on
     // the tun2socks UDP/53 intercept path, so there's nothing to abort here.
-    info!("mihomo-rust engine stopped");
+    info!("meow-rs engine stopped");
 }
 
 pub fn is_running() -> bool {
@@ -615,7 +615,7 @@ rules:
 #[cfg(test)]
 mod config_parse_tests {
     //! Regression test for the feature-flag fix that re-enabled `ss` / `trojan`
-    //! on mihomo-config. If `mihomo-config` is ever pulled with
+    //! on meow-config. If `meow-config` is ever pulled with
     //! `default-features = false` and those feature strings missing again,
     //! every `type: ss` proxy falls through `parse_proxy`'s catch-all
     //! `_ => Err("unsupported proxy type: ss")` → warn-skip → groups that
@@ -631,7 +631,7 @@ mod config_parse_tests {
         let stripped = super::strip_listener_fields(FIXTURE).expect("strip ok");
         let rt = tokio::runtime::Runtime::new().expect("tokio rt");
         let cfg = rt
-            .block_on(mihomo_config::load_config_from_str(&stripped))
+            .block_on(meow_config::load_config_from_str(&stripped))
             .expect("load_config_from_str on the fixture should succeed");
 
         let (groups, leaves): (Vec<_>, Vec<_>) =
@@ -644,8 +644,8 @@ mod config_parse_tests {
             leaves.len(),
             144,
             "expected 141 ss proxies + 3 built-ins; if this drops to 3, \
-             mihomo-config was built without the `ss` feature — see commit \
-             enabling default features on the mihomo-config dep",
+             meow-config was built without the `ss` feature — see commit \
+             enabling default features on the meow-config dep",
         );
         assert_eq!(groups.len(), 22, "all 22 user-defined groups must resolve");
     }

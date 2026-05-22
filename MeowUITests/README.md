@@ -8,7 +8,7 @@ See `docs/TEST_STRATEGY.md` §5 for the full plan.
 
 ## Launch arguments
 
-- `-UITests` — enables the test-only `MihomoAPI` stub and in-memory SwiftData
+- `-UITests` — enables the test-only `MeowAPI` stub and in-memory SwiftData
 - `-ResetState` — wipes all persisted state before launch
 - `-StubURL <url>` — optional override for the REST base URL (defaults to a
   local echo server started by `MeowUITests/Support/TestServer.swift`)

@@ -1,1 +1,1 @@
-Mihomo-powered VPN client
+meow-rs powered VPN client

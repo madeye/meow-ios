@@ -77,17 +77,17 @@ will be silently overwritten.
 
 There is no Go toolchain. The NetworkExtension memory ceiling (50 MB resident
 on iOS) forbids the Go runtime, so the proxy engine is
-[`mihomo-rust`](https://github.com/madeye/mihomo-rust) embedded into our FFI
+[`meow-rs`](https://github.com/madeye/meow-rs) embedded into our FFI
 crate as a Cargo dependency. Only one static library ships.
 
-`scripts/build-rust.sh` produces `MeowCore/Frameworks/MihomoCore.xcframework`
-and the `MeowCore/include/mihomo_core.h` header. Both the app and extension
+`scripts/build-rust.sh` produces `MeowCore/Frameworks/MeowCore.xcframework`
+and the `MeowCore/include/meow_core.h` header. Both the app and extension
 link the same XCFramework directly — there is no `MIHOMO_CORE_LINKED`
 conditional; the framework is declared `optional: true` in `project.yml`
 so source compiles before the `.a` exists, but link fails without it.
 
 ```sh
-./scripts/build-rust.sh   # → MihomoCore.xcframework
+./scripts/build-rust.sh   # → MeowCore.xcframework
 ```
 
 ### Rust notes
@@ -101,12 +101,12 @@ so source compiles before the `.a` exists, but link fails without it.
   targets (see `project.yml`) takes the `.appex` from ~8.8 MB to ~5.6 MB,
   under the 8 MB TEST_STRATEGY §8.1 ceiling. Removing that script will fail
   QA's CI size gate.
-- `cbindgen` emits `mihomo_core.h` from `build.rs` on every build.
-- Mihomo crates pulled as git deps (`mihomo-common`, `mihomo-config`,
-  `mihomo-dns`, `mihomo-tunnel`, `mihomo-api`, `mihomo-proxy`) from
-  `github.com/madeye/mihomo-rust`. The FFI crate owns the tokio runtime,
-  hosts the mihomo-rust engine directly, and dispatches tun2socks flows
-  in-process through `mihomo_tunnel::tcp::handle_tcp` — no SOCKS5 loopback.
+- `cbindgen` emits `meow_core.h` from `build.rs` on every build.
+- meow-rs crates pulled as git deps (`meow-common`, `meow-config`,
+  `meow-dns`, `meow-tunnel`, `meow-api`, `meow-proxy`) from
+  `github.com/madeye/meow-rs`. The FFI crate owns the tokio runtime,
+  hosts the meow-rs engine directly, and dispatches tun2socks flows
+  in-process through `meow_tunnel::tcp::handle_tcp` — no SOCKS5 loopback.
 
 ## Running locally
 
@@ -128,7 +128,7 @@ To build and install onto a connected iPhone:
 ```
 
 The script writes Xcode outputs into `build/DerivedData`, refreshes Swift
-packages in `build/SourcePackages`, rebuilds `MihomoCore.xcframework` by
+packages in `build/SourcePackages`, rebuilds `MeowCore.xcframework` by
 default, and emits the final `.app` path on success. Use `--xcconfig <path>`
 or `--team <TEAM_ID>` only if you need to override `Local.xcconfig`.
 
@@ -148,7 +148,7 @@ Both targets share the App Group; the provider bundle id is
 
 ## Troubleshooting
 
-- **`error: ld: library not found for -lmihomo_ios_ffi`** — run
+- **`error: ld: library not found for -lmeow_ios_ffi`** — run
   `./scripts/build-rust.sh`. The XCFramework is optional in `project.yml`
   (`optional: true`) so the app compiles without it, but any target's link
   step still fails if a referenced symbol is used.

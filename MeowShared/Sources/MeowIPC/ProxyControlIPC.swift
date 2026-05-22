@@ -4,13 +4,13 @@ import Foundation
 /// `handleAppMessage` for proxy-control mutations that today round-trip
 /// through `PUT http://127.0.0.1:9090/proxies/{group}`. Routing the call
 /// through `sendProviderMessage` lets the extension invoke the
-/// `meow_proxy_select` FFI directly against mihomo-rust's `SelectorGroup`
+/// `meow_proxy_select` FFI directly against meow-rs's `SelectorGroup`
 /// in-process, which:
 ///
 ///   1. eliminates the loopback HTTP hop and the URL percent-encoding /
 ///      Unicode-normalization step that breaks emoji-named groups (e.g.
 ///      `🚀 节点选择`),
-///   2. removes the need to expose mihomo's `external-controller` on
+///   2. removes the need to expose meow's `external-controller` on
 ///      `127.0.0.1:9090` solely for the picker, and
 ///   3. drops the apiSecret as the only thing standing between any
 ///      process on-device and a privileged mutation.

@@ -8,12 +8,12 @@
 ## TL;DR
 
 The previously-tracked **+0.14 MiB/s** linear RSS growth during sustained
-TCP-connection churn is **not** caused by mihomo internals (resolver cache,
+TCP-connection churn is **not** caused by meow internals (resolver cache,
 NAT entries, rule stats) as previously assumed. It is overwhelmingly
 caused by **`netstack_smoltcp::tcp::TcpListenerRunner::create`'s
 per-connection closure state not being released when flows close**.
 The crate at the boundary (downstream of the FFI, upstream of
-`mihomo-tunnel`) is the right place to fix it.
+`meow-tunnel`) is the right place to fix it.
 
 ## Stress profile
 
@@ -67,8 +67,8 @@ observed `free()` for at profiler-drop time.
 |    6 |    641 KiB |    268 | `tokio::sync::mpsc::list::Tx::push` (queue depth) |
 |    7 |    615 KiB | 39,378 | `iprange::IpTrie::insert` (CN-IP trie baseline — not growing) |
 |    8 |    444 KiB |    111 | `rustls::DeframerVecBuffer::read` (per-conn TLS deframer) |
-|    9 |    308 KiB |  6,574 | `mihomo_rules::parser::parse_rule` (rule parse — baseline) |
-|   10 |    252 KiB |    108 | `mihomo_transport::ws::WsLayer::connect` (WS handshake state) |
+|    9 |    308 KiB |  6,574 | `meow_rules::parser::parse_rule` (rule parse — baseline) |
+|   10 |    252 KiB |    108 | `meow_transport::ws::WsLayer::connect` (WS handshake state) |
 
 Site #1 dominates by **2-3 orders of magnitude**. At
 roughly 4 retained closure-allocations per accepted connection (43k
@@ -96,7 +96,7 @@ shutdown signaler). One of the following is likely:
 2. The listener-level shared state keeps a per-connection record that
    isn't pruned on connection close, only on listener shutdown — so the
    structure grows monotonically for the listener's lifetime.
-3. A drop chain has been broken by a recent `mihomo-rust` change (the
+3. A drop chain has been broken by a recent `meow-rs` change (the
    crate is pulled as a cargo-git dep at `v0.7.3` / `0f182f4b`; the
    `netstack_smoltcp` dep is at `v0.2.1`).
 
@@ -128,7 +128,7 @@ the top 20.
 2. **Investigate the 70 MiB hashbrown baseline** (site #2). Four tables
    pre-sized to ~17.5 MiB each is anomalous and could be trimmed
    independently of the leak fix.
-3. **Profile mihomo-tunnel's connection lifecycle** rather than
+3. **Profile meow-tunnel's connection lifecycle** rather than
    netstack-smoltcp: rustls per-conn state, tokio mpsc backlog,
    NAT/conn-tracking eviction on FIN/RST. The patched-build experiment
    below points away from netstack-smoltcp as the source.
@@ -145,7 +145,7 @@ fork-pinning the crate with two changes:
 
 Patch lived on the `meow-ios/buf-and-timeout-trim` branch of the fork
 and was wired in via `[patch.crates-io]` in
-`core/rust/mihomo-ios-ffi/Cargo.toml`. The Rust workspace rebuilt
+`core/rust/meow-ios-ffi/Cargo.toml`. The Rust workspace rebuilt
 cleanly; cargo confirmed the patched crate was in the dependency tree
 (`otool` and the git-checkout source both verified the patched
 constants made it into the binary).
@@ -188,7 +188,7 @@ but not reality:
    per accepted connection. The actual leaked state is elsewhere.
 2. **The 60 s timeout likely accelerated growth** because each
    prematurely-torn-down smoltcp socket leaves dangling state in
-   upstream layers (mihomo-tunnel's proxy session, rustls connection
+   upstream layers (meow-tunnel's proxy session, rustls connection
    state, the outbound TLS session cache, the NAT/conntrack table)
    that doesn't get notified of the netstack-side eviction. Under
    sustained churn, the upstream state accumulates faster than smoltcp
@@ -202,21 +202,21 @@ but not reality:
 ### Revised hypothesis
 
 The genuine RSS growth lives **above netstack-smoltcp** in the
-mihomo-tunnel proxy-session lifecycle:
+meow-tunnel proxy-session lifecycle:
 
-* rustls TLS sessions held by `mihomo_transport::tls::TlsLayer` and
-  `mihomo_transport::ws::WsLayer` (dhat rows #5, #10, #13 in the
+* rustls TLS sessions held by `meow_transport::tls::TlsLayer` and
+  `meow_transport::ws::WsLayer` (dhat rows #5, #10, #13 in the
   exit-live table — small individually but per-connection and slow to
   drop).
-* The proxy-side conn-tracking / NAT bookkeeping that mihomo-tunnel
+* The proxy-side conn-tracking / NAT bookkeeping that meow-tunnel
   keeps for in-flight UDP and TCP sessions — `hashbrown::reserve_rehash`
   (#3) suggests a map that grows monotonically.
 * tokio mpsc backlog on the engine-side dispatch channels — `tokio::sync::mpsc::list::Tx::push` (#6) had 268 retained blocks at exit, indicating receivers couldn't keep up.
 
 Next concrete step that has a chance of being right: an iOS-device
-Instruments allocations capture, or a `mihomo-tunnel` cargo-level dhat
+Instruments allocations capture, or a `meow-tunnel` cargo-level dhat
 run that targets that crate specifically (its allocations are
-attributed to `mihomo-ios-ffi::engine::start` callers from outside
+attributed to `meow-ios-ffi::engine::start` callers from outside
 which obscures them in the harness profile).
 
 ## Resolution — 2026-05-16 (TCP accept-cap)
@@ -225,11 +225,11 @@ The dominant lever wasn't the allocator, wasn't per-flow buffer size,
 and wasn't a leak. It was the **concurrent-flow population the
 runtime ever holds at once**.
 
-Existing knob: `mihomo_ios_ffi::tun2socks::TCP_ACCEPT_CAP_DEFAULT`,
+Existing knob: `meow_ios_ffi::tun2socks::TCP_ACCEPT_CAP_DEFAULT`,
 exposed at the FFI as `meow_tun_set_accept_cap`. Pre-fix value: 128.
 That's the count of in-flight `dispatch_tcp` tasks the runtime will
 ever have simultaneously — each holding its full per-flow allocation
-(Metadata, `Box<dyn ProxyConn>`, mihomo's outbound dial buffers, the
+(Metadata, `Box<dyn ProxyConn>`, meow's outbound dial buffers, the
 netstack-smoltcp stream's tx/rx rings). 128 × per-flow state is what
 filled the 122 MiB working set we kept landing on.
 
@@ -257,7 +257,7 @@ headroom for spikes.
 
 ### What ships
 
-* `core/rust/mihomo-ios-ffi/src/tun2socks.rs`: `TCP_ACCEPT_CAP_DEFAULT`
+* `core/rust/meow-ios-ffi/src/tun2socks.rs`: `TCP_ACCEPT_CAP_DEFAULT`
   changes 128 → 32. Single-line change plus an updated comment that
   cites this doc. `meow_tun_set_accept_cap` remains the runtime knob
   for environments that need to override (slow-DNS, very-high-fanout
@@ -285,7 +285,7 @@ against jetsam-driven extension kills mid-session.
 * Consider lifting the runtime knob into a `Settings` toggle for
   "throughput mode" (cap=64 or 96) once on-device numbers are in.
   Slow-DNS environments may want cap=64 in particular.
-* Revisit if a future mihomo-rust release brings per-flow allocations
+* Revisit if a future meow-rs release brings per-flow allocations
   down — once the working set per flow shrinks, the cap can grow
   proportionally.
 
@@ -319,7 +319,7 @@ Artifacts from this run:
 
 ## Update — 2026-05-18 (accept-cap fix was illusory; leak is per-accepted-flow)
 
-Re-ran the harness against mihomo-rust v0.7.4 (post-bump from v0.7.3). The
+Re-ran the harness against meow-rs v0.7.4 (post-bump from v0.7.3). The
 2026-05-16 "cap=32 plateaus at 38.62 MiB" result does **not** reproduce.
 Running a sweep across cap, DNS scheme, proxy mode, and connection rate
 shows the working-set growth is **per accepted TCP flow, not per
@@ -353,7 +353,7 @@ process lifetime.
 * **Proxy outbound is not a lever.** `mode: direct` (which skips the
   proxy dial / rustls handshake entirely) leaks ~4.0 KiB per accept,
   same as `mode: rule`. The retention happens before, in, or around
-  `mihomo_tunnel::tcp::handle_tcp`'s scaffolding common to every mode.
+  `meow_tunnel::tcp::handle_tcp`'s scaffolding common to every mode.
 * **In-flight count is not the lever, accept count is.** The
   `conns=8/hold=1000` row generates 1/19th the accepts as the baseline
   and produces 1/3 the heap growth — proportional to accept count.
@@ -364,16 +364,16 @@ process lifetime.
 
 The investigation has eliminated:
 1. Per-flow buffer size — proven false 2026-05-16.
-2. Mihomo-tunnel `Statistics.connections` map — RAII `ConnectionGuard`
+2. Meow-tunnel `Statistics.connections` map — RAII `ConnectionGuard`
    removes the entry on every exit path (verified by reading
-   `crates/mihomo-tunnel/src/tcp.rs`).
+   `crates/meow-tunnel/src/tcp.rs`).
 3. DoH per-query TLS handshake state (the v0.7.4 in-tree DNS client
    uses `Connection: close`, no pooling) — Do53 run had identical
    growth.
 4. Proxy outbound rustls / WS / TLS session state — direct mode had
    identical growth.
 5. FFI flow registry — `tcp_flows().remove(&flow_id)` runs on every
-   task exit (verified by reading `core/rust/mihomo-ios-ffi/src/tun2socks.rs:467-481`).
+   task exit (verified by reading `core/rust/meow-ios-ffi/src/tun2socks.rs:467-481`).
 
 What remains suspected (in descending priority):
 1. **netstack-smoltcp's per-socket retention through CLOSED / TIME_WAIT**
@@ -381,7 +381,7 @@ What remains suspected (in descending priority):
    has the right shape for TIME_WAIT release. Need to read
    `netstack_smoltcp::tcp::TcpListenerRunner` for what it keeps after
    the user-facing stream is dropped.
-2. **An unbounded hashbrown table in mihomo-rust or mihomo-tunnel that
+2. **An unbounded hashbrown table in meow-rs or meow-tunnel that
    inserts per-flow and never evicts** — fits the durable ~70% (~2.4
    KiB/accept) that does *not* reclaim post-stress. The 2026-05-16
    dhat #2 row (70 MiB pre-sized hashbrown baseline, 4 tables) is the
@@ -425,7 +425,7 @@ considerably less. The shipping cure is upstream — find the durable
 ### Reproducing this sweep
 
 The harness now self-shutdowns when `--stress-duration-secs` expires
-(commit on `chore/mihomo-rust-0.7.4` branch, since merged into v0.7.4
+(commit on `chore/meow-rs-0.7.4` branch, since merged into v0.7.4
 bump PR #154). The Tart VM `meow-ios-dev` was used throughout; the
 helper script `/tmp/run-stress.sh` in the VM takes `CAP`, `CONNS`,
 `HOLD_MS`, `DURATION`, `CONFIG` as env vars.

@@ -6,10 +6,10 @@ scripts from the repo root unless noted; they re-resolve `$ROOT` from
 
 ## build-rust.sh
 
-Builds `core/rust/mihomo-ios-ffi` for `aarch64-apple-ios` (device) and the
+Builds `core/rust/meow-ios-ffi` for `aarch64-apple-ios` (device) and the
 two simulator targets (`aarch64-apple-ios-sim`, `x86_64-apple-ios`), packs
-them into `MeowCore/MihomoCore.xcframework`, and regenerates the C header
-`MeowCore/include/mihomo_core.h` via cbindgen. Prerequisites: stable Rust
+them into `MeowCore/MeowCore.xcframework`, and regenerates the C header
+`MeowCore/include/meow_core.h` via cbindgen. Prerequisites: stable Rust
 toolchain with the three iOS targets installed (`rustup target add ...`)
 and `cbindgen` on `$PATH`. No env vars required.
 

@@ -20,7 +20,7 @@ Premium and calm — every motion eases in, nothing snaps.
 | `accent-blue`     | `#0A84FF`                  | Primary action, proxy path                 |
 | `accent-cyan`     | `#5AC8FA`                  | Highlight glow, data bars                  |
 | `accent-green`    | `#30D158`                  | Direct-route / success state               |
-| `accent-purple`   | `#BF5AF2`                  | Mihomo engine accent                       |
+| `accent-purple`   | `#BF5AF2`                  | meow-rs engine accent                       |
 
 ## Typography
 
@@ -54,7 +54,7 @@ Layered. Glass cards use:
 | #  | Beat              | Window        | Idea                                                        |
 | -- | ----------------- | ------------- | ----------------------------------------------------------- |
 | 1  | Logo open         | 0.0–5.0s      | "meow" wordmark + tagline, soft pulse                        |
-| 2  | Mihomo engine     | 5.0–11.0s     | Protocol pills cascade around a central engine card         |
+| 2  | meow-rs engine     | 5.0–11.0s     | Protocol pills cascade around a central engine card         |
 | 3  | NE packet tunnel  | 11.0–17.0s    | Phone silhouette, app icons drawn into a tunnel beam         |
 | 4  | Smart CN routing  | 17.0–23.0s    | Split path — CN-IP direct (green) vs global proxy (blue)    |
 | 5  | Traffic dashboard | 23.0–29.0s    | 7-day bar chart animates up, live throughput counter        |

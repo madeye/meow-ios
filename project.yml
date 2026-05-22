@@ -106,7 +106,7 @@ targets:
       - package: Yams
       - package: Firebase
         product: FirebaseAnalytics
-      - framework: MeowCore/Frameworks/MihomoCore.xcframework
+      - framework: MeowCore/Frameworks/MeowCore.xcframework
         embed: false
         optional: true
       - sdk: SystemConfiguration.framework
@@ -218,11 +218,11 @@ targets:
           - $(SRCROOT)/MeowCore/Frameworks
         OTHER_LDFLAGS:
           - -ObjC
-          # boring-sys (via mihomo-transport boring-tls feature) vendors
+          # boring-sys (via meow-transport boring-tls feature) vendors
           # BoringSSL C++ — link libc++ so std::__1 symbols resolve.
           - -lc++
     dependencies:
-      - framework: MeowCore/Frameworks/MihomoCore.xcframework
+      - framework: MeowCore/Frameworks/MeowCore.xcframework
         embed: false
         optional: true
       - sdk: SystemConfiguration.framework

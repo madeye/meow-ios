@@ -4,7 +4,7 @@ import SwiftUI
 
 struct ProxyGroupsView: View {
     @Environment(VpnManager.self) private var vpnManager
-    @Environment(MihomoAPI.self) private var mihomoAPI
+    @Environment(MeowAPI.self) private var meowAPI
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
@@ -83,27 +83,27 @@ private extension ProxyGroupsView {
             return
         }
         do {
-            let resp = try await mihomoAPI.getProxies()
+            let resp = try await meowAPI.getProxies()
             groups = ProxyGroupModel.build(from: resp.proxies)
             loadError = nil
         } catch {
             loadError = String(
                 localized: "home.error.apiUnavailable",
-                comment: "Inline error shown in Proxy Groups header when mihomo API is not reachable",
+                comment: "Inline error shown in Proxy Groups header when meow API is not reachable",
             )
         }
     }
 
     func select(group: String, proxy: String) async {
         do {
-            try await mihomoAPI.selectProxy(group: group, name: proxy)
+            try await meowAPI.selectProxy(group: group, name: proxy)
             if let profile = selected.first {
                 profile.selectedProxies[group] = proxy
                 try? modelContext.save()
             }
             await refresh()
         } catch {
-            // Surface the underlying reason — `MihomoAPIError.proxyControl`
+            // Surface the underlying reason — `MeowAPIError.proxyControl`
             // carries the sanitized message from `meow_core_last_error`
             // (e.g. "engine not running", "'<name>' is not a member of
             // '<group>'", "'<group>' is not a select-type group"), and
@@ -122,7 +122,7 @@ private extension ProxyGroupsView {
     /// are already sanitized at the FFI boundary, so they're safe to
     /// show verbatim.
     private static func describe(_ error: any Error) -> String {
-        if let api = error as? MihomoAPIError {
+        if let api = error as? MeowAPIError {
             switch api {
             case let .proxyControl(reason): return reason
             case let .http(status): return "HTTP \(status)"
@@ -134,7 +134,7 @@ private extension ProxyGroupsView {
 
     func ping(proxy: String) async {
         inflightDelay.insert(proxy)
-        _ = try? await mihomoAPI.testDelay(
+        _ = try? await meowAPI.testDelay(
             proxy: proxy,
             url: "http://www.gstatic.com/generate_204",
         )

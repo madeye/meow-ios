@@ -2,7 +2,7 @@ import MeowModels
 import SwiftUI
 
 struct ConnectionsView: View {
-    @Environment(MihomoAPI.self) private var api
+    @Environment(MeowAPI.self) private var api
     @State private var connections: [Connection] = []
     @State private var query: String = ""
     @State private var errorMessage: String?
@@ -50,8 +50,8 @@ struct ConnectionsView: View {
 
     private func row(for conn: Connection) -> some View {
         let slug = conn.id.identifierSlug
-        // mihomo-rust's `/connections` doesn't ship per-connection metadata
-        // yet (mihomo-api routes.rs:281-289), so fall back to the rule label
+        // meow-rs's `/connections` doesn't ship per-connection metadata
+        // yet (meow-api routes.rs:281-289), so fall back to the rule label
         // when host/port/network aren't available.
         let host = conn.metadata?.host ?? conn.rule
         let port = conn.metadata?.destinationPort ?? ""

@@ -2,12 +2,12 @@ import Foundation
 import Yams
 
 /// Transforms a user Clash YAML profile into the effective config the engine
-/// actually loads. Mirrors the Android `MihomoInstance.start` pipeline:
+/// actually loads. Mirrors the Android `MeowInstance.start` pipeline:
 ///
 ///   1. Remove user-managed `dns:` and `subscriptions:` blocks — the extension
 ///      owns DNS (DoH + fake-ip) and the app owns subscription fetching.
 ///   2. Strip `secret:` so the REST API runs open on loopback — the app talks
-///      to the engine via `MihomoAPI(secret: "")` and would 401 if the user's
+///      to the engine via `MeowAPI(secret: "")` and would 401 if the user's
 ///      profile happened to ship a token.
 ///   3. Pin `mixed-port` (defaults to 7890) so the tun2socks dispatcher and the
 ///      REST API know the listener port without consulting the YAML.
@@ -24,7 +24,7 @@ public enum EffectiveConfigWriter {
 
     /// Matches the Android client's jsDelivr mirrors of the MetaCubeX databases.
     /// `asn` is included so subscriptions with `IP-ASN,<num>,<group>` rules work
-    /// — without the `GeoLite2-ASN.mmdb` on disk, mihomo-rust errors out of
+    /// — without the `GeoLite2-ASN.mmdb` on disk, meow-rs errors out of
     /// engine_start.
     public static let defaultGeoXURL: [String: String] = [
         "geoip": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
@@ -96,7 +96,7 @@ public enum EffectiveConfigWriter {
         }
 
         // Stable key ordering so the effective file diffs cleanly across
-        // restarts, and mihomo-rust doesn't care about input key order.
+        // restarts, and meow-rs doesn't care about input key order.
         return try Yams.dump(object: root, sortKeys: true)
     }
 }

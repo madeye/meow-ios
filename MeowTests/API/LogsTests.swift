@@ -2,24 +2,24 @@ import Foundation
 @testable import meow_ios
 import Testing
 
-/// Contract for `streamLogs(level:)` — the WebSocket half of `MihomoAPI`
+/// Contract for `streamLogs(level:)` — the WebSocket half of `MeowAPI`
 /// consumed by T4.7 Logs Screen.
 ///
 /// `.disabled("blocked on T4.7")` — WebSocket stubbing is not built into
 /// `URLProtocolStub` and lands with the T4.7 Logs Screen harness. Until
 /// then these skeletons pin the `LogEntry` contract and the
 /// level-picker / malformed-line behaviors the view depends on, so that
-/// any drift in `App/Sources/Services/MihomoAPITypes.swift` breaks the
+/// any drift in `App/Sources/Services/MeowAPITypes.swift` breaks the
 /// build.
 ///
 /// Fixture source: `URLProtocolStub` in `MeowTests/Support/URLProtocolStub.swift`
 /// (plus a WebSocket stub helper that lands with T4.7).
-@Suite("MihomoAPI logs WebSocket", .tags(.api))
+@Suite("MeowAPI logs WebSocket", .tags(.api))
 struct LogsTests {
     /// Compile-time anchor — drift in `LogEntry` or the `streamLogs`
     /// signature breaks this file. `streamLogs` returns synchronously; the
     /// `AsyncThrowingStream` itself is the asynchrony boundary.
-    private static func _contractAnchor(api: MihomoAPI) {
+    private static func _contractAnchor(api: MeowAPI) {
         _ = LogEntry.self
         _ = LogEntry.from(jsonString: "")
         let stream: AsyncThrowingStream<LogEntry, Error> = api.streamLogs(level: "info")
@@ -30,7 +30,7 @@ struct LogsTests {
         .disabled("blocked on T4.7"),
     )
     func `LogEntry.from(jsonString:) decodes well-formed {type,payload}`() {
-        // `LogEntry { type, payload }` — see MihomoAPITypes.swift.
+        // `LogEntry { type, payload }` — see MeowAPITypes.swift.
         // Exercise: `LogEntry.from(jsonString: #"{"type":"info","payload":"hi"}"#)`
         // must yield a non-nil entry with both fields populated.
         Issue.record("LogsTests.logEntryDecodesHappyPath not implemented — skeleton gated on T4.7")
@@ -54,7 +54,7 @@ struct LogsTests {
         // Picker in LogsView toggles between debug/info/warning/error and
         // restarts the stream on change (`task(id: level)`). The client
         // must encode the level as `?level=<value>` on the WebSocket URL —
-        // mihomo honors this as a server-side filter.
+        // meow honors this as a server-side filter.
         Issue.record("LogsTests.streamLogsLevelQuery not implemented — skeleton gated on T4.7")
     }
 
@@ -73,7 +73,7 @@ struct LogsTests {
         .disabled("blocked on T4.7"),
     )
     func `WebSocket remote close surfaces as throwing-stream error`() {
-        // When the server tears down the socket (engine restart / mihomo
+        // When the server tears down the socket (engine restart / meow
         // panic), `ws.receive()` throws. The stream must finish(throwing:)
         // so LogsView can recover on the next `.task(id: level)` cycle
         // rather than silently stalling.

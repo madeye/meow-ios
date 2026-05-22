@@ -45,8 +45,8 @@ Carthage/Build/
 # ---- Rust ----
 core/rust/**/target/
 core/rust/**/Cargo.lock.bak
-# cbindgen output — canonical copy lives at MeowCore/include/mihomo_core.h
-core/rust/mihomo-ios-ffi/include/
+# cbindgen output — canonical copy lives at MeowCore/include/meow_core.h
+core/rust/meow-ios-ffi/include/
 **/*.rs.bk
 
 # ---- Go ----
@@ -92,3 +92,4 @@ fastlane/test_output/
 # Firebase CLI debug log emitted by `firebase` commands during release
 firebase-debug.log
 firebase-debug.*.log
+.antigravitycli/

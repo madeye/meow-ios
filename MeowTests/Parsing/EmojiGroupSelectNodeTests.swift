@@ -16,7 +16,7 @@ import Yams
 /// 3. There is exactly one `type: select` group named `🚀 节点选择`, and
 ///    every name it lists either resolves to a proxy in the `proxies:`
 ///    block or is a built-in (`DIRECT`/`REJECT`). Dangling references are
-///    the bug class that breaks the picker — once mihomo-rust converts
+///    the bug class that breaks the picker — once meow-rs converts
 ///    `select` → `Selector`, `ProxyGroupModel.build(from:)` would render
 ///    a child the user can't actually switch to.
 @Suite("Emoji-named proxy groups · select-node", .tags(.parsing))
@@ -47,7 +47,7 @@ struct EmojiGroupSelectNodeTests {
         #expect(children.last == "DIRECT")
 
         // Every named child must resolve — either to a parsed proxy or to a
-        // mihomo built-in. A drift here is what makes "select node" silently
+        // meow built-in. A drift here is what makes "select node" silently
         // surface a row the user can't actually switch to.
         let builtins = Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"])
         let unresolved = children.filter { !proxyNames.contains($0) && !builtins.contains($0) }

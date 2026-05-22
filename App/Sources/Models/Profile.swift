@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// A mihomo profile — either a fetched Clash YAML subscription or a manually
+/// A meow profile — either a fetched Clash YAML subscription or a manually
 /// authored config.
 @Model
 final class Profile {

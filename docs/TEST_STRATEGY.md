@@ -7,15 +7,15 @@
 **Applies to:** meow-ios v1.0 (MVP — see `PRD.md` §3.1)
 **Changelog:**
 - v1.3 — Automated E2E + XCUITest scaffolding retired in sync with PRD v1.4 / PROJECT_PLAN v1.4 T6.5 retirement (2026-04-18, user directive "remove e2e tests"). §5 *UI Test Plan (XCUITest)* and §7 *Device-class E2E via vphone-cli in a Tart VM* both replaced with 2-line retirement stubs; coverage moves to PROJECT_PLAN T2.8 manual-smoke on user's iPhone. §11.1 `nightly.yml` subsection + `ui-test` CI job removed; §11.3 `SLACK_WEBHOOK_URL` row removed; §11.5 required-checks list drops `ui-test`. Scattered refs across §1/§2/§6/§8/§11/§12/§13/§14 updated. 5-check gate content (§6.2) retained as the manual-smoke checklist — PRD v1.4 §4.4 retained the label format for on-device readability. `docs/RUNNER.md` + `docs/TEST_FIXTURES.md` deleted (superseded). Apple Team ID / ASC key ID / Issuer ID placeholders now `<TEAM_ID>` / `<ASC_KEY_ID>` / `<ISSUER_ID>` throughout (pre-public redaction; CI still resolves via secrets). Section numbering preserved (no ripple renumber).
-- v1.2.1 — Post-rebase cleanup after Dev's Rust-unification + PRD v1.3 landing: §11.1 CI pipeline collapses `build-rust`+`build-go` → single `build-core` producing `MihomoCore.xcframework`, adds explicit `size-check` job (§8.1 8 MB gate), drops `govulncheck`. §11.1 `nightly.yml` description now matches the Tart/vphone-cli flow actually in `.github/workflows/nightly.yml`. Editorial: removed the last "Go engine" / "Rust+Go bridge" references in §1/§4.1/§6.3 to align with PRD v1.3 pure-Rust architecture. No strategy changes; only stale refs corrected.
-- v1.2 — Added §7 *Device-class E2E via vphone-cli in a SIP-disabled Tart VM* (replaces the earlier "tethered iPhone" nightly model). Tightened §8.1 memory budget: Extension resident ≤ 40 MB with a 50 MB hard ceiling (enforced as a ship-blocker test) to live inside the iOS NE memory limit. Tightened `MihomoCore.xcframework` stripped size budget to ≤ 8 MB. Renumbered §7–§13 → §8–§14.
-- v1.1 — Aligned with PRD v1.1 (pure-Rust `MihomoCore.xcframework`, no Go toolchain). Merged Rust + Go FFI test sections into one; updated CI pipeline to drop the Go build job; updated C symbol names in stubs.
+- v1.2.1 — Post-rebase cleanup after Dev's Rust-unification + PRD v1.3 landing: §11.1 CI pipeline collapses `build-rust`+`build-go` → single `build-core` producing `MeowCore.xcframework`, adds explicit `size-check` job (§8.1 8 MB gate), drops `govulncheck`. §11.1 `nightly.yml` description now matches the Tart/vphone-cli flow actually in `.github/workflows/nightly.yml`. Editorial: removed the last "Go engine" / "Rust+Go bridge" references in §1/§4.1/§6.3 to align with PRD v1.3 pure-Rust architecture. No strategy changes; only stale refs corrected.
+- v1.2 — Added §7 *Device-class E2E via vphone-cli in a SIP-disabled Tart VM* (replaces the earlier "tethered iPhone" nightly model). Tightened §8.1 memory budget: Extension resident ≤ 40 MB with a 50 MB hard ceiling (enforced as a ship-blocker test) to live inside the iOS NE memory limit. Tightened `MeowCore.xcframework` stripped size budget to ≤ 8 MB. Renumbered §7–§13 → §8–§14.
+- v1.1 — Aligned with PRD v1.1 (pure-Rust `MeowCore.xcframework`, no Go toolchain). Merged Rust + Go FFI test sections into one; updated CI pipeline to drop the Go build job; updated C symbol names in stubs.
 
 ---
 
 ## 1. Objectives & Guiding Principles
 
-The iOS port's critical surfaces — the Packet Tunnel Provider, the `MihomoCore.xcframework` C ABI bridge (pure Rust, PRD v1.1+), and the `NETunnelProviderManager` lifecycle — cannot be validated by unit tests alone. This strategy therefore layers four overlapping test tiers and treats on-device smoke tests as the authoritative signal for "does it work."
+The iOS port's critical surfaces — the Packet Tunnel Provider, the `MeowCore.xcframework` C ABI bridge (pure Rust, PRD v1.1+), and the `NETunnelProviderManager` lifecycle — cannot be validated by unit tests alone. This strategy therefore layers four overlapping test tiers and treats on-device smoke tests as the authoritative signal for "does it work."
 
 Guiding principles:
 
@@ -23,7 +23,7 @@ Guiding principles:
 2. **Parity with Android where it matters.** The Android `test-e2e.sh` (see `/Volumes/DATA/workspace/meow-go/test-e2e.sh`) sets the bar: TUN interface up, DNS resolves, TCP/HTTP flows. We reproduce that five-check gate on iOS as a manual pre-release smoke on a physical device (PROJECT_PLAN v1.4 T2.8; see §6.2).
 3. **Fail closed on security regressions.** Security checks (ATS, Keychain, no plaintext secrets) run on every PR — not in the release pipeline only.
 4. **Performance is a first-class acceptance criterion.** Extension memory is hard-capped by iOS at ~50 MB; our budget is ≤ 40 MB PASS / ≥ 50 MB hard-fail (§8.1). A regression here is a ship-blocker, not a polish item.
-5. **Shift-left for FFI.** The Swift↔C boundary into `MihomoCore.xcframework` is the highest-risk surface. Cover it with unit tests at the C ABI layer (see §3.1) before building UI on top.
+5. **Shift-left for FFI.** The Swift↔C boundary into `MeowCore.xcframework` is the highest-risk surface. Cover it with unit tests at the C ABI layer (see §3.1) before building UI on top.
 
 ---
 
@@ -60,9 +60,9 @@ Target distribution: **60% unit, 25% integration, 10% UI, 5% E2E/manual.** If un
 
 **Target:** `MeowTests` bundle, linked against the main app target.
 
-### 3.1 FFI Bridge Tests — `MihomoCore.xcframework`
+### 3.1 FFI Bridge Tests — `MeowCore.xcframework`
 
-Cover the Swift↔C boundary for the single pure-Rust library (PRD v1.1 dropped the Go engine). These are the thinnest, highest-value tests — they catch ABI drift the moment `mihomo-ios-ffi` is rebuilt.
+Cover the Swift↔C boundary for the single pure-Rust library (PRD v1.1 dropped the Go engine). These are the thinnest, highest-value tests — they catch ABI drift the moment `meow-ios-ffi` is rebuilt.
 
 Full exported surface per PRD §2.4. All exports return `int` status codes and write string output into caller-provided buffers (`dst`, `cap`).
 
@@ -93,7 +93,7 @@ Full exported surface per PRD §2.4. All exports return `int` status codes and w
 | Subject | Inputs |
 |---------|--------|
 | `SubscriptionParser.detectFormat(_:)` | Clash YAML, v2rayN base64 nodelist, mixed/unknown → enum |
-| `SubscriptionParser.parseClash(_:)` | Fixture YAML with SS / Trojan / VLESS nodes (the protocol set shipped by mihomo-rust v0.6.1), proxy-groups, rules — assert counts and names |
+| `SubscriptionParser.parseClash(_:)` | Fixture YAML with SS / Trojan / VLESS nodes (the protocol set shipped by meow-rs v0.6.1), proxy-groups, rules — assert counts and names |
 | `SubscriptionParser.parseClash(_:)` | Clash YAML missing `proxies:` → error; malformed indentation → error |
 | `NodelistConverter.convert(_:)` | Base64(ss://...) nodelist → Clash YAML via FFI; assert resulting YAML has expected node count |
 | `YamlPatcher.applyMixedPort(_:port:)` | Strips `subscriptions:` block; prepends/replaces `mixed-port:` |
@@ -129,7 +129,7 @@ Full exported surface per PRD §2.4. All exports return `int` status codes and w
 
 URLSession is injected via a `URLProtocol` subclass test double — not a full mock framework. See Apple's sample `URLProtocolStub` pattern.
 
-### 3.5 REST Client Tests (`MihomoAPI`)
+### 3.5 REST Client Tests (`MeowAPI`)
 
 Use `URLProtocolStub` to inject canned responses for each endpoint:
 - `GET /proxies` — parse groups and members; handle `now` field
@@ -194,7 +194,7 @@ IPC tests that need the actual extension process live in the integration tier (�
 
 Implementation: use `NEVPNManager.shared().loadFromPreferences` then drive the provider and observe `NEVPNStatusDidChangeNotification`. Tests require network entitlements — cannot run on Xcode Cloud without a provisioned test runner.
 
-### 4.2 MihomoCore (Rust) Engine Integration
+### 4.2 MeowCore (Rust) Engine Integration
 
 These tests live in the extension target's `PacketTunnelTests` bundle (runs inside the extension process).
 
@@ -260,7 +260,7 @@ All five must pass before a release candidate is accepted. A single failure bloc
 
 ### 6.3 Protocol Matrix
 
-Each protocol gets its own YAML fixture and is validated by checks 3–5 above. Protocols in scope for MVP — limited to the outbound implementations shipped by mihomo-rust v0.6.1:
+Each protocol gets its own YAML fixture and is validated by checks 3–5 above. Protocols in scope for MVP — limited to the outbound implementations shipped by meow-rs v0.6.1:
 
 | Protocol | Fixture | Notes |
 |----------|---------|-------|
@@ -271,9 +271,9 @@ Each protocol gets its own YAML fixture and is validated by checks 3–5 above. 
 | VLESS (XTLS-Vision) | `fixtures/vless-vision.yaml` | XTLS-Vision splice path |
 | VLESS (WS / gRPC) | `fixtures/vless-ws.yaml` | WebSocket and gRPC transports |
 
-Out of scope (not shipped by mihomo-rust v0.6.1): VMess, WireGuard, TUIC, Hysteria 2.
+Out of scope (not shipped by meow-rs v0.6.1): VMess, WireGuard, TUIC, Hysteria 2.
 
-Test pass criterion per protocol: all 5 connectivity checks pass, and the mihomo-rust engine reports at least one successful connection via its REST controller `GET /connections` (127.0.0.1:9090 in-extension).
+Test pass criterion per protocol: all 5 connectivity checks pass, and the meow-rs engine reports at least one successful connection via its REST controller `GET /connections` (127.0.0.1:9090 in-extension).
 
 ### 6.4 DNS (DoH)
 
@@ -309,14 +309,14 @@ All benchmarks run on iPhone 14 (minimum supported device) on iOS 26. E2E-adjace
 
 ### 8.1 Memory
 
-The iOS NetworkExtension process is capped at **~50 MB resident memory** by the system — exceeding it is a hard jetsam kill with no recovery. This is the single largest architectural constraint on meow-ios and the reason we moved from Go mihomo to pure-Rust mihomo (PRD v1.1). Our test targets are therefore tight, and the "ceiling" test is a ship-blocker.
+The iOS NetworkExtension process is capped at **~50 MB resident memory** by the system — exceeding it is a hard jetsam kill with no recovery. This is the single largest architectural constraint on meow-ios and the reason we moved from Go mihomo to pure-Rust meow-rs (PRD v1.1). Our test targets are therefore tight, and the "ceiling" test is a ship-blocker.
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
 | Extension resident memory at idle (60s post-connect) | ≤ **40 MB** | `task_info` via Instruments Allocations; ship-blocker |
 | Extension peak memory under load (100 Mbps sustained, 60s) | ≤ **45 MB** | Instruments Allocations — any sample ≥ 50 MB fails build |
 | Extension memory headroom stress test | No jetsam over 30 min at 50 Mbps + 200 concurrent connections | Instruments Allocations + `log stream` for jetsam events |
-| `PacketTunnel.appex` stripped binary | ≤ **10 MB** (soft warn at 9 MB) | CI gate via `stat` in `ci.yml` size-budget step; revisit when mihomo-rust gains new protocols. Raised 8 → 10 MB in 2026-05 to track the v0.7.x bump — see step comment for rationale. The actual ship constraint is the row above (extension RSS); binary size is a proxy heuristic |
+| `PacketTunnel.appex` stripped binary | ≤ **10 MB** (soft warn at 9 MB) | CI gate via `stat` in `ci.yml` size-budget step; revisit when meow-rs gains new protocols. Raised 8 → 10 MB in 2026-05 to track the v0.7.x bump — see step comment for rationale. The actual ship constraint is the row above (extension RSS); binary size is a proxy heuristic |
 | App-side memory at idle | ≤ 80 MB | Instruments Allocations |
 | Memory growth after 1h session | ≤ +0.5 MB in extension; ≤ +10 MB in app | Identify leaks via Instruments Leaks |
 
@@ -541,10 +541,10 @@ Runners: `macos-14` (arm64, GitHub-hosted)
 
 Jobs (parallel where possible):
 
-1. **build-core** — checkout rust crate + `mihomo-rust` submodule, install `aarch64-apple-ios`/`aarch64-apple-ios-sim` Rust targets, run `scripts/build-rust.sh` → upload `MihomoCore.xcframework` artifact (single unified framework per PRD v1.1+)
+1. **build-core** — checkout rust crate + `meow-rs` submodule, install `aarch64-apple-ios`/`aarch64-apple-ios-sim` Rust targets, run `scripts/build-rust.sh` → upload `MeowCore.xcframework` artifact (single unified framework per PRD v1.1+)
 2. **lint** — SwiftLint, SwiftFormat --dry-run, actionlint on workflow files
 3. **size-check** — fail if `PacketTunnel.appex` stripped binary exceeds 10 MB (§8.1)
-4. **unit-test** — download `MihomoCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` for `MeowTests`
+4. **unit-test** — download `MeowCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` for `MeowTests`
 5. **integration-test** — simulator-based NetworkExtension lifecycle + FFI tests (subset that runs without device)
 6. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
 
@@ -616,12 +616,12 @@ On `main`:
 | Risk (from PRD §8) | Test Mitigation | Priority |
 |---------------------|-----------------|----------|
 | Extension memory limit (iOS NE cap ≈ 50 MB) | CI fails build if `PacketTunnel.appex` stripped binary > 10 MB (proxy heuristic — see §8.1); manual pre-release smoke (T2.8) fails if resident > 40 MB sustained or any sample ≥ 50 MB per §8.1 | P0 |
-| mihomo-rust protocol parity gaps vs. Go mihomo | Protocol matrix §6.3 exercises every outbound shipped by mihomo-rust v0.6.1 (SS / Trojan / VLESS variants) through real test servers; missing/broken protocol = ship-blocker for that protocol. Out-of-scope outbounds (VMess, WireGuard, TUIC, Hysteria 2) are deferred — not advertised, not tested. | P0 |
+| meow-rs protocol parity gaps vs. Go meow | Protocol matrix §6.3 exercises every outbound shipped by meow-rs v0.6.1 (SS / Trojan / VLESS variants) through real test servers; missing/broken protocol = ship-blocker for that protocol. Out-of-scope outbounds (VMess, WireGuard, TUIC, Hysteria 2) are deferred — not advertised, not tested. | P0 |
 | Apple review rejection | Static scan for ATS / privacy violations; manual pre-submission checklist | P0 |
 | NetworkExtension sandbox file I/O | Integration tests §4.1 exercise only App Group paths; any direct path triggers test failure | P1 |
 | TUN fd bridging (Option A vs B) | §4.2 covers chosen path; decision recorded in ADR before M1 closes | P0 |
 | CFNotification latency | §4.3 asserts ≤ 500ms round-trip; fallback to polling documented | P1 |
-| Rust cross-compile + cbindgen toolchain | CI builds `MihomoCore.xcframework` from scratch every PR; Rust toolchain + cbindgen versions pinned | P0 |
+| Rust cross-compile + cbindgen toolchain | CI builds `MeowCore.xcframework` from scratch every PR; Rust toolchain + cbindgen versions pinned | P0 |
 | smoltcp iOS packet framing | §6.2 five-check gate walked on the developer's physical device (T2.8) is the authoritative signal | P0 |
 | In-process Tokio channel (no loopback) correctness | §4.2 asserts packet-in-packet-out latency stays in-process (<20ms median); watch for deadlocks under load | P1 |
 
@@ -632,7 +632,7 @@ On `main`:
 All must be true before App Store submission:
 
 - [ ] All acceptance criteria §10 pass on iPhone 14 (minimum device) and iPhone 16 Pro
-- [ ] All 5 network checks §6.2 pass for the protocols shipped by mihomo-rust v0.6.1 — SS, Trojan, and VLESS (TLS / XTLS-Vision / WS) — walked manually on the developer's physical iPhone per T2.8
+- [ ] All 5 network checks §6.2 pass for the protocols shipped by meow-rs v0.6.1 — SS, Trojan, and VLESS (TLS / XTLS-Vision / WS) — walked manually on the developer's physical iPhone per T2.8
 - [ ] Performance benchmarks §8 meet targets on iPhone 14, **including the 50 MB extension memory ceiling (§8.1)**
 - [ ] Security checklist §9 is 100% complete
 - [ ] Zero known P0/P1 bugs

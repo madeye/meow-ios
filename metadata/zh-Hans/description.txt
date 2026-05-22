@@ -1,6 +1,6 @@
-meow 是 Android 版 "meow" 客户端的原生 iOS 版本——将完整的 Mihomo 代理引擎包裹在 SwiftUI iOS 26 Liquid Glass 界面中，通过 NetworkExtension 数据包隧道承载流量。
+meow 是 Android 版 "meow" 客户端的原生 iOS 版本——将完整的 meow-rs 代理引擎包裹在 SwiftUI iOS 26 Liquid Glass 界面中，通过 NetworkExtension 数据包隧道承载流量。
 
-如果你管理过 Clash 或 Mihomo 配置，使用 meow 会非常顺手：订阅一份 YAML 配置、选择代理组、打开开关——你的流量便会通过代理引擎转发。整个过程完全在设备上完成，没有任何云端组件。
+如果你管理过 Clash 或 meow-rs 配置，使用 meow 会非常顺手：订阅一份 YAML 配置、选择代理组、打开开关——你的流量便会通过代理引擎转发。整个过程完全在设备上完成，没有任何云端组件。
 
 主要特性
 • 支持 Clash 协议 YAML 订阅，支持自动刷新与内置 YAML 编辑器

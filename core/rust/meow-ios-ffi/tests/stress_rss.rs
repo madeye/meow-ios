@@ -28,7 +28,7 @@
 
 #![cfg(target_vendor = "apple")]
 
-use mihomo_ios_ffi::{meow_core_init, meow_tun_ingest, meow_tun_start, meow_tun_stop, rss};
+use meow_ios_ffi::{meow_core_init, meow_tun_ingest, meow_tun_start, meow_tun_stop, rss};
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;

@@ -7,10 +7,10 @@ import SwiftUI
 /// source of truth — what the engine actually loads via
 /// `EffectiveConfigWriter`), exposes Add / Delete / Reorder / per-row
 /// editing, validates the rewritten YAML through the FFI's
-/// `MihomoConfigValidator`, persists back to the Profile, and writes the
+/// `MeowConfigValidator`, persists back to the Profile, and writes the
 /// active config so the engine picks it up on next start.
 ///
-/// Changes do not hot-apply: mihomo-rust has no rule-set-only reload path
+/// Changes do not hot-apply: meow-rs has no rule-set-only reload path
 /// today (and the rule index is built once at engine start in
 /// `Tunnel::update_rules`). The view surfaces a banner reminding the user
 /// to reconnect the tunnel when the editor closes with unsaved-to-engine
@@ -18,7 +18,7 @@ import SwiftUI
 struct RulesEditorView: View {
     let profile: Profile
     @Environment(SubscriptionService.self) private var service
-    @Environment(MihomoAPI.self) private var api
+    @Environment(MeowAPI.self) private var api
     @Environment(\.dismiss) private var dismiss
 
     @State private var rules: [EditableRule] = []
@@ -175,7 +175,7 @@ struct RulesEditorView: View {
     /// rows with the same (type, payload) are skipped — re-tapping the
     /// preset is a no-op rather than producing duplicates.
     ///
-    /// Front-of-list placement is the whole point of the preset: mihomo
+    /// Front-of-list placement is the whole point of the preset: meow
     /// walks `rules:` top-down and stops at the first match, so for the
     /// "send China-app traffic to DIRECT regardless of the user's other
     /// routing" intent to hold, these rows must precede everything else.
@@ -215,7 +215,7 @@ struct RulesEditorView: View {
         defer { saving = false }
         do {
             let newYAML = try RulesYAMLEditor.apply(rules, to: profile.yamlContent)
-            try MihomoConfigValidator.validate(newYAML)
+            try MeowConfigValidator.validate(newYAML)
             profile.yamlBackup = profile.yamlContent
             profile.yamlContent = newYAML
             try service.writeActiveConfig(profile)

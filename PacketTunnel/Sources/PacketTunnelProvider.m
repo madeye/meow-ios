@@ -5,7 +5,7 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWDiagnosticsRunner.h"
-#import "mihomo_core.h"
+#import "meow_core.h"
 #import <os/log.h>
 #import <mach/mach.h>
 @import Network;
@@ -246,7 +246,7 @@ static os_log_t gLog;
         // `reload` is currently a stop-only shim: the extension cancels the
         // tunnel and the app is expected to re-trigger `start` once it
         // observes the disconnected stage. M3 will add hot-reload via the
-        // mihomo REST API and avoid the round-trip.
+        // meow REST API and avoid the round-trip.
         os_log_info(gLog, "reload intent received (stop-only shim; app must restart)");
         [self cancelTunnelWithError:nil];
     }
@@ -379,7 +379,7 @@ static os_log_t gLog;
 
     // Light-touch network-change handling: keep the VPN connected, keep
     // the TUN and engine running, and just abort every in-flight TCP
-    // flow in tun2socks. Mihomo-tunnel's `ConnectionGuard` drops the
+    // flow in tun2socks. Meow-tunnel's `ConnectionGuard` drops the
     // matching `Statistics.connections` entry on each task cancel, so
     // its state stays in sync with our flow registry. The next packet
     // from the app for any pre-flip flow opens a fresh dispatch and
@@ -389,7 +389,7 @@ static os_log_t gLog;
     // targeted way to drop stale flows.
     //
     // UDP is intentionally not touched: it's connectionless from the
-    // app's perspective, mihomo's NAT entries time out on their own,
+    // app's perspective, meow's NAT entries time out on their own,
     // and dropping them mid-flip would clobber in-flight DNS replies.
     int32_t aborted = meow_tun_close_all_tcp_flows();
     os_log_info(gLog, "path: closed %d TCP flows on network change", aborted);

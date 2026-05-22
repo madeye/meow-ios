@@ -1,6 +1,6 @@
 import MeowModels
 
-/// View-model shape the proxy-groups section renders. Built from a mihomo
+/// View-model shape the proxy-groups section renders. Built from a meow
 /// `/proxies` response via `build(from:)`, which filters to user-selectable
 /// group types and projects each child proxy's most recent delay probe.
 struct ProxyGroupModel: Identifiable, Equatable {
@@ -17,7 +17,7 @@ struct ProxyGroupModel: Identifiable, Equatable {
         let delay: Int?
     }
 
-    /// Flatten the mihomo `/proxies` response into the subset of proxy groups
+    /// Flatten the meow `/proxies` response into the subset of proxy groups
     /// the user can interact with. `GLOBAL` is hidden because it's the
     /// top-level aggregator, not a user-facing selector; direct/reject are
     /// leaf proxies, not groups.

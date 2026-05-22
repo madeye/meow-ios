@@ -4,9 +4,9 @@
 **Date:** 2026-04-18  
 **Status:** Draft  
 **Changelog:**
-- v1.1 — Removed Go toolchain (T0.5) and Phase 2 (Go Core). All engine functionality in single Rust `MihomoCore.xcframework` via mihomo-rust.
+- v1.1 — Removed Go toolchain (T0.5) and Phase 2 (Go Core). All engine functionality in single Rust `MeowCore.xcframework` via meow-rs.
 - v1.2 — T2.6 (Debug Diagnostics Panel) inserted as nightly E2E gate. Memory budget aligned to TEST_STRATEGY v1.2.
-- v1.3 — Removed `mihomo-listener` from Rust dep list (confirmed not needed in in-process path, commit `dd3d44a`). Added T2.9 (non-DNS UDP path) as post-M1.5 backlog task with upstream dependency gate. Noted `src/subscription.rs` and `src/diagnostics.rs` as Rust-native replacements for old Go paths; T3.5 and T4.10 depend on T1.4 directly.
+- v1.3 — Removed `meow-listener` from Rust dep list (confirmed not needed in in-process path, commit `dd3d44a`). Added T2.9 (non-DNS UDP path) as post-M1.5 backlog task with upstream dependency gate. Noted `src/subscription.rs` and `src/diagnostics.rs` as Rust-native replacements for old Go paths; T3.5 and T4.10 depend on T1.4 directly.
 - v1.4 — Automated E2E scope retired per user directive 2026-04-18. T6.5 (Nightly E2E Gate, vphone-cli harness) deleted. T2.6 no longer flagged as nightly gate blocker — now feeds a manual on-device smoke owned by the user. T2.8 reframed from automated E2E smoke to manual device smoke. T6.3 UI Tests scope clarified: unit-level UI only, not full-tunnel. M1.5 milestone row rewritten to "Manual Smoke Passes". Critical path updated — nightly gate removed. Self-hosted runner docs, `nightly.yml`, tart/vphone scripts, LocalE2ETests target all queued for deletion in a separate QA-led audit PR.
 - v1.5 — T4.10 (User-Facing Diagnostics Screen) deferred from M4 to M5 per team-lead directive 2026-04-18. Architectural addendum added to §T4.10 documenting the process-affinity constraint on 2/3 FFIs (`meow_engine_test_proxy_http`, `meow_engine_test_dns` gate on `engine::tunnel()` which is `Some` only inside the PacketTunnel extension process). M4 close-out diff: T4.7, T4.8, T4.9, T4.11, T4.12 shipped; T4.10 moved to M5 alongside Traffic + UDP work that already requires extension-side surface area.
 - v1.6 — Added T4.13 (Proxy Groups Subview): proxy group list moves out of Home into a dedicated pushed view; Home shows only a count + navigation row. Amends T4.2 acceptance.
@@ -48,33 +48,33 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 #### T0.4 — Rust Toolchain Setup
 - Install Rust targets: `aarch64-apple-ios`, `aarch64-apple-ios-sim`, `x86_64-apple-ios`
 - Add `cbindgen` to build pipeline
-- Add mihomo-rust as git submodule at `core/rust/vendor/mihomo-rust`
-- Scaffold `mihomo-ios-ffi` Cargo workspace; add mihomo-rust crates as dependencies (excluding `mihomo-listener` — not needed in in-process path)
+- Add meow-rs as git submodule at `core/rust/vendor/meow-rs`
+- Scaffold `meow-ios-ffi` Cargo workspace; add meow-rs crates as dependencies (excluding `meow-listener` — not needed in in-process path)
 - Write `build-rust.sh`: compile → lipo simulator fat binary → `xcodebuild -create-xcframework`
-- Verify `MihomoCore.xcframework` produces on CI and Swift can import the bridging header
-- **Output:** `MihomoCore.xcframework` in `MeowCore/Frameworks/`
+- Verify `MeowCore.xcframework` produces on CI and Swift can import the bridging header
+- **Output:** `MeowCore.xcframework` in `MeowCore/Frameworks/`
 
 ---
 
-### Phase 1: Rust Core (mihomo-ios-ffi + mihomo-rust)
+### Phase 1: Rust Core (meow-ios-ffi + meow-rs)
 
-#### T1.1 — Strip JNI, Wire mihomo-rust as Engine Backend
-- Copy `mihomo-android-ffi` crate to `core/rust/mihomo-ios-ffi/`
+#### T1.1 — Strip JNI, Wire meow-rs as Engine Backend
+- Copy `mihomo-android-ffi` crate to `core/rust/meow-ios-ffi/`
 - Remove `jni` crate and all `Java_*` JNI function signatures
-- Add mihomo-rust workspace crates as Cargo dependencies: `mihomo-common`, `mihomo-proxy`, `mihomo-rules`, `mihomo-dns`, `mihomo-tunnel`, `mihomo-config`, `mihomo-api`
-- Note: `mihomo-listener` is **not** included — no loopback listener needed in the in-process path
-- Implement `engine.rs` wrapping mihomo-rust startup: `meow_core_set_home_dir()`, `meow_engine_start()`, `meow_engine_stop()`, `meow_engine_is_running()`, `meow_engine_traffic()`
-- Implement `src/subscription.rs`: node list → Clash YAML conversion using `mihomo-config` crate (replaces Go `convert.go`)
+- Add meow-rs workspace crates as Cargo dependencies: `meow-common`, `meow-proxy`, `meow-rules`, `meow-dns`, `meow-tunnel`, `meow-config`, `meow-api`
+- Note: `meow-listener` is **not** included — no loopback listener needed in the in-process path
+- Implement `engine.rs` wrapping meow-rs startup: `meow_core_set_home_dir()`, `meow_engine_start()`, `meow_engine_stop()`, `meow_engine_is_running()`, `meow_engine_traffic()`
+- Implement `src/subscription.rs`: node list → Clash YAML conversion using `meow-config` crate (replaces Go `convert.go`)
 - Implement `src/diagnostics.rs`: direct TCP test, proxy HTTP test, DNS resolver test (replaces Go `diagnostics.go`)
-- Export full C ABI (see PRD §2.4); run `cbindgen` to generate `mihomo_core.h`
+- Export full C ABI (see PRD §2.4); run `cbindgen` to generate `meow_core.h`
 - **Depends on:** T0.4
-- **Output:** `mihomo_core.h`, compiling `mihomo-ios-ffi` crate
+- **Output:** `meow_core.h`, compiling `meow-ios-ffi` crate
 
 #### T1.2 — In-Process tun2socks ↔ Engine Channel (TCP)
-- Wire tun2socks TCP handler to `mihomo_tunnel::tcp::handle_tcp()` via in-process Tokio channel
+- Wire tun2socks TCP handler to `meow_tunnel::tcp::handle_tcp()` via in-process Tokio channel
 - Replaces Android SOCKS5 loopback; tun2socks passes `Box<dyn AsyncRead+AsyncWrite>` streams directly
 - Verify no routing loops (iOS NetworkExtension handles socket protection automatically)
-- **Note:** UDP non-DNS forwarding via `mihomo_tunnel::udp::handle_udp()` is **deferred to T2.9** pending upstream API maturity
+- **Note:** UDP non-DNS forwarding via `meow_tunnel::udp::handle_udp()` is **deferred to T2.9** pending upstream API maturity
 - **Depends on:** T1.1
 
 #### T1.3 — iOS TUN FD Handling & Logging
@@ -85,8 +85,8 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 
 #### T1.4 — XCFramework Build
 - Run `build-rust.sh` to produce device + simulator static libs
-- Run `cbindgen` to emit `MeowCore/include/mihomo_core.h`
-- `xcodebuild -create-xcframework` to produce `MihomoCore.xcframework`
+- Run `cbindgen` to emit `MeowCore/include/meow_core.h`
+- `xcodebuild -create-xcframework` to produce `MeowCore.xcframework`
 - CI gate: fail build if stripped xcframework > 8 MB (TEST_STRATEGY v1.2)
 - Verify Swift can call `meow_engine_start()` from bridging header
 - **Depends on:** T1.1, T1.2, T1.3
@@ -164,12 +164,12 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - **Depends on:** T2.3, T2.5, T2.6, T2.7
 
 #### T2.9 — Non-DNS UDP Path (Backlog)  ⚑ **POST-M1.5 / MVP GAP**
-- Wire netstack-smoltcp UDP socket surface → `mihomo_tunnel::udp::handle_udp()`
-- **Prerequisite gate:** check mihomo-rust upstream for UDP reverse-pump API maturity; confirm `mihomo_tunnel::udp::handle_udp` signature is stable before starting
+- Wire netstack-smoltcp UDP socket surface → `meow_tunnel::udp::handle_udp()`
+- **Prerequisite gate:** check meow-rs upstream for UDP reverse-pump API maturity; confirm `meow_tunnel::udp::handle_udp` signature is stable before starting
 - Also verify netstack-smoltcp UDP socket surface (bind, recv_from, send_to async API)
-- Fixes: QUIC/HTTP3 (currently degrades to TCP HTTP/2) and UDP-only apps. (WireGuard outbounds are not shipped in mihomo-rust v0.6.1 and are out of scope for this task.)
+- Fixes: QUIC/HTTP3 (currently degrades to TCP HTTP/2) and UDP-only apps. (WireGuard outbounds are not shipped in meow-rs v0.6.1 and are out of scope for this task.)
 - **Decision (v1.3):** Known limitation for M0→M1; disclose in release notes; patch in M1 (Milestone 5). TCP + DoH covers ~99% of user-observable iOS traffic; QUIC-heavy sites degrade gracefully.
-- **Depends on:** T1.2, upstream mihomo-rust UDP API stability
+- **Depends on:** T1.2, upstream meow-rs UDP API stability
 - **Target milestone:** M5 (Weeks 9–10)
 
 ---
@@ -194,7 +194,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 - Publish received state and traffic as Combine publishers
 - **Depends on:** T0.3
 
-#### T3.4 — MihomoAPI REST Client
+#### T3.4 — MeowAPI REST Client
 - `URLSession`-based client hitting `http://127.0.0.1:9090`
 - Methods: `getProxies()`, `selectProxy(group:name:)`, `getConnections()`, `closeConnection(id:)`, `closeAllConnections()`, `getRules()`, `getProviders()`, `getConfigs()`, `patchConfigs(_:)`, `getMemory()`, `testDelay(proxy:url:timeout:)`
 - WebSocket method: `streamLogs(level:)` → `AsyncStream<LogEntry>`
@@ -222,14 +222,14 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 #### T4.1 — App Shell & Navigation
 - `ContentView` with `TabView` (5 tabs: Home, Subscriptions, Traffic, Logs, Settings)
 - iOS 26 tab bar style
-- Environment objects: `VpnManager`, `MihomoAPI`, `SubscriptionService`
+- Environment objects: `VpnManager`, `MeowAPI`, `SubscriptionService`
 - **Depends on:** T3.2
 
 #### T4.2 — Home Screen
 - VPN status card with connect/disconnect button and animated state
 - Traffic rate tiles (upload/download)
 - Route mode picker
-- Proxy groups section (fetched from `MihomoAPI.getProxies()`, filtered to selectable groups)
+- Proxy groups section (fetched from `MeowAPI.getProxies()`, filtered to selectable groups)
 - Per-group proxy picker (bottom sheet or inline picker)
 - "Connections" and "Rules" navigation links (visible when connected)
 - Restore saved `selectedProxies` on connect
@@ -253,7 +253,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 
 #### T4.5 — Connections Screen
 - Pushed from Home when connected
-- Polling `MihomoAPI.getConnections()` every 1 second (Task-based timer, cancellable)
+- Polling `MeowAPI.getConnections()` every 1 second (Task-based timer, cancellable)
 - Connection rows: host, protocol, up/down bytes, proxy chain, matched rule
 - Search bar filtering
 - Swipe-to-close row; "Close All" button
@@ -261,12 +261,12 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 
 #### T4.6 — Rules Screen
 - Pushed from Home when connected
-- Single fetch of `MihomoAPI.getRules()` on appear, pull-to-refresh
+- Single fetch of `MeowAPI.getRules()` on appear, pull-to-refresh
 - Rule list: type, payload, proxy
 - **Depends on:** T3.4, T4.1
 
 #### T4.7 — Logs Screen (tab)
-- WebSocket stream via `MihomoAPI.streamLogs(level:)`
+- WebSocket stream via `MeowAPI.streamLogs(level:)`
 - Level filter picker (debug/info/warning/error)
 - Auto-scroll toggle
 - Search filter
@@ -302,13 +302,13 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 
 #### T4.11 — Providers Screen
 - Pushed from Home (post-connection)
-- Fetch `MihomoAPI.getProviders()`
+- Fetch `MeowAPI.getProviders()`
 - List proxy providers with their proxies and delay test button
 - **Depends on:** T3.4, T4.1
 
 #### T4.13 — Proxy Groups Subview
 - Move the proxy groups section (currently inline in Home — see T4.2) into a dedicated `ProxyGroupsView` pushed from Home
-- Home screen replaces the inline group list with a single summary row: label "Proxy Groups" + count of selectable groups returned by `MihomoAPI.getProxies()`; tapping the row pushes `ProxyGroupsView`
+- Home screen replaces the inline group list with a single summary row: label "Proxy Groups" + count of selectable groups returned by `MeowAPI.getProxies()`; tapping the row pushes `ProxyGroupsView`
 - `ProxyGroupsView` owns the per-group proxy picker UX (bottom sheet or inline picker) previously embedded in Home; restoring `selectedProxies` on connect remains in `VpnManager` and is unaffected
 - Empty state when count is 0 (e.g., not connected / no profile selected): show "—" instead of a count and disable the row
 - Update T4.2 acceptance: Home no longer renders individual groups; only the count + navigation row
@@ -345,7 +345,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 #### T6.1 — Unit Tests
 - `SubscriptionService`: test Clash YAML detection, v2rayN conversion (via `meow_engine_convert_subscription` FFI mock)
 - `DailyTraffic` accumulation logic
-- `MihomoAPI`: mock URLSession, test response parsing
+- `MeowAPI`: mock URLSession, test response parsing
 - `IPCBridge`: test state serialization/deserialization
 
 #### T6.2 — Integration Tests (Extension)
@@ -362,7 +362,7 @@ This plan translates the PRD milestones into a concrete, dependency-ordered task
 
 #### T6.4 — Performance Tests
 - **Extension resident memory during active VPN:** target ≤ 40 MB; hard-fail at 50 MB (TEST_STRATEGY v1.2)
-- **MihomoCore.xcframework stripped binary size:** ≤ 8 MB (TEST_STRATEGY v1.2); enforced in T1.4 CI step
+- **MeowCore.xcframework stripped binary size:** ≤ 8 MB (TEST_STRATEGY v1.2); enforced in T1.4 CI step
 - Battery usage (Instruments Energy Log, 1-hour session)
 - TUN throughput (iperf3 through proxy, target: ≥ 100 Mbps on WiFi)
 
@@ -413,8 +413,8 @@ T6.* after T5.*
 
 | Milestone | Weeks | Key Deliverable |
 |-----------|-------|-----------------|
-| M0: Infrastructure | 1 | Xcode project builds on CI; Rust toolchain + mihomo-rust submodule ready |
-| M1: Native Core | 2–3 | `MihomoCore.xcframework` ≤8 MB stripped; TCP + DoH traffic flows on device; UDP gap documented |
+| M0: Infrastructure | 1 | Xcode project builds on CI; Rust toolchain + meow-rs submodule ready |
+| M1: Native Core | 2–3 | `MeowCore.xcframework` ≤8 MB stripped; TCP + DoH traffic flows on device; UDP gap documented |
 | M1.5: Manual Smoke Passes | end of week 3 | T2.6 (Debug Diagnostics Panel) complete on device; user confirms all 5 checks `PASS` on their iPhone via T2.8 manual smoke |
 | M2: Basic UI | 4–5 | Connect/disconnect, subscriptions, settings |
 | M3: Proxy & Realtime | 6–7 | Proxy selection, connections, rules, logs |
@@ -433,7 +433,7 @@ T0.1 → T0.4 → T1.1 → T1.2/T1.3 → T1.4 → T2.3/T2.5 → T2.6 (manual-smo
 ```
 
 Three tasks define critical-path risk:
-1. **T1.2** — in-process tun2socks ↔ mihomo-rust Tokio channel wiring
+1. **T1.2** — in-process tun2socks ↔ meow-rs Tokio channel wiring
 2. **T2.5** — Swift `packetFlow.readPackets()` → Unix socket pair → Rust TUN reader
 3. **T2.6** — Debug Diagnostics Panel; must ship end of week 3 so user can run T2.8 manual smoke before UI milestones are signed off
 
@@ -445,7 +445,7 @@ T2.9 (non-DNS UDP) is off the critical path — it's a known M0 limitation with 
 
 1. **In-process channel vs SOCKS5 loopback:** if T1.2 Tokio channel proves complex, fall back to local SOCKS5 loopback socket (127.0.0.1:7890). Decide definitively before Phase 2 begins.
 
-2. **T2.9 upstream gate:** before starting UDP wiring, file an issue against mihomo-rust to confirm `mihomo_tunnel::udp::handle_udp` signature is stable. Block T2.9 until upstream confirms.
+2. **T2.9 upstream gate:** before starting UDP wiring, file an issue against meow-rs to confirm `meow_tunnel::udp::handle_udp` signature is stable. Block T2.9 until upstream confirms.
 
 3. **YAML editor:** `CodeEditView` Swift package (syntax highlighting) vs plain `UITextView`. Decide in M4.
 

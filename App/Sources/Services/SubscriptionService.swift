@@ -3,7 +3,7 @@ import MeowModels
 import SwiftData
 import Yams
 
-/// Fetches and stores mihomo profiles. mihomo-rust only consumes Clash YAML
+/// Fetches and stores meow profiles. meow-rs only consumes Clash YAML
 /// — if the subscription body isn't valid YAML it's rejected here rather
 /// than producing a broken profile at engine startup.
 @Observable
@@ -86,11 +86,11 @@ final class SubscriptionService {
         // generic clients see a CN-bypass-only YAML, Clash-family clients see
         // the full SS/Trojan/VLESS upstream set. Match exactly what the
         // embedded engine sends from its own subscription fetcher
-        // (mihomo-rust `crates/mihomo-config/src/subscription.rs`:
+        // (meow-rs `crates/meow-config/src/subscription.rs`:
         //   `concat!("clash.meta/", env!("CARGO_PKG_VERSION"))`),
         // so app-side refresh and engine-side rule-provider / geodata pulls
-        // hit identical UA gates. Bumped together with the mihomo-rust tag
-        // in `core/rust/mihomo-ios-ffi/Cargo.toml`.
+        // hit identical UA gates. Bumped together with the meow-rs tag
+        // in `core/rust/meow-ios-ffi/Cargo.toml`.
         request.setValue("clash.meta/0.7.4", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200 ..< 300).contains(http.statusCode) {

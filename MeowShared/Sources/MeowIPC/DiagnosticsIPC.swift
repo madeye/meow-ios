@@ -4,7 +4,7 @@ import MeowModels
 /// Payload used between the app (DiagnosticsViewController) and the
 /// PacketTunnel extension's `handleAppMessage`. The extension is the only
 /// process that can answer the PRD §4.4 checks: four of them need the
-/// mihomo-rust engine runtime, and `MEM_OK` needs `task_info` on the
+/// meow-rs engine runtime, and `MEM_OK` needs `task_info` on the
 /// extension's own mach task.
 ///
 /// The protocol is tag-dispatched on the first byte of the request payload:
@@ -19,9 +19,9 @@ import MeowModels
 ///   from `task_info(TASK_VM_INFO).phys_footprint` inside the extension —
 ///   the same metric iOS jetsam compares against the NE memory limit and
 ///   that Xcode's Memory gauge shows. This is what the Settings
-///   "About / Memory" row displays; mihomo's `/memory` REST endpoint is
-///   WebSocket-only in mihomo-rust and returns 400 to plain GETs, and
-///   mihomo's internal accounting under-reports by the Swift/ObjC/tokio
+///   "About / Memory" row displays; meow's `/memory` REST endpoint is
+///   WebSocket-only in meow-rs and returns 400 to plain GETs, and
+///   meow's internal accounting under-reports by the Swift/ObjC/tokio
 ///   overhead anyway, so the IPC path is the only reliable snapshot.
 ///
 /// Tags share one `sendProviderMessage` channel because the extension

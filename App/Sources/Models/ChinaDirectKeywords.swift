@@ -6,7 +6,7 @@ import Foundation
 ///
 /// # Why DOMAIN-KEYWORD
 ///
-/// Mihomo's `DOMAIN-KEYWORD` rule is a plain substring match against the
+/// Meow's `DOMAIN-KEYWORD` rule is a plain substring match against the
 /// full hostname of the connection. Compared with `DOMAIN-SUFFIX`,
 /// keywords let one short rule cover the long-tail of CDN / sharded
 /// hostnames a single Chinese app uses (xhscdn.com, sns-img-bd.xhscdn.com,
@@ -369,7 +369,7 @@ enum ChinaDirectKeywords {
     /// skipped so re-tapping the action is a no-op. The relative order of
     /// `existing` is preserved behind the preset block.
     ///
-    /// Mihomo evaluates `rules:` top-down and stops at the first hit, so
+    /// Meow evaluates `rules:` top-down and stops at the first hit, so
     /// front-of-list placement is what guarantees a China-app domain
     /// reaches `DIRECT` even when a user's later rule would have sent the
     /// same hostname through a proxy group.
@@ -385,7 +385,7 @@ enum ChinaDirectKeywords {
     /// Merge `preset` into `existing`, skipping any preset row whose
     /// (type, payload) pair is already present (case-insensitive on type,
     /// case-sensitive on payload — keywords are matched verbatim by
-    /// mihomo). New rows are appended in preset order. Returns the merged
+    /// meow). New rows are appended in preset order. Returns the merged
     /// list and the count of rows actually inserted.
     ///
     /// This is the append-flavoured sibling of `prepend(preset:to:)`;

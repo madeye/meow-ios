@@ -20,10 +20,10 @@ built for `aarch64-apple-darwin`).
 
 ```bash
 # Prepare a home directory mirroring the AppGroup container layout:
-mkdir -p /tmp/meow-home/mihomo
-cp /Volumes/DATA/workspace/meow-ios/App/Resources/geox/Country.mmdb /tmp/meow-home/mihomo/
-cp /Volumes/DATA/workspace/meow-ios/App/Resources/geox/cn-ipv4.bin   /tmp/meow-home/mihomo/
-cp /Volumes/DATA/workspace/meow-ios/App/Resources/geox/cn-ipv6.bin   /tmp/meow-home/mihomo/
+mkdir -p /tmp/meow-home/meow
+cp /Volumes/DATA/workspace/meow-ios/App/Resources/geox/Country.mmdb /tmp/meow-home/meow/
+cp /Volumes/DATA/workspace/meow-ios/App/Resources/geox/cn-ipv4.bin   /tmp/meow-home/meow/
+cp /Volumes/DATA/workspace/meow-ios/App/Resources/geox/cn-ipv6.bin   /tmp/meow-home/meow/
 
 # Hand it an iOS-style effective-config.yaml.
 sudo ./target/release/meow-utun \

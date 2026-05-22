@@ -28,7 +28,7 @@
 
     // Conservative MSS clamp for PMTU black-holes on the upstream side.
     // The app's TCP stack derives MSS from this MTU (1400 - 40 = 1360),
-    // so all payloads entering the TUN are ≤1360 bytes. When mihomo
+    // so all payloads entering the TUN are ≤1360 bytes. When meow
     // re-emits them on a real upstream socket, the kernel's outbound
     // segment fits inside even pathological path MTUs (1428 on some
     // cellular carriers, 1380 on iCloud Private Relay-style paths, etc.)

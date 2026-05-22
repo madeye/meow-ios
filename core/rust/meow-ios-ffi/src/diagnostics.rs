@@ -1,7 +1,7 @@
 //! Network diagnostics surfaced to the UI. Each function returns either a
 //! success measurement or a human-readable error string — never panics.
 use anyhow::{anyhow, Result};
-use mihomo_proxy::health::{url_test, UrlTestError};
+use meow_proxy::health::{url_test, UrlTestError};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
@@ -21,7 +21,7 @@ pub async fn test_direct_tcp(host: &str, port: u16, to: Duration) -> Result<Dura
 }
 
 pub async fn test_proxy_http(
-    tunnel: &mihomo_tunnel::Tunnel,
+    tunnel: &meow_tunnel::Tunnel,
     url: &str,
     to: Duration,
 ) -> Result<(u16, Duration)> {
@@ -35,7 +35,7 @@ pub async fn test_proxy_http(
 }
 
 pub async fn test_dns(
-    tunnel: &mihomo_tunnel::Tunnel,
+    tunnel: &meow_tunnel::Tunnel,
     host: &str,
     to: Duration,
 ) -> Result<Vec<IpAddr>> {

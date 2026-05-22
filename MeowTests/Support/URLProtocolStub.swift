@@ -2,7 +2,7 @@ import Foundation
 
 /// URLProtocol subclass that lets tests inject canned responses for
 /// `URLSession` requests. Install before running tests that hit the
-/// mihomo REST controller, subscription fetches, or DoH bootstrap.
+/// meow REST controller, subscription fetches, or DoH bootstrap.
 ///
 /// Usage:
 /// ```

@@ -23,7 +23,7 @@ struct ProxiesResponse: Decodable {
 
 struct Connection: Decodable, Identifiable {
     let id: String
-    // mihomo-rust's `/connections` payload (mihomo-api routes.rs:281-289)
+    // meow-rs's `/connections` payload (meow-api routes.rs:281-289)
     // omits the per-connection metadata block today, so leave this optional.
     let metadata: Metadata?
     let upload: Int64
@@ -48,8 +48,8 @@ struct ConnectionsResponse: Decodable {
     let uploadTotal: Int64
     let connections: [Connection]?
 
-    /// mihomo-rust serializes the outer struct fields with default snake_case
-    /// (mihomo-api routes.rs:270-275 — no `rename_all` attribute) while the
+    /// meow-rs serializes the outer struct fields with default snake_case
+    /// (meow-api routes.rs:270-275 — no `rename_all` attribute) while the
     /// per-connection JSON is built with literal camelCase keys.
     enum CodingKeys: String, CodingKey {
         case downloadTotal = "download_total"

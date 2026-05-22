@@ -6,7 +6,7 @@ struct HomeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
-    @Environment(MihomoAPI.self) private var mihomoAPI
+    @Environment(MeowAPI.self) private var meowAPI
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
     @State private var groupCount: Int = 0
@@ -347,7 +347,7 @@ private extension HomeView {
     func refreshRouteMode() async {
         guard vpnManager.stage == .connected else { return }
         do {
-            let resp = try await mihomoAPI.getConfigs()
+            let resp = try await meowAPI.getConfigs()
             if let mode = RouteMode(wire: resp.mode) {
                 routeMode = mode
             }
@@ -359,7 +359,7 @@ private extension HomeView {
     func applyRouteMode(_ mode: RouteMode) async {
         guard vpnManager.stage == .connected else { return }
         do {
-            try await mihomoAPI.setMode(mode.wire)
+            try await meowAPI.setMode(mode.wire)
         } catch {
             // Re-fetch to revert the segmented control if the engine rejected it.
             await refreshRouteMode()
@@ -372,7 +372,7 @@ private extension HomeView {
             return
         }
         do {
-            let resp = try await mihomoAPI.getProxies()
+            let resp = try await meowAPI.getProxies()
             groupCount = ProxyGroupModel.build(from: resp.proxies).count
         } catch {
             groupCount = 0
@@ -391,7 +391,7 @@ enum RouteMode: String, CaseIterable, Identifiable {
         rawValue
     }
 
-    /// Wire value sent to mihomo's `PATCH /configs`. Mihomo calls the
+    /// Wire value sent to meow's `PATCH /configs`. Meow calls the
     /// "send everything through proxies" mode `global`; the UI uses `All`
     /// to match how users describe it in this app.
     var wire: String {

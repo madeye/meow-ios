@@ -1,1 +1,1 @@
-Native iOS Clash client powered by the Mihomo engine. Shadowsocks, Trojan, and VLESS — bring your own subscription.
+Native iOS Clash client powered by the meow-rs engine. Shadowsocks, Trojan, and VLESS — bring your own subscription.

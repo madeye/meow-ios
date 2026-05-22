@@ -17,7 +17,7 @@ struct MeowApp: App {
             ContentView()
                 .environment(appModel)
                 .environment(appModel.vpnManager)
-                .environment(appModel.mihomoAPI)
+                .environment(appModel.meowAPI)
                 .environment(appModel.subscriptionService)
                 .environment(appModel.ipcBridge)
                 .task { await appModel.bootstrap() }

@@ -1,17 +1,17 @@
 //! tun2socks using netstack-smoltcp: Swift pushes raw IP packets in via
 //! [`ingest`], netstack terminates TCP and UDP sessions in a userspace
 //! smoltcp stack, and each flow dispatches directly into
-//! `mihomo_tunnel::{tcp,udp}::handle_*` — no SOCKS5 loopback, no cross-process
+//! `meow_tunnel::{tcp,udp}::handle_*` — no SOCKS5 loopback, no cross-process
 //! hop.
 //!
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS is delegated to mihomo's resolver running in fake-IP mode for the
-//! qtypes mihomo's `DnsServer::handle_query` knows about — A (1) and AAAA
+//! DNS is delegated to meow's resolver running in fake-IP mode for the
+//! qtypes meow's `DnsServer::handle_query` knows about — A (1) and AAAA
 //! (28). Anything else (HTTPS=65, SVCB=64, TXT=16, MX=15, PTR=12, …) is
 //! forwarded as a raw UDP packet to the pinned upstream pool and the
-//! response is injected straight back. mihomo's DnsServer returns NXDOMAIN
+//! response is injected straight back. meow's DnsServer returns NXDOMAIN
 //! for non-A/AAAA queries, which kills modern iOS connection setup (Safari's
 //! HTTPS-record probe, ECH, DNS-SD, mDNS-fallback) — the passthrough path
 //! lets those queries get a real answer instead.
@@ -25,19 +25,19 @@
 //! semantics, and TTL handling for A/AAAA; the FFI owns only the qtype
 //! peek + the upstream forward.
 //!
-//! TCP/UDP destination IPs come back as fake-IPs from mihomo's resolver pool.
+//! TCP/UDP destination IPs come back as fake-IPs from meow's resolver pool.
 //! `dispatch_tcp` and `dispatch_udp` pass the literal `dst.ip()` to
-//! `mihomo_tunnel`, whose `pre_handle_metadata` reverses any fake-IP back to
+//! `meow_tunnel`, whose `pre_handle_metadata` reverses any fake-IP back to
 //! the original qname before rule matching — so the rule / proxy chain still
 //! sees the hostname rather than the synthetic IP, without the FFI keeping
 //! its own pool.
 
 use crate::logging;
 use futures::{SinkExt, StreamExt};
-use mihomo_common::{ConnType, Metadata, Network, ProxyConn};
-use mihomo_dns::DnsServer;
-use mihomo_tunnel::tunnel::TunnelInner;
-use mihomo_tunnel::udp::UdpSession;
+use meow_common::{ConnType, Metadata, Network, ProxyConn};
+use meow_dns::DnsServer;
+use meow_tunnel::tunnel::TunnelInner;
+use meow_tunnel::udp::UdpSession;
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::io;
@@ -56,7 +56,7 @@ type UdpMsg = (Vec<u8>, SocketAddr, SocketAddr);
 type AnyIpPktFrame = Vec<u8>;
 type NetstackTcpStream = lwip::TcpStream;
 
-/// Matches the cbindgen-emitted typedef in `mihomo_core.h`: Rust calls this
+/// Matches the cbindgen-emitted typedef in `meow_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
 pub type WritePacketFn = unsafe extern "C" fn(ctx: *mut c_void, data: *const u8, len: usize);
 
@@ -88,7 +88,7 @@ pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
 // spawns a `dispatch_tcp` task immediately — and under a real burst (e.g.
 // loading a content-rich CN homepage that fans out to 50+ subdomains in
 // the first second), 1000+ concurrent dispatch tasks each hold their own
-// per-flow state (Metadata, Box<dyn ProxyConn>, mihomo's outbound dial
+// per-flow state (Metadata, Box<dyn ProxyConn>, meow's outbound dial
 // buffers, the netstack stream's tx/rx ring). The 10-min VM stress run
 // peaked at 440 MiB of RSS in the first ~10 s of load — 8.8× the on-device
 // 50 MB jetsam cap — almost entirely from the size of this in-flight set.
@@ -145,10 +145,10 @@ pub fn accept_cap() -> usize {
 // docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md for the
 // failure mode: `DirectAdapter::dial_tcp` awaits `TcpStream::connect`
 // with no timeout, and an iOS reachability-cache / scoped-routing
-// transient can leave the connect hanging until the 30 s idle sweeper
+// transient can leave the connect hanging until cap-pressure eviction
 // reaps the flow. With the deadline, the app sees a RST in
 // `DIAL_DEADLINE_MS` ms instead of 30 s, the `tcp_accept_sem` permit is
-// released promptly, and `ConnectionGuard`'s Drop runs the mihomo
+// released promptly, and `ConnectionGuard`'s Drop runs the meow
 // session cleanup on the discarded future.
 //
 // 10 s default: safely above cold cellular handshakes against distant
@@ -161,7 +161,8 @@ static DIAL_DEADLINE_MS: AtomicU64 = AtomicU64::new(DIAL_DEADLINE_MS_DEFAULT);
 
 /// Set the per-flow dial deadline, in milliseconds. `0` disables the
 /// deadline (no watchdog — flows that hang in `dial_tcp` will only be
-/// reaped by the 30 s idle sweeper). Returns true unconditionally.
+/// reaped when the accept cap forces a longest-idle eviction). Returns
+/// true unconditionally.
 pub fn set_dial_deadline_ms(ms: u64) -> bool {
     DIAL_DEADLINE_MS.store(ms, Ordering::Relaxed);
     true
@@ -207,18 +208,11 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
     UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed)
 }
 
-// Sweep window. Tightened from 90 / 30 s to 30 / 10 s: dead-flow state
-// holds for at most one sweep interval past the idle deadline, so the
-// post-burst tail (~50 s in the 10-min stress run) is what we're trying
-// to compress. iOS jetsam doesn't wait — once we're past the cap any
-// retention beyond the next sweep tick is a jetsam risk.
-const TCP_IDLE_SECS: u64 = 30;
-const TCP_IDLE_SWEEP_INTERVAL_SECS: u64 = 10;
 const UDP_BURST_CAP: usize = 512;
 
 // In-TUN UDP/53 handler fan-out cap. Each UDP/53 packet spawns an async
 // task that may block on a real DNS round-trip (forward_dns_to_upstream
-// for non-A/AAAA, mihomo's resolver for A/AAAA). Without a cap, a DNS
+// for non-A/AAAA, meow's resolver for A/AAAA). Without a cap, a DNS
 // storm (Safari HTTPS/SVCB probes, mDNS-style fan-out, malicious flood)
 // produces unbounded `tokio::spawn` calls each holding the inbound IP
 // frame plus its upstream socket. 256 is sized to match the UDP burst
@@ -240,14 +234,6 @@ const DNS_TASK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 // with no on-device signal. Throttled via warn_capped to once per second.
 static EGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
-// Emergency watchdog: when registry size crosses the threshold, abort
-// *every* flow in the table. Was 3600 s / 1024 flows — the on-device
-// 50 MB cap can't tolerate a runaway-flow window measured in hours.
-// 60 s / 256 flows makes the registry-size backstop measurable in the
-// same units (seconds, MB) the OS will jetsam us in.
-const TCP_WATCHDOG_INTERVAL_SECS: u64 = 60;
-const TCP_WATCHDOG_THRESHOLD: usize = 256;
-
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 static TCP_FLOW_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -261,7 +247,7 @@ struct FlowState {
 
 /// Registry entry for one in-flight TCP flow. Aborting `abort` drops the
 /// `dispatch_tcp` future, which closes both halves of the relay — the
-/// netstack stream side and the in-process mihomo dispatch (whichever
+/// netstack stream side and the in-process meow dispatch (whichever
 /// outbound the rule engine selected: proxy, direct, or reject).
 struct FlowRecord {
     state: Arc<FlowState>,
@@ -282,41 +268,39 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Walk the flow table and abort any flow whose `last_active_ms` is older
-/// than `TCP_IDLE_SECS`. Called from the periodic sweeper. Returns the
-/// number of evicted flows.
-fn sweep_idle_tcp_flows() -> usize {
-    let cutoff = now_ms().saturating_sub(TCP_IDLE_SECS * 1000);
-    let mut evicted: Vec<(u64, SocketAddr, SocketAddr)> = Vec::new();
-    tcp_flows().retain(|&id, rec| {
-        if rec.state.last_active_ms.load(Ordering::Relaxed) <= cutoff {
-            rec.abort.abort();
-            evicted.push((id, rec.src, rec.dst));
-            false
-        } else {
-            true
-        }
-    });
-    if !evicted.is_empty() {
-        warn!(
-            "tun2socks: evicted {} idle TCP flows (>{}s)",
-            evicted.len(),
-            TCP_IDLE_SECS
-        );
-        for (id, src, dst) in &evicted {
-            logging::bridge_log(&format!(
-                "tun2socks: TCP idle-evict {} {} -> {}",
-                id, src, dst
-            ));
+/// Find the flow with the oldest `last_active_ms`, remove it from the
+/// registry, and abort its task. Called from the accept loop when the
+/// accept semaphore is saturated — eviction is cap-triggered, not
+/// time-triggered, and always targets the longest-idle flow first.
+/// Returns the evicted flow's id, or `None` if the registry is empty.
+fn evict_oldest_idle_tcp_flow() -> Option<u64> {
+    let flows = tcp_flows();
+    let mut oldest: Option<(u64, u64)> = None;
+    for entry in flows.iter() {
+        let ts = entry.value().state.last_active_ms.load(Ordering::Relaxed);
+        match oldest {
+            None => oldest = Some((*entry.key(), ts)),
+            Some((_, best_ts)) if ts < best_ts => oldest = Some((*entry.key(), ts)),
+            _ => {}
         }
     }
-    evicted.len()
+    let (id, _) = oldest?;
+    let (_, rec) = flows.remove(&id)?;
+    rec.abort.abort();
+    warn!(
+        "tun2socks: TCP cap reached, evicting longest-idle flow {} {} -> {}",
+        id, rec.src, rec.dst
+    );
+    logging::bridge_log(&format!(
+        "tun2socks: TCP cap-evict {} {} -> {}",
+        id, rec.src, rec.dst
+    ));
+    Some(id)
 }
 
-/// Abort every flow in the registry. Same `abort()` semantics as the idle
-/// sweeper — dropping the `dispatch_tcp` future closes both halves of the
-/// relay. Returns the number of flows closed. Used by the registry watchdog
-/// when the live count exceeds `TCP_WATCHDOG_THRESHOLD`.
+/// Abort every flow in the registry. Dropping the `dispatch_tcp` future
+/// closes both halves of the relay. Returns the number of flows closed.
+/// Exposed via FFI (`meow_tun_close_all_tcp_flows`) for emergency teardown.
 pub fn close_all_tcp_flows() -> usize {
     let flows = tcp_flows();
     let mut closed: Vec<(u64, SocketAddr, SocketAddr)> = Vec::with_capacity(flows.len());
@@ -433,9 +417,9 @@ async fn run_tun2socks(
     let (udp_write, mut udp_read) = udp_socket.split();
 
     let (udp_reply_tx, mut udp_reply_rx) = mpsc::channel::<UdpMsg>(256);
-    // NAT key mirrors mihomo-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
+    // NAT key mirrors meow-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
     // post-ADR-0008 Direction-A refactor. We must key reader spawns on the
-    // same tuple mihomo-tunnel uses, or dedupe breaks and we leak readers.
+    // same tuple meow-tunnel uses, or dedupe breaks and we leak readers.
     let reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>> =
         Arc::new(Mutex::new(HashSet::new()));
 
@@ -500,15 +484,24 @@ async fn run_tun2socks(
                 drop(stream);
                 continue;
             }
-            // Hold accept until a permit is available — caps the number of
-            // dispatch_tcp tasks live at once and, transitively, the peak
-            // per-flow allocation footprint. `acquire_owned` returns a permit
-            // we move into the spawned task; permit drops on task exit, freeing
+            // Cap-triggered eviction: when no permit is immediately available
+            // the registry is at the accept cap. Evict the longest-idle flow
+            // to free a slot, then await a permit (the aborted task drops its
+            // permit asynchronously, which unblocks the wait). The permit
+            // moves into the spawned task and drops on task exit, freeing
             // a slot for the next accept. smoltcp keeps unaccepted SYNs in its
             // accept queue (bounded by `stack_buffer_size`), so the cap shows
             // up as TCP backpressure rather than dropped flows.
-            let Ok(permit) = tcp_accept_sem_for_task.clone().acquire_owned().await else {
-                break; // semaphore closed → tunnel shutting down
+            let permit = match tcp_accept_sem_for_task.clone().try_acquire_owned() {
+                Ok(p) => p,
+                Err(tokio::sync::TryAcquireError::Closed) => break,
+                Err(tokio::sync::TryAcquireError::NoPermits) => {
+                    evict_oldest_idle_tcp_flow();
+                    let Ok(p) = tcp_accept_sem_for_task.clone().acquire_owned().await else {
+                        break; // semaphore closed → tunnel shutting down
+                    };
+                    p
+                }
             };
             // Per-accept logging was INFO; under burst (16k accepts in 600 s
             // measured in the VM stress run) the formatter + oslog writer
@@ -535,50 +528,6 @@ async fn run_tun2socks(
                     dst: remote_addr,
                 },
             );
-        }
-    });
-
-    // Periodic idle sweeper: catches flows that have gone idle while no new
-    // accepts are arriving (e.g. background apps with long-lived sockets that
-    // haven't said anything recently). Cancelled at tun2socks shutdown.
-    let idle_sweeper_handle = tokio::spawn(async move {
-        let mut tick =
-            tokio::time::interval(std::time::Duration::from_secs(TCP_IDLE_SWEEP_INTERVAL_SECS));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        // First tick fires immediately; skip it so we don't churn at startup.
-        tick.tick().await;
-        loop {
-            tick.tick().await;
-            if !TUN2SOCKS_RUNNING.load(Ordering::Relaxed) {
-                break;
-            }
-            sweep_idle_tcp_flows();
-        }
-    });
-
-    // Hourly watchdog: if the flow registry has crept past the threshold,
-    // close everything. Read the count off `tcp_flows()` directly (the
-    // registry is the source of truth — `ACTIVE_TCP_CONNS` is incremented
-    // inside `dispatch_tcp` and can briefly disagree at flow boundaries).
-    let watchdog_handle = tokio::spawn(async move {
-        let mut tick =
-            tokio::time::interval(std::time::Duration::from_secs(TCP_WATCHDOG_INTERVAL_SECS));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        // Skip the immediate first tick so we don't fire right at startup.
-        tick.tick().await;
-        loop {
-            tick.tick().await;
-            if !TUN2SOCKS_RUNNING.load(Ordering::Relaxed) {
-                break;
-            }
-            let live = tcp_flows().len();
-            if live > TCP_WATCHDOG_THRESHOLD {
-                warn!(
-                    "tun2socks: registry watchdog tripped: {} live TCP flows > {} threshold, closing all",
-                    live, TCP_WATCHDOG_THRESHOLD
-                );
-                close_all_tcp_flows();
-            }
         }
     });
 
@@ -632,10 +581,10 @@ async fn run_tun2socks(
         // (172.19.0.2) as the system DNS server, so every UDP DNS query
         // arrives here as an in-TUN IP packet. Branch on qtype:
         //
-        //   * A (1) / AAAA (28)  → mihomo's `DnsServer::handle_query`
+        //   * A (1) / AAAA (28)  → meow's `DnsServer::handle_query`
         //     (fake-IP synthesis, reverse map, hosts, TTL).
         //   * anything else      → raw UDP forward to the pinned upstream
-        //     pool (HTTPS, SVCB, TXT, MX, PTR, …). mihomo's DnsServer
+        //     pool (HTTPS, SVCB, TXT, MX, PTR, …). meow's DnsServer
         //     synthesises NXDOMAIN for non-A/AAAA, which kills iOS's
         //     HTTPS-record probe + ECH + Safari's modern connect path; the
         //     passthrough route lets those queries reach a real resolver.
@@ -681,7 +630,7 @@ async fn run_tun2socks(
                     // Non-A/AAAA: forward verbatim to the upstream pool,
                     // first response wins. Falls through to NXDOMAIN-shaped
                     // dropped reply if every upstream times out — better
-                    // than mihomo's blanket NXDOMAIN, which actively
+                    // than meow's blanket NXDOMAIN, which actively
                     // misleads the client.
                     match forward_dns_to_upstream(
                         parsed.payload,
@@ -720,15 +669,13 @@ async fn run_tun2socks(
 
     stack_handle.abort();
     tcp_accept_handle.abort();
-    idle_sweeper_handle.abort();
-    watchdog_handle.abort();
     udp_accept_handle.abort();
     udp_writer_handle.abort();
     egress_handle.abort();
     drop(udp_reply_tx);
 
     // Abort any TCP flows still held in the registry so the in-process
-    // mihomo dispatch tasks don't outlive the tunnel.
+    // meow dispatch tasks don't outlive the tunnel.
     let flows = tcp_flows();
     for entry in flows.iter() {
         entry.abort.abort();
@@ -740,7 +687,7 @@ async fn run_tun2socks(
 }
 
 // ---------------------------------------------------------------------------
-// In-process TCP dispatch into mihomo_tunnel
+// In-process TCP dispatch into meow_tunnel
 // ---------------------------------------------------------------------------
 
 /// RAII guard that decrements `ACTIVE_TCP_CONNS` on drop. Replaces the
@@ -777,8 +724,8 @@ async fn dispatch_tcp(
         return;
     };
 
-    // No FFI-side fake-IP reverse: hand `dst.ip()` straight to mihomo with
-    // an empty host. `mihomo_tunnel::tcp::handle_tcp` calls
+    // No FFI-side fake-IP reverse: hand `dst.ip()` straight to meow with
+    // an empty host. `meow_tunnel::tcp::handle_tcp` calls
     // `pre_handle_metadata` first, which consults the resolver's fake-IP
     // reverse table — if `dst.ip()` is inside the resolver's pool the
     // metadata is rewritten in place to `(host: <qname>, dst_ip: None)`
@@ -799,7 +746,7 @@ async fn dispatch_tcp(
     // Snapshot the FlowState's accept-time stamp before the relay future
     // even runs. `IdleTracking::touch` rewrites `last_active_ms` on the
     // first successful poll, which only happens after
-    // `mihomo_tunnel::tcp::handle_tcp` → `pre_handle_metadata` →
+    // `meow_tunnel::tcp::handle_tcp` → `pre_handle_metadata` →
     // `pre_resolve` → `proxy.dial_tcp` returns and `copy_bidirectional_buf`
     // starts reading. So "`last_active_ms` is still equal to the snapshot"
     // is a precise proxy for "the dial hasn't completed yet."
@@ -816,13 +763,13 @@ async fn dispatch_tcp(
     });
 
     // Race the normal relay against a local-FIN watcher. The relay
-    // (`mihomo_tunnel::tcp::handle_tcp` → `copy_bidirectional_buf`)
+    // (`meow_tunnel::tcp::handle_tcp` → `copy_bidirectional_buf`)
     // already RFC-correctly half-closes: on local EOF it calls
     // `poll_shutdown` on the proxy outbound (sending FIN upstream) and
     // then waits for the upstream to FIN back to terminate.  That wait
     // hangs forever for long-poll / SSE / dead-peer flows and leaves
     // the proxy session, rustls state, NAT entry, and our task stack
-    // alive until the idle sweeper evicts it minutes later.
+    // alive until cap-pressure eviction picks it as the longest-idle flow.
     //
     // Instead: once the local read returns EOF, give the relay a brief
     // grace window to flush its outbound `poll_shutdown` cleanly, then
@@ -831,9 +778,9 @@ async fn dispatch_tcp(
     // down the WebSocket framing, and drops the upstream TCP — clean
     // close semantics on every layer, just not waiting for the peer.
     //
-    // `Statistics.connections` stays in sync because mihomo-tunnel's
+    // `Statistics.connections` stays in sync because meow-tunnel's
     // `ConnectionGuard` is RAII and runs on the dropped future.
-    let fut = mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
+    let fut = meow_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
     tokio::pin!(fut);
 
     // Dial-deadline watchdog (see DIAL_DEADLINE_MS docs above and
@@ -864,7 +811,7 @@ async fn dispatch_tcp(
                 "tun2socks: TCP dial-deadline {} -> {} ({} ms)",
                 src, dst, dial_deadline,
             ));
-            // Drop `fut` on exit → mihomo `ConnectionGuard` cleanup runs,
+            // Drop `fut` on exit → meow `ConnectionGuard` cleanup runs,
             // accept_sem permit released via the spawned task's exit.
         }
     }
@@ -876,8 +823,8 @@ async fn dispatch_tcp(
 /// the lifetime.
 ///
 /// `dial_deadline_ms == 0` opts out (watchdog parks forever, behaviour
-/// matches the pre-fix pipeline that relied solely on the 30 s idle
-/// sweeper). Otherwise the watchdog ticks every 500 ms — fine grained
+/// matches the pre-fix pipeline that relied solely on cap-pressure
+/// eviction). Otherwise the watchdog ticks every 500 ms — fine grained
 /// enough to make sub-second `dial_deadline_ms` settings (used by tests)
 /// converge in <=2 ticks, coarse enough not to be a measurable wake-up
 /// cost under steady state.
@@ -970,9 +917,9 @@ impl ProxyConn for NetstackConn {
 /// Pending / would-block polls are intentionally not counted as activity.
 ///
 /// Generic over the inner stream so the idle-tracking semantics apply to
-/// the mihomo path (`IdleTracking<NetstackConn>`, served as a
-/// `Box<dyn ProxyConn>` to `mihomo_tunnel::tcp::handle_tcp`). Every TCP
-/// flow goes through `mihomo_tunnel::tcp::handle_tcp`; there is no
+/// the meow path (`IdleTracking<NetstackConn>`, served as a
+/// `Box<dyn ProxyConn>` to `meow_tunnel::tcp::handle_tcp`). Every TCP
+/// flow goes through `meow_tunnel::tcp::handle_tcp`; there is no
 /// alternate FFI-side bypass relay any more.
 struct IdleTracking<T> {
     inner: T,
@@ -1055,8 +1002,8 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for IdleTracking<T> {
     }
 }
 
-// `ProxyConn` only matters on the mihomo path (the trait is consumed by
-// `mihomo_tunnel::tcp::handle_tcp`); scope the impl to the netstack flavor
+// `ProxyConn` only matters on the meow path (the trait is consumed by
+// `meow_tunnel::tcp::handle_tcp`); scope the impl to the netstack flavor
 // so other future `IdleTracking<_>` instantiations don't have to invent a
 // `remote_destination()` they wouldn't use.
 impl ProxyConn for IdleTracking<NetstackConn> {
@@ -1066,12 +1013,12 @@ impl ProxyConn for IdleTracking<NetstackConn> {
 }
 
 // ---------------------------------------------------------------------------
-// In-process UDP dispatch into mihomo_tunnel
+// In-process UDP dispatch into meow_tunnel
 //
-// `mihomo_tunnel::udp::handle_udp` installs the outbound session into the NAT
+// `meow_tunnel::udp::handle_udp` installs the outbound session into the NAT
 // table on the first packet of a flow but does not drive the reply side — the
 // caller owns the reader loop. We key replies on the same NAT key
-// mihomo-tunnel uses internally (`"{src}:{remote_address}"`) so reader
+// meow-tunnel uses internally (`"{src}:{remote_address}"`) so reader
 // spawns stay deduped without a second source of truth.
 // ---------------------------------------------------------------------------
 
@@ -1088,7 +1035,7 @@ async fn dispatch_udp(
         return;
     };
 
-    // No FFI-side fake-IP reverse: pass `dst.ip()` through and let mihomo's
+    // No FFI-side fake-IP reverse: pass `dst.ip()` through and let meow's
     // `pre_handle_metadata` rewrite to the qname when the destination is
     // inside the resolver's fake-IP pool, exactly like the TCP path.
     let mut metadata = Metadata {
@@ -1131,7 +1078,7 @@ async fn dispatch_udp(
     };
     let key = (src, SocketAddr::new(resolved_ip, metadata.dst_port));
 
-    mihomo_tunnel::udp::handle_udp(tunnel.inner(), &payload, src, metadata).await;
+    meow_tunnel::udp::handle_udp(tunnel.inner(), &payload, src, metadata).await;
 
     if !reply_readers.lock().insert(key) {
         return;
@@ -1162,7 +1109,7 @@ fn spawn_udp_reply_reader(
         // fragmentation. Was 64 KiB — at N concurrent UDP sessions (DNS,
         // QUIC, NAT-traversal probes) that sums to N * 64 KiB pinned for
         // each session's idle lifetime, blowing past the 50 MB jetsam cap
-        // long before mihomo's NAT timeout reaps the session. 4 KiB covers
+        // long before meow's NAT timeout reaps the session. 4 KiB covers
         // every UDP datagram that can actually round-trip through a
         // 1500-MTU tun without fragmentation; oversized datagrams are
         // truncated at the read, which matches the on-wire reality.
@@ -1223,7 +1170,7 @@ fn spawn_udp_reply_reader(
 }
 
 // ---------------------------------------------------------------------------
-// DNS passthrough — for qtypes mihomo's resolver doesn't synthesise (anything
+// DNS passthrough — for qtypes meow's resolver doesn't synthesise (anything
 // other than A / AAAA) we forward the raw query to one of the pinned
 // upstream resolvers and inject the reply back. Mirrors the upstream pool in
 // `engine::pinned_dns_block` (CN-side, no anycast) so that split-horizon
@@ -1669,8 +1616,7 @@ mod tests {
     }
 
     /// Spawns a no-op task purely so we have a real `AbortHandle` to put in
-    /// `FlowRecord`. The test only inspects whether `sweep_idle_tcp_flows`
-    /// removes entries by timestamp; we don't care if abort actually fires.
+    /// `FlowRecord`. We don't care if abort actually fires.
     fn dummy_handle() -> tokio::task::AbortHandle {
         tokio::runtime::Handle::current()
             .spawn(std::future::pending::<()>())
@@ -1678,7 +1624,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sweep_evicts_only_idle_flows() {
+    async fn evict_oldest_picks_longest_idle_flow() {
         let _guard = flows_test_guard();
         let flows = tcp_flows();
         flows.clear();
@@ -1691,7 +1637,7 @@ mod tests {
             stale_id,
             FlowRecord {
                 state: Arc::new(FlowState {
-                    last_active_ms: AtomicU64::new(now.saturating_sub((TCP_IDLE_SECS + 5) * 1000)),
+                    last_active_ms: AtomicU64::new(now.saturating_sub(60_000)),
                 }),
                 abort: dummy_handle(),
                 src: dummy_addr(1),
@@ -1710,8 +1656,8 @@ mod tests {
             },
         );
 
-        let evicted = sweep_idle_tcp_flows();
-        assert_eq!(evicted, 1, "only the stale flow should be swept");
+        let evicted = evict_oldest_idle_tcp_flow();
+        assert_eq!(evicted, Some(stale_id), "longest-idle flow should be evicted");
         assert!(flows.get(&stale_id).is_none(), "stale flow removed");
         assert!(flows.get(&fresh_id).is_some(), "fresh flow retained");
 
@@ -1719,11 +1665,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sweep_with_no_flows_is_a_no_op() {
+    async fn evict_oldest_with_no_flows_is_a_no_op() {
         let _guard = flows_test_guard();
         let flows = tcp_flows();
         flows.clear();
-        assert_eq!(sweep_idle_tcp_flows(), 0);
+        assert_eq!(evict_oldest_idle_tcp_flow(), None);
     }
 
     #[tokio::test]
@@ -1780,7 +1726,7 @@ mod tests {
             stale_id,
             FlowRecord {
                 state: Arc::new(FlowState {
-                    last_active_ms: AtomicU64::new(now.saturating_sub((TCP_IDLE_SECS + 5) * 1000)),
+                    last_active_ms: AtomicU64::new(now.saturating_sub(60_000)),
                 }),
                 abort: dummy_handle(),
                 src: dummy_addr(11),
@@ -1816,7 +1762,7 @@ mod tests {
     /// `IdleTracking::touch` never runs and `FlowState.last_active_ms`
     /// stays frozen at its accept-time value. The watchdog must reap
     /// the flow within the configured `dial_deadline_ms` budget rather
-    /// than waiting on the 30 s idle sweeper.
+    /// than waiting on cap-pressure eviction.
     #[tokio::test(start_paused = true)]
     async fn dial_watchdog_fires_when_relay_never_starts() {
         let now = now_ms();
@@ -1893,7 +1839,7 @@ mod tests {
 
     /// `dial_deadline_ms == 0` is the documented opt-out: the watchdog
     /// must never fire, even if the relay never starts. Falls back to
-    /// the 30 s idle sweeper as the only line of defence.
+    /// cap-pressure eviction as the only line of defence.
     #[tokio::test(start_paused = true)]
     async fn dial_watchdog_zero_deadline_opts_out() {
         let now = now_ms();

@@ -4,8 +4,8 @@ import Testing
 /// Covers the `URLSession`-based client pointed at `http://127.0.0.1:9090`.
 /// Tests use `URLProtocolStub` (see `MeowTests/Support/URLProtocolStub.swift`)
 /// to inject canned responses.
-@Suite("MihomoAPI REST client", .tags(.api))
-struct MihomoAPITests {
+@Suite("MeowAPI REST client", .tags(.api))
+struct MeowAPITests {
     @Test(.disabled("blocked on T4.4"))
     func `GET /proxies parses groups and nested proxies`() {
         // stub response: {"proxies": {"Proxy": {"type":"Selector", "all":["a","b"], "now":"a"}, ...}}

@@ -1,4 +1,4 @@
-# ADR-005: Download geoip via in-process mihomo proxy, not via a bootstrap tunnel
+# ADR-005: Download geoip via in-process meow proxy, not via a bootstrap tunnel
 
 - **Status:** Accepted
 - **Date:** 2026-05-19 (proposed), 2026-05-20 (accepted)
@@ -20,7 +20,7 @@ mmdb/asn does the following dance, per
 3. Call `NETunnelProviderManager.connection.startVPNTunnel()`.
 4. Poll for `NEVPNStatus = .connected` (up to 30 s).
 5. `GeoAssetService.ensureFiles` → `URLSession.download` for each
-   `geox-url` — the TUN routes those requests through mihomo through
+   `geox-url` — the TUN routes those requests through meow-rs through
    the first proxy.
 6. `stopVPNTunnel()`, wait for `.disconnected` (up to 10 s).
 7. Restore the real config (via `defer`).
@@ -58,7 +58,7 @@ of the TLS class of failure:
 
 Download the four geo files through a proxy from the user's config
 **without** starting `NEPacketTunnelProvider`, by running a minimal
-mihomo engine in the App process as a local HTTP/SOCKS5 listener and
+meow engine in the App process as a local HTTP/SOCKS5 listener and
 pointing `URLSession` at it.
 
 ## Non-goals
@@ -78,7 +78,7 @@ pointing `URLSession` at it.
 
 ## Why this is feasible — what the FFI already exposes
 
-`MeowCore/include/mihomo_core.h` cleanly separates engine startup
+`MeowCore/include/meow_core.h` cleanly separates engine startup
 from TUN startup:
 
 ```c
@@ -103,7 +103,7 @@ It does **not** require `meow_tun_start` to be called. The
 PacketTunnel extension calls both in sequence; the App can call only
 the first.
 
-Critically, the App target **already links `MihomoCore.xcframework`**
+Critically, the App target **already links `MeowCore.xcframework`**
 (`project.yml:110`, mirror of `project.yml:226` for PacketTunnel) and
 the App already calls FFI symbols today
 (`App/Sources/Services/SubscriptionConverter.swift`,
@@ -114,9 +114,9 @@ delta.
 
 ## Approaches considered
 
-### A. In-process mihomo engine, no TUN (RECOMMENDED)
+### A. In-process meow engine, no TUN (RECOMMENDED)
 
-App process starts a minimal mihomo engine, points URLSession at
+App process starts a minimal meow engine, points URLSession at
 `127.0.0.1:7890` via `connectionProxyDictionary`, downloads through it,
 stops the engine, then asks `NETunnelProviderManager` to start the
 real tunnel with the real config.
@@ -135,8 +135,8 @@ complementary, not a replacement.
 
 ### C. Engine-side download (new FFI)
 
-Add `meow_engine_fetch_url(url, proxy_name, out_path)`. mihomo-rust
-opens an `mihomo-proxy` adapter for `proxy_name`, sends the HTTP
+Add `meow_engine_fetch_url(url, proxy_name, out_path)`. meow-rs
+opens an `meow-proxy` adapter for `proxy_name`, sends the HTTP
 request using its own TLS stack (boring-tls), writes the body to
 `out_path`.
 
@@ -176,7 +176,7 @@ final class BootstrapEngine {
         case alreadyRunning
     }
 
-    /// Bring up an engine-only (no TUN) mihomo against `minimalConfig`,
+    /// Bring up an engine-only (no TUN) meow-rs against `minimalConfig`,
     /// confirmed listening on 127.0.0.1:<port>. Returns the port so
     /// callers can point URLSession at it. Idempotent: returns the
     /// existing port if already running.
@@ -223,7 +223,7 @@ Internals:
   `AppModel.replaySelectedProxies` already uses
   (`App/Sources/AppModel.swift:81-91`); applied to the local
   listener instead of the REST API).
-* `stop()` calls `meow_engine_stop()`; mihomo-rust releases the port
+* `stop()` calls `meow_engine_stop()`; meow-rs releases the port
   synchronously on its side, but BSD socket TIME_WAIT can hold the
   port for up to ~30 s. Random-port choice neutralizes this.
 
@@ -381,7 +381,7 @@ permits the loopback HTTP proxy in the first place.
 | Port held in TIME_WAIT after `meow_engine_stop`. | Random port per bootstrap; no impact on subsequent runs. |
 | `meow_engine_start` returns before the socket is fully bound. | The cold-connect readiness probe pattern from `AppModel.replaySelectedProxies` (`App/Sources/AppModel.swift:81-91`) is the proven mitigation — 100 ms × up-to-10 retries against the loopback listener. |
 | ATS rejects HTTPS-via-HTTP-proxy on loopback. | `NSAllowsLocalNetworking: true` is already in `project.yml`; this is exactly the case it's for. Adding `NSExceptionDomains` is not needed because the destination is `cdn.jsdelivr.net` (publicly HTTPS-capable), not a non-TLS host. |
-| Engine startup logs leak to the app's stderr / device console. | mihomo-rust logging is gated by `log-level: warning` in the minimal config (`MinimalConfigBuilder.swift:37`); accept the warnings, they're useful for diagnostics. |
+| Engine startup logs leak to the app's stderr / device console. | meow-rs logging is gated by `log-level: warning` in the minimal config (`MinimalConfigBuilder.swift:37`); accept the warnings, they're useful for diagnostics. |
 | User force-quits app mid-bootstrap. | Engine is in-process — dies with the app. No external cleanup needed. Contrast with the current bootstrap-tunnel approach where a force-quit between `configURL` overwrite and `defer`-restore leaves a wedged config. |
 
 ## Test plan
@@ -436,7 +436,7 @@ Single PR, no feature flag. Justification:
   URLSession-over-loopback proves to still hit `-1200` for reasons
   outside our control (e.g., iOS Security framework strictness on
   some jsDelivr-served chains), revisit with a `meow_engine_fetch_url`
-  FFI that uses mihomo's TLS stack.
+  FFI that uses meow's TLS stack.
 * **Bundling geo files in the IPA.** Removes the chicken-and-egg
   entirely; ~5–6 MB IPA cost. Deserves its own ADR weighing IPA size
   vs onboarding reliability.
@@ -458,5 +458,5 @@ Single PR, no feature flag. Justification:
   chicken-and-egg in the first place.
 * `App/Sources/AppModel.swift:81-91` — cold-connect readiness probe
   pattern, reused here for "is the loopback listener up yet."
-* `MeowCore/include/mihomo_core.h` — FFI surface that already
+* `MeowCore/include/meow_core.h` — FFI surface that already
   supports engine-without-TUN.

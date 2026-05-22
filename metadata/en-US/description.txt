@@ -1,6 +1,6 @@
-meow is a native iOS port of the Android "meow" client — a full Mihomo proxy engine wrapped in a SwiftUI iOS 26 Liquid Glass UI, with traffic carried by a NetworkExtension packet tunnel provider.
+meow is a native iOS port of the Android "meow" client — a full meow-rs proxy engine wrapped in a SwiftUI iOS 26 Liquid Glass UI, with traffic carried by a NetworkExtension packet tunnel provider.
 
-If you have ever managed a Clash or Mihomo configuration, meow will feel familiar. Subscribe to a YAML config, choose a proxy group, flip the toggle, and your traffic flows through the proxy engine — all on-device, with no cloud component.
+If you have ever managed a Clash or meow-rs configuration, meow will feel familiar. Subscribe to a YAML config, choose a proxy group, flip the toggle, and your traffic flows through the proxy engine — all on-device, with no cloud component.
 
 WHAT IT DOES
 • Clash-protocol YAML subscriptions with auto-refresh and a built-in YAML editor

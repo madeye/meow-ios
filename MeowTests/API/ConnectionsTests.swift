@@ -2,17 +2,17 @@ import Foundation
 @testable import meow_ios
 import Testing
 
-/// Contract for the Connections half of the mihomo REST client (T3.4) — the
+/// Contract for the Connections half of the meow REST client (T3.4) — the
 /// slice consumed by T4.5 Connections Screen.
 ///
 /// The `.disabled("blocked on T4.5")` attribute is deliberate: the REST
-/// methods already exist on `MihomoAPI`, but the full URLProtocolStub
-/// harness for the `@Observable` client (shared with `MihomoAPITests.swift`)
+/// methods already exist on `MeowAPI`, but the full URLProtocolStub
+/// harness for the `@Observable` client (shared with `MeowAPITests.swift`)
 /// lands with T4.5 when the Connections Screen goes through end-to-end
 /// wiring. Until then these tests exist to:
 ///
 ///   1. Compile against today's `Connection` / `ConnectionsResponse`
-///      contract from `App/Sources/Services/MihomoAPITypes.swift` — if any
+///      contract from `App/Sources/Services/MeowAPITypes.swift` — if any
 ///      field gets renamed or retyped, this file fails to build (the point
 ///      of skeleton tests, per team-lead).
 ///   2. Pin the endpoint list T4.5 must satisfy: polling `/connections`,
@@ -20,15 +20,15 @@ import Testing
 ///      and HTTP-error handling.
 ///
 /// Fixture source: `URLProtocolStub` in `MeowTests/Support/URLProtocolStub.swift`.
-@Suite("MihomoAPI connections endpoints", .tags(.api))
+@Suite("MeowAPI connections endpoints", .tags(.api))
 struct ConnectionsTests {
     /// Compile-time anchor: if any of the shapes below drifts, this file
     /// fails to build. That is the point of skeleton tests.
-    private static func _contractAnchor(api: MihomoAPI) async throws {
+    private static func _contractAnchor(api: MeowAPI) async throws {
         _ = ConnectionsResponse.self
         _ = Connection.self
         _ = Connection.Metadata.self
-        _ = MihomoAPIError.http(status: 0)
+        _ = MeowAPIError.http(status: 0)
         _ = try await api.getConnections()
         try await api.closeConnection(id: "")
         try await api.closeAllConnections()
@@ -38,7 +38,7 @@ struct ConnectionsTests {
         .disabled("blocked on T4.5"),
     )
     func `GET /connections decodes ConnectionsResponse with non-empty list`() {
-        // Expected shape (see MihomoAPITypes.swift):
+        // Expected shape (see MeowAPITypes.swift):
         //   ConnectionsResponse { downloadTotal, uploadTotal, connections: [Connection]? }
         //   Connection { id, metadata: Metadata, upload, download, start, chains, rule, rulePayload }
         //
@@ -53,7 +53,7 @@ struct ConnectionsTests {
         .disabled("blocked on T4.5"),
     )
     func `GET /connections decodes empty-list payload (null connections)`() {
-        // mihomo emits `"connections": null` when idle. Client must surface
+        // meow emits `"connections": null` when idle. Client must surface
         // `nil` (or `[]`) without throwing — `ConnectionsView` treats either
         // as "empty state" via `resp.connections ?? []`.
         Issue.record("ConnectionsTests.getConnectionsEmptyList not implemented — skeleton gated on T4.5")
@@ -83,9 +83,9 @@ struct ConnectionsTests {
     @Test(
         .disabled("blocked on T4.5"),
     )
-    func `non-2xx HTTP status surfaces as MihomoAPIError.http`() {
+    func `non-2xx HTTP status surfaces as MeowAPIError.http`() {
         // Stub `/connections` with 500 status; assert the thrown error
-        // matches `MihomoAPIError.http(status: 500)`. Baseline behavior for
+        // matches `MeowAPIError.http(status: 500)`. Baseline behavior for
         // the error overlay the Connections Screen will add during T4.5.
         Issue.record("ConnectionsTests.httpErrorSurfaces not implemented — skeleton gated on T4.5")
     }

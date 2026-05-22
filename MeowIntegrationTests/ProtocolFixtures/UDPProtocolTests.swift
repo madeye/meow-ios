@@ -12,7 +12,7 @@ import XCTest
 ///
 /// All tests in this suite carry `.disabled("blocked on T2.9")`:
 /// PRD v1.3 / PROJECT_PLAN.md T2.9 defers non-DNS UDP forwarding to
-/// post-M1.5. Until `mihomo_tunnel::udp::handle_udp` is wired to
+/// post-M1.5. Until `meow_tunnel::udp::handle_udp` is wired to
 /// netstack-smoltcp's UDP socket surface, the engine cannot send or
 /// receive through these three adapters end-to-end — even though the
 /// fixture servers stand up cleanly and the Clash subscription wires

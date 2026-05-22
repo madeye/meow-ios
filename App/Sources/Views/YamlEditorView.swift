@@ -54,7 +54,7 @@ struct YamlEditorView: View {
         saving = true
         defer { saving = false }
         do {
-            try MihomoConfigValidator.validate(text)
+            try MeowConfigValidator.validate(text)
             profile.yamlBackup = profile.yamlContent
             profile.yamlContent = text
             try service.writeActiveConfig(profile)
@@ -81,7 +81,7 @@ struct YamlEditorView: View {
     }
 }
 
-enum MihomoConfigValidator {
+enum MeowConfigValidator {
     /// Validates a YAML config via the Rust FFI (`meow_engine_validate_config`)
     /// which runs the same `load_config_from_str` path the engine uses at
     /// start time.
@@ -91,12 +91,12 @@ enum MihomoConfigValidator {
         }
         if rc != 0 {
             let msg = meow_core_last_error().map { String(cString: $0) } ?? "invalid config"
-            throw MihomoConfigError.invalid(msg)
+            throw MeowConfigError.invalid(msg)
         }
     }
 }
 
-enum MihomoConfigError: LocalizedError {
+enum MeowConfigError: LocalizedError {
     case invalid(String)
     var errorDescription: String? {
         let fallback = String(

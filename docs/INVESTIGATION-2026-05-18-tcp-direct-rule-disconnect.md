@@ -3,7 +3,7 @@
 **Date:** 2026-05-18
 **Investigator:** Claude Opus 4.7 driven by max.c.lv@gmail.com
 **Tool chain:** Source-only audit of the live `claude/fix-tcp-flow-disconnect-ezNma`
-branch + cross-reference against `mihomo-rust` v0.7.6 and the patched
+branch + cross-reference against `meow-rs` v0.7.6 and the patched
 `netstack-smoltcp` (`feat/aggressive-recycle`). No new device reproduction
 was run for this pass.
 
@@ -16,17 +16,17 @@ with the app, but no upstream bytes ever appear in the egress, across all
 DIRECT destinations roughly equally and with no obvious trigger (no path
 change, no tunnel restart, no traffic burst).
 
-This shape matches **a stalled outbound dial inside `mihomo-proxy`'s
+This shape matches **a stalled outbound dial inside `meow-proxy`'s
 `DirectAdapter::dial_tcp`**, which awaits `tokio::net::TcpStream::connect`
 with **no timeout at any layer** of the pipeline:
 
-* `mihomo-proxy/src/direct.rs::DirectAdapter::dial_tcp` — bare `.await` on
+* `meow-proxy/src/direct.rs::DirectAdapter::dial_tcp` — bare `.await` on
   `connect_with_mark` (the `routing_mark` arm is `#[cfg(target_os =
   "linux")]`; iOS falls through to plain `TcpStream::connect`).
-* `mihomo-tunnel/src/tcp.rs::handle_tcp` — bare `.await` on
+* `meow-tunnel/src/tcp.rs::handle_tcp` — bare `.await` on
   `proxy.dial_tcp(&metadata)`.
-* `mihomo-ios-ffi/src/tun2socks.rs::dispatch_tcp` — bare `.await` on
-  `mihomo_tunnel::tcp::handle_tcp` (plus the post-FIN 250 ms grace added
+* `meow-ios-ffi/src/tun2socks.rs::dispatch_tcp` — bare `.await` on
+  `meow_tunnel::tcp::handle_tcp` (plus the post-FIN 250 ms grace added
   in `5685553`, which is post-connect and does not bound the dial).
 
 A stalled dial holds its `tcp_accept_sem` permit indefinitely and the
@@ -38,7 +38,7 @@ on schedule, but it compares against the freshness-on-create stamp from
 the accept loop (`now_ms()` at `tun2socks.rs:464`); each app-side
 retransmit (TLS ClientHello, packet retries) goes through netstack but
 **not through the IdleTracking instance** — IdleTracking sits on the
-mihomo side of the relay, downstream of `handle_tcp`. So as long as the
+meow-rs side of the relay, downstream of `handle_tcp`. So as long as the
 relay never starts, the IdleTracking timestamp never advances *and* never
 gets re-stamped by the retransmits — the flow does eventually get reaped
 30 s after accept, but from the app's perspective that 30 s is a
@@ -77,7 +77,7 @@ This combination rules out three plausible-looking candidates:
   `dst_ip = 28.x.x.x` when reverse-lookup fails; `DirectAdapter::
   resolve_target` step 1 dials `dst_ip` directly without re-validating).**
   Would correlate with specific hosts whose entries were evicted, not
-  *all* DIRECT destinations equally. The mihomo resolver's fake-IP CIDR
+  *all* DIRECT destinations equally. The meow-rs resolver's fake-IP CIDR
   is `28.0.0.0/8` (16M IPs); pool wraparound is essentially impossible
   under normal traffic.
 
@@ -106,12 +106,12 @@ each step lives at:
    (`tun2socks.rs:463-480`).
 7. `dispatch_tcp` (`tun2socks.rs:712`) builds `Metadata` with
    `dst_ip = Some(dst.ip())`, `host = ""`, wraps the netstack stream in
-   `IdleTracking`, and awaits `mihomo_tunnel::tcp::handle_tcp`
+   `IdleTracking`, and awaits `meow_tunnel::tcp::handle_tcp`
    (`tun2socks.rs:769`).
-8. `handle_tcp` (mihomo-tunnel `src/tcp.rs`) calls `pre_handle_metadata`
+8. `handle_tcp` (meow-tunnel `src/tcp.rs`) calls `pre_handle_metadata`
    (reverses fake-IP → host), `pre_resolve`, `resolve_proxy` (rule
    match), then `proxy.dial_tcp(&metadata)`.
-9. `DirectAdapter::dial_tcp` (mihomo-proxy `src/direct.rs`) calls
+9. `DirectAdapter::dial_tcp` (meow-proxy `src/direct.rs`) calls
    `resolve_target` (which short-circuits on `metadata.dst_ip` if still
    set, otherwise calls `resolver.resolve_ip(&host)`), then
    `connect_with_mark(dest, self.routing_mark)`.
@@ -178,10 +178,10 @@ dropped the flow, or the upstream silently held the connection. This is
 the symptom that maps directly to 'page hangs' on-device." — is the same
 shape as today's report.
 
-The harness was deleted in `a8351c5` ("delegate fake-IP DNS to mihomo's
+The harness was deleted in `a8351c5` ("delegate fake-IP DNS to meow's
 resolver in-process") along with the FFI's own fake-IP module. The
 **DNS-side** findings of the diagnostic were addressed in `37aa64a`
-(CN-only nameserver pool) and `a8351c5` (resolver in mihomo). The
+(CN-only nameserver pool) and `a8351c5` (resolver in meow-rs). The
 **relay-side** finding ("dial succeeded but no bytes flowed") was never
 specifically attributed — the diagnostic listed three candidates and
 moved on. The current investigation re-opens that question and points
@@ -223,7 +223,7 @@ would have caught this without needing operator reports.
 
 ### 1. FFI-side dial deadline in `dispatch_tcp`
 
-Wrap `mihomo_tunnel::tcp::handle_tcp` in a first-byte deadline. If
+Wrap `meow_tunnel::tcp::handle_tcp` in a first-byte deadline. If
 `state.last_active_ms` (touched on the first successful `poll_read` /
 `poll_write` of the netstack stream by `IdleTracking`) has not advanced
 within N seconds of accept, abort the future. The relay's first
@@ -236,7 +236,7 @@ Sketch (in `dispatch_tcp` after the existing `let local_eof = …`):
 let accepted_at = now_ms();
 let dial_deadline_ms = DIAL_DEADLINE.load(Ordering::Relaxed); // e.g. 10_000
 
-let fut = mihomo_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
+let fut = meow_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
 tokio::pin!(fut);
 
 let dial_watchdog = async {
@@ -264,7 +264,7 @@ tokio::select! {
                 "tun2socks: dial deadline exceeded for {} -> {} after {} ms",
                 src, dst, dial_deadline_ms,
             );
-            return; // drop fut → mihomo session cleanup, accept_sem permit released
+            return; // drop fut → meow-rs session cleanup, accept_sem permit released
         }
     }
 }
@@ -277,7 +277,7 @@ ms`, analogous to `set_accept_cap`) leaves headroom for high-latency
 cellular environments without recompiling.
 
 Pros:
-- Lives entirely in the FFI; no upstream `mihomo-rust` change required.
+- Lives entirely in the FFI; no upstream `meow-rs` change required.
 - Releases the `tcp_accept_sem` permit promptly so the 32-cap doesn't
   pile up stuck flows.
 - App sees RST in 10 s instead of 30 s — recoverable from the app's
@@ -291,13 +291,13 @@ Cons:
 - Bandaid: doesn't fix the underlying `TcpStream::connect` indefinite
   hang, just reaps it faster.
 
-### 2. Upstream: connect timeout in `mihomo-proxy::DirectAdapter`
+### 2. Upstream: connect timeout in `meow-proxy::DirectAdapter`
 
-The proper fix is in `madeye/mihomo-rust`. Two adjacent options:
+The proper fix is in `madeye/meow-rs`. Two adjacent options:
 
 a. **Wrap `connect_with_mark` in `tokio::time::timeout`.** Simplest
    change; flows back to all downstream consumers of the crate, not
-   just the iOS FFI. Threshold tunable via `Adapter` config (mihomo's
+   just the iOS FFI. Threshold tunable via `Adapter` config (meow's
    YAML `connect-timeout:` field already exists on some adapter types
    — extending it to `DirectAdapter` is the natural slot).
 
@@ -314,31 +314,31 @@ b. **Use `TcpSocket::connect` with explicit interface binding
    reliably under iOS routing transients).
 
    The interface index needs to be re-read on every path change and
-   passed from Swift down through the FFI into mihomo. Plumbing-heavy
+   passed from Swift down through the FFI into meow-rs. Plumbing-heavy
    but mechanical.
 
 Pros:
-- Fixes the issue at the source for all mihomo consumers.
+- Fixes the issue at the source for all meow-rs consumers.
 - (b) eliminates the iOS routing-cache failure mode entirely rather
   than reaping it.
 
 Cons:
 - Requires an upstream PR + version bump. Multi-week lag.
 - (b) is a non-trivial cross-cutting change (Swift path monitor →
-  IPC → FFI → mihomo) that touches roughly six files.
+  IPC → FFI → meow-rs) that touches roughly six files.
 
 ### 3. Diagnostic harness — restore `xhs_e2e.rs` as a regression repro
 
 The `xhs_e2e.rs` test was the right shape but was deleted alongside the
 FFI-side fake-IP module in `a8351c5`. Recreating it (or a successor
-under the now-mihomo-owned DNS path) gives:
+under the now-meow-owned DNS path) gives:
 
 - A repeatable Rust-only reproduction of "DNS resolves, SYN-ACK comes
   back, no upstream data within Ns" without needing a phone in hand.
 - A cargo-test gate that fails when a future change regresses the
   dial-timeout backstop.
 - A platform for instrumented attribution: tracing-subscriber +
-  `RUST_LOG=mihomo_proxy::direct=trace` should expose exactly which
+  `RUST_LOG=meow_proxy::direct=trace` should expose exactly which
   `connect()` hangs (logging dest IP + elapsed before timeout fires).
 
 Specifically:
@@ -364,7 +364,7 @@ shift is "app sees RST in 10 s instead of 30 s on the flows that were
 already hanging." The accumulation-of-stuck-flows path is closed
 immediately.
 
-(2a) should be filed against `madeye/mihomo-rust` as soon as (1) lands
+(2a) should be filed against `madeye/meow-rs` as soon as (1) lands
 — the upstream timeout is the durable fix that benefits all
 consumers, and the FFI deadline becomes a defense-in-depth backstop
 rather than the only line.
@@ -390,11 +390,11 @@ should land independent of (1)/(2)'s timing.
   `tokio-console` or `tokio::runtime::Handle::metrics()` sample from
   a long-running session would settle whether the 2-worker runtime is
   ever wedged on blocking work. If a thread blocks (e.g., on a
-  synchronous DNS call somewhere in mihomo), every async task is
+  synchronous DNS call somewhere in meow-rs), every async task is
   stalled — which would also present as "DIRECT flow hangs" but with
   proxied flows hanging too. Worth a 30-minute device-side capture
   before assuming the hypothesis above is exhaustive.
-* **Does `pre_resolve` (mihomo-tunnel, called inside `handle_tcp`)
+* **Does `pre_resolve` (meow-tunnel, called inside `handle_tcp`)
   ever block synchronously?** If `resolver.resolve_ip` is invoked
   with the wrong runtime context (e.g., inside a `block_on` somewhere
   upstream), it could be the actual stall site rather than `connect`.

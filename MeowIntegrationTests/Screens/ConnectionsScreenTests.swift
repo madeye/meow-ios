@@ -3,13 +3,13 @@ import Foundation
 import Testing
 
 /// End-to-end contract for `ConnectionsView` (T4.5) — drives the view
-/// against a stubbed `MihomoAPI` and asserts polling cadence, swipe-to-close
+/// against a stubbed `MeowAPI` and asserts polling cadence, swipe-to-close
 /// dispatch, Close-All dispatch, and search-filter behavior.
 ///
 /// `.disabled("blocked on T4.5")` — this suite depends on two things the
 /// T4.5 Connections Screen task delivers:
 ///
-///   1. A hosted-view harness that can inject an `@Environment(MihomoAPI)`
+///   1. A hosted-view harness that can inject an `@Environment(MeowAPI)`
 ///      into `ConnectionsView` and observe @State changes. The shared
 ///      harness lands with T4.5 (the Traffic / Subscriptions screens will
 ///      reuse it), so standing up a one-off fixture here would be churn.
@@ -19,16 +19,16 @@ import Testing
 ///      identifiers get wired for nightly E2E selection.
 ///
 /// The skeletons here compile against `Connection` / `ConnectionsResponse`
-/// (`App/Sources/Services/MihomoAPITypes.swift`) so contract drift breaks
+/// (`App/Sources/Services/MeowAPITypes.swift`) so contract drift breaks
 /// the build before it reaches a reviewer.
 ///
-/// `.serialized` — the MihomoAPI polling loop is long-lived; overlapping
+/// `.serialized` — the MeowAPI polling loop is long-lived; overlapping
 /// tests against the same stub registry race on shared state.
 @Suite("ConnectionsView — T4.5 screen contract", .tags(.screen), .serialized)
 struct ConnectionsScreenTests {
     /// Compile-time anchor — drift in `Connection` / `ConnectionsResponse`
     /// or the close-connection API surface breaks this file.
-    private static func _contractAnchor(api: MihomoAPI) async throws {
+    private static func _contractAnchor(api: MeowAPI) async throws {
         _ = Connection.self
         _ = ConnectionsResponse.self
         _ = try await api.getConnections()

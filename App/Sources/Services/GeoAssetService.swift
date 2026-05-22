@@ -4,16 +4,16 @@ import os
 import Yams
 
 /// Downloads the GeoIP/GeoSite/ASN MMDB databases declared in the effective
-/// config's `geox-url:` block into `AppGroup.mihomoConfigDir` so mihomo-rust
-/// finds them on disk at engine_start. mihomo-rust does NOT itself honor
+/// config's `geox-url:` block into `AppGroup.meowConfigDir` so meow-rs
+/// finds them on disk at engine_start. meow-rs does NOT itself honor
 /// `geox-url` for lazy fetching — the URL block tells the app where to
 /// download from, and the app stages the files before the tunnel comes up.
 ///
-/// Each URL maps to `<mihomoConfigDir>/<basename(url)>`. Files that already
+/// Each URL maps to `<meowConfigDir>/<basename(url)>`. Files that already
 /// exist with non-zero size are skipped (no HEAD revalidation — refresh
 /// happens by deleting the file). Writes are atomic: download lands in a
 /// `.partial` sibling and is renamed on success so a mid-transfer crash
-/// never leaves a corrupted file for mihomo-rust to load.
+/// never leaves a corrupted file for meow-rs to load.
 enum GeoAssetService {
     private static let log = Logger(subsystem: "io.github.madeye.meow", category: "geo-asset")
 
@@ -32,14 +32,14 @@ enum GeoAssetService {
     }
 
     /// True when every URL in the user profile's `geox-url:` block already
-    /// has a non-empty file in `mihomoConfigDir`. Used to decide whether the
+    /// has a non-empty file in `meowConfigDir`. Used to decide whether the
     /// connect flow needs the proxy-bootstrap detour or can go straight to
     /// `startVPNTunnel` with the production config.
     static func allFilesPresent() -> Bool {
         let urls = geoXURLs(prefs: Preferences.load(from: AppGroup.defaults))
         guard !urls.isEmpty else { return true }
         for (_, source) in urls {
-            let destination = AppGroup.mihomoConfigDir.appending(path: source.lastPathComponent)
+            let destination = AppGroup.meowConfigDir.appending(path: source.lastPathComponent)
             let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? 0
             if size <= 0 { return false }
         }
@@ -59,12 +59,12 @@ enum GeoAssetService {
         let urls = geoXURLs(prefs: prefs)
         guard !urls.isEmpty else { return }
 
-        try FileManager.default.createDirectory(at: AppGroup.mihomoConfigDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: AppGroup.meowConfigDir, withIntermediateDirectories: true)
 
         let userOverridesGeoXURL = userProfileHasGeoXURL()
 
         for (name, sourceURL) in urls {
-            let destination = AppGroup.mihomoConfigDir.appending(path: sourceURL.lastPathComponent)
+            let destination = AppGroup.meowConfigDir.appending(path: sourceURL.lastPathComponent)
             let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? 0
             if size > 0 { continue }
 

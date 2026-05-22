@@ -2,7 +2,7 @@
 # Server hostnames, passwords, UUIDs, plugin hosts, and DNS servers
 # replaced with fake/public values. Rules filtered to DOMAIN/IP-CIDR
 # only so the parser does not need GeoIP or rule-provider assets.
-# Purpose: regression test that mihomo-config is built with the `ss`
+# Purpose: regression test that meow-config is built with the `ss`
 # feature enabled. If any of the 141 ss proxies stop parsing, groups
 # that reference them collapse, which is the failure mode users saw.
 # Asserts in engine::config_parse_tests depend on these counts.

@@ -50,7 +50,7 @@ Options:
   --team <team-id>               Override DEVELOPMENT_TEAM for signing.
   --device <device-id>           Build for a specific connected device.
   --install                      Install the built .app onto the device from --device.
-  --skip-rust-build              Skip rebuilding MihomoCore.xcframework first.
+  --skip-rust-build              Skip rebuilding MeowCore.xcframework first.
   --no-provisioning-updates      Do not pass -allowProvisioningUpdates to xcodebuild.
   --clean                        Remove repo-local DerivedData and SourcePackages first.
   -h, --help                     Show this help text.

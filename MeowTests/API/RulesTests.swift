@@ -5,18 +5,18 @@ import Testing
 /// Contract for `GET /rules` — consumed by T4.6 Rules Screen.
 ///
 /// `.disabled("blocked on T4.6")` until the URLProtocolStub harness for
-/// the `@Observable` `MihomoAPI` is shared across API suites (lands with
+/// the `@Observable` `MeowAPI` is shared across API suites (lands with
 /// the T4.6 Rules Screen work). Today these skeletons serve as a
 /// compile-time contract check against `Rule` / `RulesResponse` in
-/// `App/Sources/Services/MihomoAPITypes.swift`: if either shape drifts,
+/// `App/Sources/Services/MeowAPITypes.swift`: if either shape drifts,
 /// this file fails to build.
 ///
 /// Fixture source: `URLProtocolStub` in `MeowTests/Support/URLProtocolStub.swift`.
-@Suite("MihomoAPI rules endpoint", .tags(.api))
+@Suite("MeowAPI rules endpoint", .tags(.api))
 struct RulesTests {
     /// Compile-time anchor — drift in `Rule` / `RulesResponse` or in the
     /// `getRules()` signature breaks this file.
-    private static func _contractAnchor(api: MihomoAPI) async throws {
+    private static func _contractAnchor(api: MeowAPI) async throws {
         _ = Rule.self
         _ = RulesResponse.self
         _ = try await api.getRules()
@@ -26,7 +26,7 @@ struct RulesTests {
         .disabled("blocked on T4.6"),
     )
     func `GET /rules parses Rule array with type/payload/proxy triples`() {
-        // Expected shape (MihomoAPITypes.swift):
+        // Expected shape (MeowAPITypes.swift):
         //   RulesResponse { rules: [Rule] }
         //   Rule { type, payload, proxy, id: "\(type)\(payload)\(proxy)" }
         //
@@ -50,7 +50,7 @@ struct RulesTests {
     @Test(
         .disabled("blocked on T4.6"),
     )
-    func `non-2xx HTTP status surfaces as MihomoAPIError.http`() {
+    func `non-2xx HTTP status surfaces as MeowAPIError.http`() {
         // Stub `/rules` with 503; the `.overlay` showing error text in
         // RulesView depends on this being a throwing path rather than a
         // silent empty-list.
@@ -61,7 +61,7 @@ struct RulesTests {
         .disabled("blocked on T4.6"),
     )
     func `unknown rule type string preserves raw value (no enum coercion)`() {
-        // mihomo adds new rule kinds upstream faster than we ship; `Rule.type`
+        // meow adds new rule kinds upstream faster than we ship; `Rule.type`
         // is `String` not an enum so new kinds pass through unchanged.
         // Guards against a well-meaning enum refactor that would start
         // rejecting valid server payloads.

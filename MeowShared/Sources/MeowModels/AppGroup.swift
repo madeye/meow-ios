@@ -33,10 +33,10 @@ public enum AppGroup {
     }
 
     /// Directory the engine treats as its "config home": mirrors the layout
-    /// `mihomo-config` expects under `$XDG_CONFIG_HOME/mihomo`, which the FFI
+    /// `meow-config` expects under `$XDG_CONFIG_HOME/meow`, which the FFI
     /// layer points at `containerURL` via `meow_core_set_home_dir`.
-    public static var mihomoConfigDir: URL {
-        containerURL.appending(path: "mihomo", directoryHint: .isDirectory)
+    public static var meowConfigDir: URL {
+        containerURL.appending(path: "meow", directoryHint: .isDirectory)
     }
 
     /// Scratch directory for the app-process bootstrap engine's transient

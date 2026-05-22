@@ -18,7 +18,7 @@ provisioned test runner.
 
 - `VPNLifecycle/` — `NETunnelProviderManager` lifecycle, crash recovery,
   sleep/wake
-- `EngineIntegration/` — Rust tun2socks + Go mihomo engine coexistence,
+- `EngineIntegration/` — Rust tun2socks + Go meow engine coexistence,
   REST controller reachability, DoH bootstrap
 - `IPC/` — App↔Extension command and state round-trips, throughput, races
 - `SwiftData/` — concurrent profile access, large DailyTraffic queries,

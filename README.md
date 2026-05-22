@@ -1,6 +1,6 @@
 # meow-ios
 
-Native iOS port of the Android "meow" VPN/proxy client. Full mihomo proxy engine
+Native iOS port of the Android "meow" VPN/proxy client. Full meow-rs proxy engine
 wrapped in a SwiftUI material UI with a NetworkExtension packet
 tunnel provider.
 
@@ -31,7 +31,7 @@ App/              SwiftUI app target
 PacketTunnel/     NEPacketTunnelProvider extension target
 MeowShared/       Swift package shared between app and extension
 MeowCore/         Unified C header + XCFramework for the Rust native lib
-core/rust/        mihomo-ios-ffi (mihomo-rust engine + tun2socks + DoH)
+core/rust/        meow-ios-ffi (meow-rs engine + tun2socks + DoH)
 scripts/          Build scripts for the native lib and Xcode project
 docs/             PRD, project plan, build docs
 ```
@@ -50,7 +50,7 @@ The native library is built separately and wrapped as a single XCFramework
 that both the app and extension link against:
 
 ```sh
-./scripts/build-rust.sh   # → MeowCore/Frameworks/MihomoCore.xcframework
+./scripts/build-rust.sh   # → MeowCore/Frameworks/MeowCore.xcframework
 ```
 
 See [`docs/BUILD.md`](docs/BUILD.md) for toolchain requirements.
