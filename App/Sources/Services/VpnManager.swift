@@ -26,7 +26,6 @@ final class VpnManager {
     }
 
     private var manager: NETunnelProviderManager?
-    private let bootstrapEngine = BootstrapEngine()
     // nonisolated(unsafe): written only from attach() on MainActor, read from
     // deinit (which is nonisolated). NotificationCenter.removeObserver is
     // thread-safe, so a torn read here is harmless.
@@ -55,34 +54,15 @@ final class VpnManager {
     }
 
     /// Kick off a connect. Caller should have already written the selected
-    /// profile YAML into the App Group container.
-    ///
-    /// When GeoIP/ASN files are missing, runs an in-process meow engine
-    /// (no TUN) so URLSession can download through the user's first proxy
-    /// over `127.0.0.1:<port>` — see ADR-005. The `.preparing` badge covers
-    /// the engine boot + download window; `startVPNTunnel` only fires once
-    /// the files are on disk, so the tunnel only transitions
-    /// `.disconnected → .connecting → .connected` once.
+    /// profile YAML into the App Group container. Missing GeoIP/ASN/geosite
+    /// DBs are now downloaded inside the Rust engine on first boot (routed
+    /// through the user's first proxy via `internal_http`), so the app
+    /// process does not run a pre-flight engine of its own.
     func connect() async {
         lastError = nil
         if manager == nil { await refresh() }
         guard let manager else { return }
-        stage = .preparing
         do {
-            if !GeoAssetService.allFilesPresent() {
-                let port = try await bootstrapEngine.start()
-                do {
-                    let proxy = URL(string: "http://127.0.0.1:\(port)")
-                    try await GeoAssetService.ensureFiles(
-                        prefs: Preferences.load(from: AppGroup.defaults),
-                        throughProxy: proxy,
-                    )
-                } catch {
-                    await bootstrapEngine.stop()
-                    throw error
-                }
-                await bootstrapEngine.stop()
-            }
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription

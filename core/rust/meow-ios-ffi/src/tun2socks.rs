@@ -191,8 +191,7 @@ pub fn dial_deadline_ms() -> u64 {
 // [`set_udp_first_reply_deadline_ms`] / `meow_tun_set_udp_first_reply_deadline_ms`;
 // set to 0 to opt out.
 const UDP_FIRST_REPLY_DEADLINE_MS_DEFAULT: u64 = 10_000;
-static UDP_FIRST_REPLY_DEADLINE_MS: AtomicU64 =
-    AtomicU64::new(UDP_FIRST_REPLY_DEADLINE_MS_DEFAULT);
+static UDP_FIRST_REPLY_DEADLINE_MS: AtomicU64 = AtomicU64::new(UDP_FIRST_REPLY_DEADLINE_MS_DEFAULT);
 
 /// Set the per-UDP-session first-reply deadline, in milliseconds. `0`
 /// disables the deadline (legacy unbounded behaviour). Returns true
@@ -411,8 +410,8 @@ async fn run_tun2socks(
 ) -> io::Result<()> {
     logging::bridge_log("tun2socks: building lwip netstack");
 
-    let (mut stack, mut tcp_listener, udp_socket) = lwip::NetStack::with_buffer_size(1024, 256)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let (mut stack, mut tcp_listener, udp_socket) =
+        lwip::NetStack::with_buffer_size(1024, 256).map_err(|e| io::Error::other(e.to_string()))?;
 
     let (udp_write, mut udp_read) = udp_socket.split();
 
@@ -613,46 +612,49 @@ async fn run_tun2socks(
                     };
                     let qtype = parse_dns_qtype(parsed.payload);
 
-                let response_payload = if matches!(qtype, Some(1) | Some(28)) {
-                    let Some(tunnel) = crate::engine::tunnel() else {
-                        trace!("tun2socks: UDP/53 A/AAAA dropped — engine not yet running");
-                        return;
+                    let response_payload = if matches!(qtype, Some(1) | Some(28)) {
+                        let Some(tunnel) = crate::engine::tunnel() else {
+                            trace!("tun2socks: UDP/53 A/AAAA dropped — engine not yet running");
+                            return;
+                        };
+                        let resolver = tunnel.resolver().clone();
+                        match DnsServer::handle_query(parsed.payload, &resolver).await {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                trace!("tun2socks: DnsServer::handle_query error: {}", e);
+                                return;
+                            }
+                        }
+                    } else {
+                        // Non-A/AAAA: forward verbatim to the upstream pool,
+                        // first response wins. Falls through to NXDOMAIN-shaped
+                        // dropped reply if every upstream times out — better
+                        // than meow's blanket NXDOMAIN, which actively
+                        // misleads the client.
+                        match forward_dns_to_upstream(
+                            parsed.payload,
+                            DNS_PASSTHROUGH_UPSTREAMS,
+                            DNS_PASSTHROUGH_TIMEOUT,
+                        )
+                        .await
+                        {
+                            Some(bytes) => bytes,
+                            None => {
+                                trace!("tun2socks: DNS passthrough timed out (qtype={:?})", qtype);
+                                return;
+                            }
+                        }
                     };
-                    let resolver = tunnel.resolver().clone();
-                    match DnsServer::handle_query(parsed.payload, &resolver).await {
-                        Ok(bytes) => bytes,
-                        Err(e) => {
-                            trace!("tun2socks: DnsServer::handle_query error: {}", e);
-                            return;
-                        }
-                    }
-                } else {
-                    // Non-A/AAAA: forward verbatim to the upstream pool,
-                    // first response wins. Falls through to NXDOMAIN-shaped
-                    // dropped reply if every upstream times out — better
-                    // than meow's blanket NXDOMAIN, which actively
-                    // misleads the client.
-                    match forward_dns_to_upstream(
-                        parsed.payload,
-                        DNS_PASSTHROUGH_UPSTREAMS,
-                        DNS_PASSTHROUGH_TIMEOUT,
-                    )
-                    .await
-                    {
-                        Some(bytes) => bytes,
-                        None => {
-                            trace!("tun2socks: DNS passthrough timed out (qtype={:?})", qtype);
-                            return;
-                        }
-                    }
-                };
                     let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
                         return;
                     };
                     let _ = egress.send(reply_pkt).await;
                 };
                 if tokio::time::timeout(DNS_TASK_TIMEOUT, work).await.is_err() {
-                    trace!("tun2socks: DNS task exceeded {:?}, aborting", DNS_TASK_TIMEOUT);
+                    trace!(
+                        "tun2socks: DNS task exceeded {:?}, aborting",
+                        DNS_TASK_TIMEOUT
+                    );
                 }
             });
             continue;
@@ -833,11 +835,7 @@ async fn dispatch_tcp(
 /// standing up the engine, netstack, and tcp-listener plumbing the
 /// real call site requires. See the `dial_watchdog_*` tests at the
 /// bottom of this file for the contract pinned in CI.
-async fn run_dial_watchdog(
-    state: Arc<FlowState>,
-    accepted_at_ms: u64,
-    dial_deadline_ms: u64,
-) {
+async fn run_dial_watchdog(state: Arc<FlowState>, accepted_at_ms: u64, dial_deadline_ms: u64) {
     if dial_deadline_ms == 0 {
         std::future::pending::<()>().await;
         return;
@@ -1657,7 +1655,11 @@ mod tests {
         );
 
         let evicted = evict_oldest_idle_tcp_flow();
-        assert_eq!(evicted, Some(stale_id), "longest-idle flow should be evicted");
+        assert_eq!(
+            evicted,
+            Some(stale_id),
+            "longest-idle flow should be evicted"
+        );
         assert!(flows.get(&stale_id).is_none(), "stale flow removed");
         assert!(flows.get(&fresh_id).is_some(), "fresh flow retained");
 

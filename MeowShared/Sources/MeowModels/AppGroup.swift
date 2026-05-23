@@ -39,13 +39,6 @@ public enum AppGroup {
         containerURL.appending(path: "meow", directoryHint: .isDirectory)
     }
 
-    /// Scratch directory for the app-process bootstrap engine's transient
-    /// minimal YAML. Kept separate from `configURL` so a crash mid-bootstrap
-    /// can never leave the user's real profile wedged on the minimal config.
-    public static var bootstrapConfigDir: URL {
-        containerURL.appending(path: "bootstrap", directoryHint: .isDirectory)
-    }
-
     /// UserDefaults suite shared between app and extension. Force-unwrap is
     /// safe once entitlements are wired — missing suite indicates a config bug
     /// that should fail loudly.

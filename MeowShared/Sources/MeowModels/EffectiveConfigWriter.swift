@@ -33,38 +33,6 @@ public enum EffectiveConfigWriter {
         "asn": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb",
     ]
 
-    /// Per-asset mirror lists walked when the primary `defaultGeoXURL` host
-    /// fails with a recoverable URLError. Order matters — primary first, then
-    /// jsDelivr alternates, then raw GitHub, then a GH-proxy fallback. If the
-    /// user's profile ships its own `geox-url:`, mirrors are NOT consulted —
-    /// the user's intent wins.
-    public static let geoXMirrors: [String: [String]] = [
-        "geoip": [
-            "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
-            "https://gcore.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
-            "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geoip.metadb",
-            "https://ghproxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geoip.metadb",
-        ],
-        "mmdb": [
-            "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
-            "https://gcore.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb",
-            "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/country.mmdb",
-            "https://ghproxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/country.mmdb",
-        ],
-        "geosite": [
-            "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
-            "https://gcore.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
-            "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geosite.dat",
-            "https://ghproxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geosite.dat",
-        ],
-        "asn": [
-            "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb",
-            "https://gcore.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb",
-            "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/GeoLite2-ASN.mmdb",
-            "https://ghproxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/GeoLite2-ASN.mmdb",
-        ],
-    ]
-
     public static func write(
         sourceYAML: String,
         to destination: URL,

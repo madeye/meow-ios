@@ -1,0 +1,13 @@
+[package]
+name = "geosite-mrs-builder"
+version = "0.1.0"
+edition = "2021"
+description = "Build-time tool: fetch V2Ray geosite.dat, convert to meow-rs geosite.mrs for bundling in the iOS app."
+publish = false
+
+[dependencies]
+anyhow = "1"
+ureq = { version = "2", default-features = false, features = ["tls", "native-certs"] }
+meow-rules = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f" }
+
+# `.mrs` writing pulls zstd via meow-rules; no extra dep needed here.

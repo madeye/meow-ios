@@ -285,11 +285,31 @@ pub fn start(config_path: &str) -> Result<()> {
     let cfg = load_stripped_config(config_path)?;
     let raw_config = Arc::new(RwLock::new(cfg.raw.clone()));
 
-    let tunnel = Tunnel::new(cfg.dns.resolver.clone());
+    let resolver = cfg.dns.resolver.clone();
+    let tunnel = Tunnel::new(resolver.clone());
     tunnel.set_mode(cfg.general.mode);
     tunnel.update_rules(cfg.rules);
     tunnel.update_proxies(cfg.proxies);
     let stats = tunnel.statistics().clone();
+
+    // Kick off a background task that downloads any missing GeoIP / ASN /
+    // geosite DB on first boot. Routes the fetch through the first user
+    // proxy via `internal_http::first_named_proxy`, so we don't need an
+    // app-side BootstrapEngine + GeoAssetService detour to reach the
+    // jsDelivr / GitHub release URLs from behind the GFW.
+    let geodata = cfg.geodata.clone();
+    let fetch_tunnel = tunnel.clone();
+    let fetch_raw_config = Arc::clone(&raw_config);
+    let fetch_resolver = Arc::clone(&resolver);
+    crate::get_runtime().spawn(async move {
+        meow_app::geodata_fetch::run_on_startup(
+            geodata,
+            fetch_tunnel,
+            fetch_raw_config,
+            fetch_resolver,
+        )
+        .await;
+    });
 
     // `ApiServer::new` grew from 5 to 9 parameters to serve the new
     // `/providers/*`, `/rules`, `/listeners`, and `/logs` routes. Build the

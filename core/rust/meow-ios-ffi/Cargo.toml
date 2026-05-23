@@ -62,9 +62,11 @@ lwip = "0.3"
 # Each crate is a workspace member of madeye/meow-rs.
 #
 # Currently on a post-rename `rev =` pin to pick up the crate-name rename
-# (madeye/meow-rs commit 105eacfe7f) plus subsequent fixes. Restore to a
-# tag once a v0.7.7+ release is cut.
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
+# (madeye/meow-rs commit 105eacfe7f) plus subsequent fixes, including the
+# in-engine geodata startup-fetch added at 9048f370d6 and the
+# proxy-routed internal_http downloader at 97b1efd435. Restore to a tag
+# once a v0.8.x release is cut.
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -72,11 +74,17 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "0a7d702eba1c05dbedc391a776ce99121be8cec3" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f" }
+# `meow-app` is the upstream binary crate; we depend on it solely for
+# `geodata_fetch::run_on_startup`, which upstream extracted at commit
+# 27f9d79bf3 for downstream FFI callers like us. `default-features = false`
+# avoids dragging in the listener / dns-server / protocol bundles meant for
+# the `meow` binary build.
+meow-app = { git = "https://github.com/madeye/meow-rs", rev = "27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f", default-features = false }
 
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
