@@ -292,24 +292,21 @@ pub fn start(config_path: &str) -> Result<()> {
     tunnel.update_proxies(cfg.proxies);
     let stats = tunnel.statistics().clone();
 
-    // Kick off a background task that downloads any missing GeoIP / ASN /
-    // geosite DB on first boot. Routes the fetch through the first user
-    // proxy via `internal_http::first_named_proxy`, so we don't need an
-    // app-side BootstrapEngine + GeoAssetService detour to reach the
-    // jsDelivr / GitHub release URLs from behind the GFW.
-    let geodata = cfg.geodata.clone();
-    let fetch_tunnel = tunnel.clone();
-    let fetch_raw_config = Arc::clone(&raw_config);
-    let fetch_resolver = Arc::clone(&resolver);
-    crate::get_runtime().spawn(async move {
-        meow_app::geodata_fetch::run_on_startup(
-            geodata,
-            fetch_tunnel,
-            fetch_raw_config,
-            fetch_resolver,
-        )
-        .await;
-    });
+    // No `meow_app::geodata_fetch::run_on_startup` spawn here: the iOS app
+    // bundles Country.mmdb, GeoLite2-ASN.mmdb, and geosite.mrs in
+    // App/Resources/GeoData and `GeoAssetStager` stages them into
+    // `AppGroup.meowConfigDir` at app launch, so every DB the rule loader
+    // and resolver want is already on disk before the engine starts. The
+    // upstream fetcher checks `meow_config::default_geosite_path()`
+    // (`geosite.dat`) — which never exists in our layout, since we ship
+    // `geosite.mrs` — and would otherwise spawn `reqwest`/`hyper`/
+    // `tokio-rustls`/`aws-lc-rs` plus buffer a multi-MB download body in
+    // process, blowing past the 50 MB NE jetsam cap within ~0.6 s of
+    // launch (per-process-limit kill, observed via `idevicesyslog`).
+    //
+    // If a future build ever stops bundling one of the DBs, the FFI must
+    // re-introduce a fetch — but in a memory-bounded form (streamed to
+    // disk, no full-body buffer) suitable for the NE budget.
 
     // `ApiServer::new` grew from 5 to 9 parameters to serve the new
     // `/providers/*`, `/rules`, `/listeners`, and `/logs` routes. Build the
