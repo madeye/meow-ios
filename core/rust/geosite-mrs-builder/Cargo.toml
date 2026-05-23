@@ -8,6 +8,6 @@ publish = false
 [dependencies]
 anyhow = "1"
 ureq = { version = "2", default-features = false, features = ["tls", "native-certs"] }
-meow-rules = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc" }
+meow-rules = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8" }
 
 # `.mrs` writing pulls zstd via meow-rules; no extra dep needed here.

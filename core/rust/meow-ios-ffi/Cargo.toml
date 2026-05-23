@@ -66,7 +66,7 @@ lwip = "0.3"
 # in-engine geodata startup-fetch added at 9048f370d6 and the
 # proxy-routed internal_http downloader at 97b1efd435. Restore to a tag
 # once a v0.8.x release is cut.
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc" }
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -74,11 +74,11 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be60
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "a703135dd7be602cd7ff3bd1fe05981250b20ddc" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "8742d16fe3bbfb434d4cbc15e3edf2d6deb274d8" }
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
 # accept bytes past our advertised window edge trigger a panic in
