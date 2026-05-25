@@ -61,12 +61,9 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# Currently on a post-rename `rev =` pin to pick up the crate-name rename
-# (madeye/meow-rs commit 105eacfe7f) plus subsequent fixes, including the
-# in-engine geodata startup-fetch added at 9048f370d6 and the
-# proxy-routed internal_http downloader at 97b1efd435. Restore to a tag
-# once a v0.8.x release is cut.
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d0f4880cca59abd11030ee5542d" }
+# Pinned to v0.11.0 tag. Includes BloomMap→TrieMap domain matching,
+# geosite Plain/Regex support, and lazy RegexSet (53→38 MB footprint).
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -74,11 +71,11 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d0f4880cca59abd11030ee5542d", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d0f4880cca59abd11030ee5542d" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d0f4880cca59abd11030ee5542d" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d0f4880cca59abd11030ee5542d" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "fde44860e1ab4d0f4880cca59abd11030ee5542d" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a" }
 # Pin smoltcp to a v0.12.0 fork that backports upstream commit f56ed8b
 # ("tcp: Reject bytes outside the receive window"). Without it, peers that
 # accept bytes past our advertised window edge trigger a panic in
