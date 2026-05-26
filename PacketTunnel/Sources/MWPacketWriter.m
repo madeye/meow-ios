@@ -1,9 +1,17 @@
 #import "MWPacketWriter.h"
 #import <stdatomic.h>
 
+static NSArray<NSNumber *> *sIPv4Proto;
+static NSArray<NSNumber *> *sIPv6Proto;
+
 @implementation MWPacketWriter {
     NEPacketTunnelFlow *_flow;
     _Atomic int64_t _egressPackets;
+}
+
++ (void)initialize {
+    sIPv4Proto = @[@(AF_INET)];
+    sIPv6Proto = @[@(AF_INET6)];
 }
 
 - (instancetype)initWithFlow:(NEPacketTunnelFlow *)flow {
@@ -18,8 +26,8 @@
 - (void)writeData:(const uint8_t *)data length:(NSUInteger)length {
     @autoreleasepool {
         NSData *packet = [NSData dataWithBytes:data length:length];
-        int32_t proto = ((length > 0 && (data[0] >> 4) == 6)) ? AF_INET6 : AF_INET;
-        [_flow writePackets:@[packet] withProtocols:@[@(proto)]];
+        NSArray<NSNumber *> *proto = (length > 0 && (data[0] >> 4) == 6) ? sIPv6Proto : sIPv4Proto;
+        [_flow writePackets:@[packet] withProtocols:proto];
         atomic_fetch_add_explicit(&_egressPackets, 1, memory_order_relaxed);
     }
 }

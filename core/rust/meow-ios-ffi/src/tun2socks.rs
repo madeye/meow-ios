@@ -290,10 +290,6 @@ fn evict_oldest_idle_tcp_flow() -> Option<u64> {
         "tun2socks: TCP cap reached, evicting longest-idle flow {} {} -> {}",
         id, rec.src, rec.dst
     );
-    logging::bridge_log(&format!(
-        "tun2socks: TCP cap-evict {} {} -> {}",
-        id, rec.src, rec.dst
-    ));
     Some(id)
 }
 
@@ -302,25 +298,16 @@ fn evict_oldest_idle_tcp_flow() -> Option<u64> {
 /// Exposed via FFI (`meow_tun_close_all_tcp_flows`) for emergency teardown.
 pub fn close_all_tcp_flows() -> usize {
     let flows = tcp_flows();
-    let mut closed: Vec<(u64, SocketAddr, SocketAddr)> = Vec::with_capacity(flows.len());
-    flows.retain(|&id, rec| {
+    let mut count = 0usize;
+    flows.retain(|_id, rec| {
         rec.abort.abort();
-        closed.push((id, rec.src, rec.dst));
+        count += 1;
         false
     });
-    if !closed.is_empty() {
-        warn!(
-            "tun2socks: registry watchdog closed {} TCP flows",
-            closed.len()
-        );
-        for (id, src, dst) in &closed {
-            logging::bridge_log(&format!(
-                "tun2socks: TCP watchdog-close {} {} -> {}",
-                id, src, dst
-            ));
-        }
+    if count > 0 {
+        warn!("tun2socks: registry watchdog closed {} TCP flows", count);
     }
-    closed.len()
+    count
 }
 
 fn warn_capped(slot: &AtomicU64, msg: &str) {
@@ -602,7 +589,7 @@ async fn run_tun2socks(
                     continue;
                 }
             };
-            let request = ip_data.clone();
+            let request = ip_data;
             let egress = egress_tx.clone();
             tokio::spawn(async move {
                 let _permit = permit;
@@ -809,12 +796,6 @@ async fn dispatch_tcp(
                 "tun2socks: dial deadline exceeded for {} -> {} after {} ms; dropping flow",
                 src, dst, dial_deadline,
             );
-            logging::bridge_log(&format!(
-                "tun2socks: TCP dial-deadline {} -> {} ({} ms)",
-                src, dst, dial_deadline,
-            ));
-            // Drop `fut` on exit → meow `ConnectionGuard` cleanup runs,
-            // accept_sem permit released via the spawned task's exit.
         }
     }
 }
@@ -1132,10 +1113,6 @@ fn spawn_udp_reply_reader(
                             "UDP first-reply deadline exceeded for {:?} after {} ms; evicting session",
                             key, first_reply_deadline_ms,
                         );
-                        logging::bridge_log(&format!(
-                            "tun2socks: UDP first-reply-deadline {:?} ({} ms)",
-                            key, first_reply_deadline_ms,
-                        ));
                         break;
                     }
                 }
@@ -1237,7 +1214,7 @@ pub(crate) async fn forward_dns_to_upstream(
         return None;
     }
     let query_id = u16::from_be_bytes([query[0], query[1]]);
-    let query_owned = query.to_vec();
+    let query_shared: Arc<[u8]> = Arc::from(query);
 
     type DnsForwardFut = Pin<Box<dyn std::future::Future<Output = Option<Vec<u8>>> + Send>>;
     let mut futs: Vec<DnsForwardFut> = Vec::with_capacity(upstreams.len());
@@ -1245,18 +1222,15 @@ pub(crate) async fn forward_dns_to_upstream(
         let Ok(addr) = upstream.parse::<SocketAddr>() else {
             continue;
         };
-        let q = query_owned.clone();
+        let q = query_shared.clone();
         futs.push(Box::pin(async move {
             let socket = tokio::net::UdpSocket::bind(("0.0.0.0", 0u16)).await.ok()?;
             socket.send_to(&q, addr).await.ok()?;
-            let mut buf = vec![0u8; 1500];
+            let mut buf = [0u8; 1500];
             let recv = tokio::time::timeout(timeout, socket.recv_from(&mut buf)).await;
             let (n, _) = recv.ok()?.ok()?;
-            buf.truncate(n);
-            // RFC 1035 §4.1.1 — a reply's ID must match the query's ID;
-            // otherwise it's stray traffic on this ephemeral port.
-            if buf.len() >= 2 && u16::from_be_bytes([buf[0], buf[1]]) == query_id {
-                Some(buf)
+            if n >= 2 && u16::from_be_bytes([buf[0], buf[1]]) == query_id {
+                Some(buf[..n].to_vec())
             } else {
                 None
             }

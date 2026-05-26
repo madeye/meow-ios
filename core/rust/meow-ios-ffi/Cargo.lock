@@ -1114,9 +1114,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3ba2a386d7f85a81f119ad7498ebe444d2e22c2af0b86b069416ace48b3311a"
+checksum = "8be7462df143984c4598a256ef469b251d7d7f9e271135073e78fc535414f3d0"
 dependencies = [
  "bytes",
  "itoa",
@@ -1640,7 +1640,7 @@ dependencies = [
 [[package]]
 name = "meow-api"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "axum",
  "base64",
@@ -1672,7 +1672,7 @@ dependencies = [
 [[package]]
 name = "meow-common"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1694,7 +1694,7 @@ dependencies = [
 [[package]]
 name = "meow-config"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1727,7 +1727,7 @@ dependencies = [
 [[package]]
 name = "meow-dns"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "async-trait",
  "dashmap 6.2.1",
@@ -1787,7 +1787,7 @@ dependencies = [
 [[package]]
 name = "meow-proxy"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "async-trait",
  "base64",
@@ -1804,6 +1804,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shadowsocks",
+ "smol_str",
  "socket2 0.5.10",
  "tokio",
  "tokio-rustls",
@@ -1814,7 +1815,7 @@ dependencies = [
 [[package]]
 name = "meow-rules"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "ipnet",
  "iprange",
@@ -1831,7 +1832,7 @@ dependencies = [
 [[package]]
 name = "meow-transport"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "async-trait",
  "base64",
@@ -1857,7 +1858,7 @@ dependencies = [
 [[package]]
 name = "meow-trie"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "smallvec",
 ]
@@ -1865,11 +1866,12 @@ dependencies = [
 [[package]]
 name = "meow-tunnel"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
+source = "git+https://github.com/madeye/meow-rs?rev=3031b1389f0af14f24ace7e97647eb67c916ed26#3031b1389f0af14f24ace7e97647eb67c916ed26"
 dependencies = [
  "arc-swap",
  "async-trait",
  "dashmap 6.2.1",
+ "itoa",
  "meow-common",
  "meow-dns",
  "meow-proxy",
@@ -1877,6 +1879,7 @@ dependencies = [
  "meow-trie",
  "parking_lot",
  "serde",
+ "smallvec",
  "smol_str",
  "tokio",
  "tracing",

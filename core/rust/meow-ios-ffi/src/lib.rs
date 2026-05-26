@@ -367,11 +367,14 @@ pub unsafe extern "C" fn meow_engine_test_dns(
     let to = Duration::from_millis(timeout_ms.max(1) as u64);
     match get_runtime().block_on(diagnostics::test_dns(&tunnel, h, to)) {
         Ok(ips) => {
-            let joined = ips
-                .iter()
-                .map(|ip| ip.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
+            use std::fmt::Write;
+            let mut joined = String::new();
+            for (i, ip) in ips.iter().enumerate() {
+                if i > 0 {
+                    joined.push(',');
+                }
+                let _ = write!(joined, "{}", ip);
+            }
             write_out(joined.as_bytes(), out, out_cap)
         }
         Err(e) => {
