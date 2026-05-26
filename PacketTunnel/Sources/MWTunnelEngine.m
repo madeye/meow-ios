@@ -13,11 +13,11 @@
 static os_log_t gLog;
 
 // Phys-footprint soft cap: jetsam on the NE extension hits around 50 MiB on
-// recent iOS. Restart preemptively at 45 MiB so we drop allocator fragmentation
-// + Rust runtime state before the kernel kills us. Cooldown keeps us from
-// thrashing if the post-restart footprint is still hugging the cap.
+// recent iOS. When footprint reaches this threshold we nudge the allocator to
+// return free pages to the OS rather than restarting the engine — a restart
+// disrupts active connections and resets in-memory state for marginal gain.
 static const NSInteger kSoftCapFootprintMB    = 35;
-static const NSTimeInterval kRestartCooldownS = 60.0;
+static const NSTimeInterval kReliefCooldownS  = 60.0;
 
 @implementation MWTunnelEngine {
     NEPacketTunnelFlow *_flow;
@@ -27,14 +27,12 @@ static const NSTimeInterval kRestartCooldownS = 60.0;
     BOOL _started;
     _Atomic BOOL _ingressRunning;
     _Atomic int64_t _ingressPackets;
-    _Atomic BOOL _restarting;
-
     dispatch_source_t _trafficTimer;
     int64_t _lastUp;
     int64_t _lastDown;
     NSTimeInterval _lastTime;
     int _pumpTick;
-    NSTimeInterval _lastRestartAttempt;  // CFAbsoluteTime; 0 = never
+    NSTimeInterval _lastReliefAttempt;  // CFAbsoluteTime; 0 = never
 }
 
 + (void)initialize {
@@ -49,7 +47,6 @@ static const NSTimeInterval kRestartCooldownS = 60.0;
         _flow = flow;
         atomic_init(&_ingressRunning, NO);
         atomic_init(&_ingressPackets, 0);
-        atomic_init(&_restarting, NO);
     }
     return self;
 }
@@ -274,99 +271,15 @@ static const NSTimeInterval kRestartCooldownS = 60.0;
 
 - (void)maybeRestartForFootprint:(NSInteger)footprintMB now:(NSTimeInterval)now {
     if (footprintMB < kSoftCapFootprintMB) return;
-    if (atomic_load_explicit(&_restarting, memory_order_relaxed)) return;
-    if (_lastRestartAttempt > 0 && (now - _lastRestartAttempt) < kRestartCooldownS) {
+    if (_lastReliefAttempt > 0 && (now - _lastReliefAttempt) < kReliefCooldownS) {
         return;
     }
-    _lastRestartAttempt = now;
+    _lastReliefAttempt = now;
 
     os_log_error(gLog,
-                 "soft-cap: footprint=%ldMB >= %ldMB, restarting engine",
+                 "soft-cap: footprint=%ldMB >= %ldMB, calling malloc_zone_pressure_relief",
                  (long)footprintMB, (long)kSoftCapFootprintMB);
-
-    [self restartWithCompletion:^(BOOL ok) {
-        os_log_info(gLog, "soft-cap: restart completion ok=%d", ok);
-    }];
-}
-
-// MARK: - Engine restart
-
-- (void)restartWithCompletion:(void (^)(BOOL))completion {
-    if (!_started) {
-        if (completion) completion(NO);
-        return;
-    }
-    if (atomic_exchange(&_restarting, YES)) {
-        os_log_info(gLog, "restart: already in flight, skipping");
-        if (completion) completion(NO);
-        return;
-    }
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        BOOL ok = [self performEngineRestart];
-        if (completion) completion(ok);
-    });
-}
-
-- (BOOL)performEngineRestart {
-    os_log_info(gLog, "restart: stopping tun + engine");
-
-    meow_tun_stop();
-    _tunStarted = NO;
-    meow_engine_stop();
-
-    if (_writerCtx) {
-        CFBridgingRelease(_writerCtx);
-        _writerCtx = NULL;
-    }
-    _writer = nil;
-
-    // Let Rust async tasks drain before rebinding ports.
-    [NSThread sleepForTimeInterval:0.3];
     malloc_zone_pressure_relief(NULL, 0);
-
-    if (!_started) {
-        os_log_info(gLog, "restart: engine was stopped externally, aborting");
-        atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return NO;
-    }
-
-    MWPreferences *prefs = [MWPreferences loadFromDefaults:[MWAppGroup defaults]];
-    NSError *err = nil;
-    if (![self writeEffectiveConfigWithPrefs:prefs error:&err]) {
-        os_log_error(gLog, "restart: config write failed: %{public}@", err);
-        atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return NO;
-    }
-
-    NSString *configPath = [MWAppGroup effectiveConfigURL].path;
-    int rc = meow_engine_start(configPath.UTF8String);
-    if (rc != 0) {
-        os_log_error(gLog, "restart: engine start failed: %{public}@",
-                     [self lastRustError]);
-        atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return NO;
-    }
-
-    MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
-    _writer    = writer;
-    _writerCtx = (void *)CFBridgingRetain(writer);
-
-    rc = meow_tun_start(_writerCtx, meowPacketWriterCB);
-    if (rc != 0) {
-        os_log_error(gLog, "restart: tun start failed: %{public}@",
-                     [self lastRustError]);
-        CFBridgingRelease(_writerCtx);
-        _writerCtx = NULL;
-        _writer    = nil;
-        meow_engine_stop();
-        atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-        return NO;
-    }
-    _tunStarted = YES;
-
-    os_log_info(gLog, "restart: complete");
-    atomic_store_explicit(&_restarting, NO, memory_order_relaxed);
-    return YES;
 }
 
 // MARK: - Config patching
