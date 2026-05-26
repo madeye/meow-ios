@@ -39,6 +39,25 @@ public enum AppGroup {
         containerURL.appending(path: "meow", directoryHint: .isDirectory)
     }
 
+    /// Mark the user's downloaded config and engine data directory as
+    /// iCloud-backup-eligible, and exclude transient files that are
+    /// regenerated on every tunnel start.
+    public static func configureBackup() {
+        setBackupExclusion(containerURL, excluded: false)
+        setBackupExclusion(configURL, excluded: false)
+        setBackupExclusion(meowConfigDir, excluded: false)
+        setBackupExclusion(effectiveConfigURL, excluded: true)
+        setBackupExclusion(stateURL, excluded: true)
+        setBackupExclusion(trafficURL, excluded: true)
+    }
+
+    private static func setBackupExclusion(_ url: URL, excluded: Bool) {
+        var u = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = excluded
+        try? u.setResourceValues(values)
+    }
+
     /// UserDefaults suite shared between app and extension. Force-unwrap is
     /// safe once entitlements are wired — missing suite indicates a config bug
     /// that should fail loudly.

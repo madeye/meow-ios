@@ -57,6 +57,7 @@ final class AppModel {
             }
         }
         try? FileManager.default.createDirectory(at: AppGroup.meowConfigDir, withIntermediateDirectories: true)
+        AppGroup.configureBackup()
         GeoAssetStager.stageIfNeeded()
         await vpnManager.refresh()
         ipcBridge.start()

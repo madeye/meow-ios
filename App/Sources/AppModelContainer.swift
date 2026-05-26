@@ -33,6 +33,10 @@ enum AppModelContainer {
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appending(path: "meow")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var dirURL = dir
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = false
+        try? dirURL.setResourceValues(values)
         return dir.appending(path: "meow.sqlite")
     }
 }
