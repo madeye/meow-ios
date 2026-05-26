@@ -7,10 +7,11 @@ struct YamlEditorView: View {
     @Environment(SubscriptionService.self) private var service
     @State private var text: String = ""
     @State private var error: String?
+    @State private var errorLines: Set<Int> = []
     @State private var saving = false
 
     var body: some View {
-        CodeTextView(text: $text, accessibilityIdentifier: "yamlEditor.editor")
+        ClashYAMLTextView(text: $text, errorLines: errorLines)
             .overlay {
                 if text.isEmpty {
                     ContentUnavailableView(
@@ -46,13 +47,20 @@ struct YamlEditorView: View {
             }
             .onAppear { text = profile.yamlContent }
             .onChange(of: text) { _, _ in
-                if error != nil { error = nil }
+                error = nil
+                errorLines = []
             }
     }
 
     private func save() {
         saving = true
         defer { saving = false }
+        let lintIssues = ClashConfigLinter.lint(text)
+        if let first = lintIssues.first {
+            error = first.message
+            errorLines = Set(lintIssues.map(\.line))
+            return
+        }
         do {
             try MeowConfigValidator.validate(text)
             profile.yamlBackup = profile.yamlContent
@@ -61,6 +69,7 @@ struct YamlEditorView: View {
             dismiss()
         } catch {
             self.error = error.localizedDescription
+            errorLines = MeowConfigValidator.parseErrorLines(error.localizedDescription)
         }
     }
 
@@ -82,9 +91,6 @@ struct YamlEditorView: View {
 }
 
 enum MeowConfigValidator {
-    /// Validates a YAML config via the Rust FFI (`meow_engine_validate_config`)
-    /// which runs the same `load_config_from_str` path the engine uses at
-    /// start time.
     static func validate(_ yaml: String) throws {
         let rc = yaml.withCString { ptr -> Int32 in
             meow_engine_validate_config(ptr, Int32(yaml.utf8.count))
@@ -93,6 +99,28 @@ enum MeowConfigValidator {
             let msg = meow_core_last_error().map { String(cString: $0) } ?? "invalid config"
             throw MeowConfigError.invalid(msg)
         }
+    }
+
+    static func parseErrorLines(_ message: String) -> Set<Int> {
+        var lines: Set<Int> = []
+        let rawPatterns = [
+            #"at line (\d+)"#,
+            #"line (\d+) column \d+"#,
+            #"\[(\d+)\]"#,
+        ]
+        let nsMsg = message as NSString
+        let range = NSRange(location: 0, length: nsMsg.length)
+        for raw in rawPatterns {
+            guard let regex = try? NSRegularExpression(pattern: raw) else { continue }
+            for match in regex.matches(in: message, range: range)
+                where match.numberOfRanges >= 2
+            {
+                if let n = Int(nsMsg.substring(with: match.range(at: 1))), n > 0 {
+                    lines.insert(n)
+                }
+            }
+        }
+        return lines
     }
 }
 
@@ -105,51 +133,5 @@ enum MeowConfigError: LocalizedError {
         )
         if case let .invalid(msg) = self { return msg.isEmpty ? fallback : msg }
         return fallback
-    }
-}
-
-/// Wraps UITextView for a no-dependency monospace editor. Syntax highlighting
-/// will replace this with CodeEditView once the YAML editor milestone lands.
-struct CodeTextView: UIViewRepresentable {
-    @Binding var text: String
-    let accessibilityIdentifier: String?
-
-    init(text: Binding<String>, accessibilityIdentifier: String? = nil) {
-        _text = text
-        self.accessibilityIdentifier = accessibilityIdentifier
-    }
-
-    func makeUIView(context: Context) -> UITextView {
-        let view = UITextView()
-        view.font = UIFontMetrics.default.scaledFont(for: .monospacedSystemFont(ofSize: 14, weight: .regular))
-        view.adjustsFontForContentSizeCategory = true
-        view.autocapitalizationType = .none
-        view.autocorrectionType = .no
-        view.smartQuotesType = .no
-        view.smartDashesType = .no
-        view.smartInsertDeleteType = .no
-        view.delegate = context.coordinator
-        view.backgroundColor = .clear
-        view.accessibilityIdentifier = accessibilityIdentifier
-        return view
-    }
-
-    func updateUIView(_ uiView: UITextView, context _: Context) {
-        if uiView.text != text { uiView.text = text }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    final class Coordinator: NSObject, UITextViewDelegate {
-        var parent: CodeTextView
-        init(_ parent: CodeTextView) {
-            self.parent = parent
-        }
-
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text
-        }
     }
 }

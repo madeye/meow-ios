@@ -1,11 +1,16 @@
 import MeowIPC
 import MeowModels
 import NetworkExtension
+import OSLog
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @State private var preferences: Preferences = .load(from: AppGroup.defaults)
     @State private var memoryMB: Int64?
+    @State private var logExportDocument: LogExportDocument?
+    @State private var showingLogExporter = false
+    @State private var exportingLogs = false
     #if DEBUG
         @State private var showDebugPanel = false
     #endif
@@ -37,6 +42,19 @@ struct SettingsView: View {
                     Label("settings.label.diagnostics", systemImage: "stethoscope")
                 }
                 .accessibilityIdentifier("settings.nav.diagnostics")
+                Button {
+                    Task { await exportLogs() }
+                } label: {
+                    HStack {
+                        Label("settings.label.exportLogs", systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if exportingLogs {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(exportingLogs)
+                .accessibilityIdentifier("settings.button.exportLogs")
             }
             Section("settings.section.about") {
                 LabeledContent("settings.about.version", value: appVersion)
@@ -84,6 +102,14 @@ struct SettingsView: View {
                 Task { await vpnManager.refresh() }
             }
             .task { await pollMemory() }
+            .fileExporter(
+                isPresented: $showingLogExporter,
+                document: logExportDocument,
+                contentType: .plainText,
+                defaultFilename: "meow-tunnel-\(logTimestamp).log",
+            ) { _ in
+                logExportDocument = nil
+            }
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<Preferences, Value>) -> Binding<Value> {
@@ -141,5 +167,69 @@ struct SettingsView: View {
 
     private var appVersion: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0"
+    }
+
+    private var logTimestamp: String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd-HHmmss"
+        return f.string(from: Date())
+    }
+
+    private func exportLogs() async {
+        exportingLogs = true
+        defer { exportingLogs = false }
+        let text = await Task.detached { collectOSLogs() }.value
+        logExportDocument = LogExportDocument(text: text)
+        showingLogExporter = true
+    }
+}
+
+private func collectOSLogs() -> String {
+    var lines: [String] = []
+    let df = DateFormatter()
+    df.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+    do {
+        let store = try OSLogStore(scope: .currentProcessIdentifier)
+        let since = store.position(date: Date().addingTimeInterval(-3600))
+        let entries = try store.getEntries(at: since)
+        for entry in entries {
+            guard let log = entry as? OSLogEntryLog else { continue }
+            let ts = df.string(from: log.date)
+            let lvl = switch log.level {
+            case .debug: "DEBUG"
+            case .info: "INFO"
+            case .notice: "NOTICE"
+            case .error: "ERROR"
+            case .fault: "FAULT"
+            default: "LOG"
+            }
+            lines.append("[\(ts)] [\(lvl)] [\(log.subsystem)/\(log.category)] \(log.composedMessage)")
+        }
+    } catch {
+        lines.append("Failed to read OSLogStore: \(error.localizedDescription)")
+    }
+    if lines.isEmpty {
+        lines.append("No log entries found in the last hour.")
+    }
+    return lines.joined(separator: "\n")
+}
+
+struct LogExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] {
+        [.plainText]
+    }
+
+    var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        text = String(data: configuration.file.regularFileContents ?? Data(), encoding: .utf8) ?? ""
+    }
+
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }

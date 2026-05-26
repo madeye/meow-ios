@@ -627,6 +627,7 @@ rules:
         };
         assert_eq!(rc, 0, "FFI validate must succeed on rule-providers YAML");
     }
+
 }
 
 #[cfg(test)]
