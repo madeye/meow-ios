@@ -1,0 +1,24 @@
+Build 2026052401 (1.3.1)
+
+更新内容
+• meow-rs 升级至 fde44860 (0.9.0)，三项关键内存改进：
+  – GeoIP MMDB 改用 mmap：系统可在内存压力下回收页面，
+    不再将整个数据库驻留在物理内存中。
+  – 域名匹配树中的 RegexSet DFA 替换为 Bloom filter：
+    消除大规则集导致的内存尖峰。
+  – 20 并发连接下峰值 RSS 从 65 MB 降至 38 MB（VM 测试，
+    Nexitally 166 代理配置）。突发负载不再突破 50 MB NE
+    jetsam 上限。
+
+• 移除已失效的 cn-ipv4/cn-ipv6 二进制构建脚本。
+
+已知问题
+• 非 DNS 的 UDP 转发尚未实现（QUIC/HTTP3 回退至 TCP HTTP/2，
+  通常无感知）。
+
+测试要点
+• 重度浏览内存测试：同时打开 10+ 个标签页，确认 VPN 保持
+  连接（无 jetsam 杀进程）。此前突发负载可能导致静默断连。
+• 验证 GEOIP 规则仍正常工作（MMDB 改为 mmap 加载，功能
+  行为应完全一致）。
+• 问题反馈：https://github.com/madeye/meow-ios/issues

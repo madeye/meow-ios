@@ -1,0 +1,26 @@
+Build 2026052503 (1.3.1)
+
+WHAT'S NEW
+• meow-rs bumped to v0.11.0 (from fde44860 / 0.9.0). Key changes:
+  – BloomMap replaced with TrieMap for domain matching: prefix trie
+    replaces bloom filters, eliminating false-positive mismatches on
+    large rule sets.
+  – Geosite now supports Plain (keyword) and Regex domain types in
+    addition to the existing Domain / Full types.
+  – Lazy RegexSet compilation: regex patterns are compiled on first
+    use rather than at startup. Active footprint dropped from 53 MB
+    to 38 MB in VM testing.
+  – Per-query heap allocations eliminated in geosite lookups.
+  – Upstream mihomo config accepted verbatim (no preprocessing needed).
+
+KNOWN
+• Non-DNS UDP forwarding still pending (QUIC/HTTP3 falls back to
+  TCP HTTP/2; usually transparent).
+
+FOR TESTERS
+• Domain-rule accuracy test: confirm sites that previously matched
+  incorrectly (bloom filter false positives) now route correctly.
+• Heavy-browsing memory test: open 10+ tabs simultaneously and
+  confirm the VPN stays connected (no jetsam kill).
+• Verify geosite rules with keyword/regex patterns fire correctly.
+• Issues: https://github.com/madeye/meow-ios/issues

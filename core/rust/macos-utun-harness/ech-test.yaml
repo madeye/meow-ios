@@ -1,0 +1,18 @@
+proxies:
+  - name: "ech-sgp"
+    type: ss
+    server: sgp.maxlv.net
+    port: 443
+    cipher: aes-128-gcm
+    password: a6wfmS1PBTVVC7L23YDTAW2mmXgPGb2
+    udp: false
+    plugin: ech-tls-tunnel
+    plugin-opts:
+      mode: client
+      sni: sgp.maxlv.net
+      path: /ws-e6ebfddbb858dfe8
+      ech_config: "AEn+DQBF/gAgACCQeNQYP6XhS1bAPcT1x0nWjCNDLiaAg83tJwDi3QhDDwAIAAEAAQABAAMAEnd3dy5jbG91ZGZsYXJlLmNvbQAA"
+      fingerprint: chrome
+
+rules:
+  - MATCH,ech-sgp

@@ -1,0 +1,27 @@
+Build 2026052401 (1.3.1)
+
+WHAT'S NEW
+• meow-rs bumped to fde44860 (0.9.0). Three key memory improvements:
+  – GeoIP MMDB now mmap'd: OS can reclaim pages under memory pressure
+    instead of holding the entire database in resident memory.
+  – RegexSet DFA replaced with Bloom filters in the domain trie:
+    eliminates unbounded DFA allocations that caused memory spikes
+    with large rule sets.
+  – Peak RSS under 20 concurrent connections dropped from 65 MB to
+    38 MB in VM testing (Nexitally 166-proxy config). The 50 MB NE
+    jetsam cap is no longer breached under burst load.
+
+• Dead cn-ipv4/cn-ipv6 binary build script removed (the bins were
+  already gone from the repo).
+
+KNOWN
+• Non-DNS UDP forwarding still pending (QUIC/HTTP3 falls back to
+  TCP HTTP/2; usually transparent).
+
+FOR TESTERS
+• Heavy-browsing memory test: open 10+ tabs simultaneously and
+  confirm the VPN stays connected (no jetsam kill). Previously
+  this could trigger a silent disconnect under burst load.
+• Verify GEOIP rules still fire correctly (the MMDB is now mmap'd
+  instead of heap-loaded; functional behavior should be identical).
+• Issues: https://github.com/madeye/meow-ios/issues
