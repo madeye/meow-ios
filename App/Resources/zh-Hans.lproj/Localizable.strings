@@ -149,10 +149,10 @@
 "yamlEditor.nav.title" = "编辑配置";
 "yamlEditor.empty.title" = "配置为空";
 "yamlEditor.empty.description" = "粘贴 Clash YAML 配置以开始编辑。";
-"yamlEditor.button.revert" = "撤销";
+"yamlEditor.button.cancel" = "取消";
 "yamlEditor.button.save" = "保存";
 "yamlEditor.button.saving" = "保存中…";
-"yamlEditor.a11y.revert" = "还原到上次保存的配置";
+"yamlEditor.a11y.cancel" = "放弃更改并关闭编辑器";
 "yamlEditor.a11y.save" = "保存配置";
 "yamlEditor.error.invalid" = "配置无效";
 
@@ -171,6 +171,7 @@
 "settings.logLevel.silent" = "静默";
 "settings.section.diagnostics" = "诊断";
 "settings.label.diagnostics" = "诊断";
+"settings.label.exportLogs" = "导出日志";
 "settings.section.about" = "关于";
 "settings.about.version" = "版本";
 "settings.about.memory" = "内存";

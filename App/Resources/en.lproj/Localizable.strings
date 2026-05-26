@@ -143,10 +143,10 @@
 "yamlEditor.nav.title" = "Edit Config";
 "yamlEditor.empty.title" = "Empty config";
 "yamlEditor.empty.description" = "Paste a Clash YAML config to start editing.";
-"yamlEditor.button.revert" = "Revert";
+"yamlEditor.button.cancel" = "Cancel";
 "yamlEditor.button.save" = "Save";
 "yamlEditor.button.saving" = "Saving…";
-"yamlEditor.a11y.revert" = "Revert to last saved config";
+"yamlEditor.a11y.cancel" = "Discard changes and close editor";
 "yamlEditor.a11y.save" = "Save config";
 "yamlEditor.error.invalid" = "Invalid config";
 
@@ -165,6 +165,7 @@
 "settings.logLevel.silent" = "Silent";
 "settings.section.diagnostics" = "Diagnostics";
 "settings.label.diagnostics" = "Diagnostics";
+"settings.label.exportLogs" = "Export Logs";
 "settings.section.about" = "About";
 "settings.about.version" = "Version";
 "settings.about.memory" = "Memory";

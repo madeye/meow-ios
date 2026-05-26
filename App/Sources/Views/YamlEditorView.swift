@@ -30,9 +30,9 @@ struct YamlEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("yamlEditor.button.revert") { text = profile.yamlBackup }
-                        .accessibilityLabel("yamlEditor.a11y.revert")
-                        .accessibilityIdentifier("yamlEditor.revertButton")
+                    Button("yamlEditor.button.cancel") { dismiss() }
+                        .accessibilityLabel("yamlEditor.a11y.cancel")
+                        .accessibilityIdentifier("yamlEditor.cancelButton")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(
