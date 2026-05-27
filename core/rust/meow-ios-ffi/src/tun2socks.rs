@@ -272,6 +272,7 @@ fn now_ms() -> u64 {
 /// accept semaphore is saturated — eviction is cap-triggered, not
 /// time-triggered, and always targets the longest-idle flow first.
 /// Returns the evicted flow's id, or `None` if the registry is empty.
+#[cfg_attr(not(test), allow(dead_code))]
 fn evict_oldest_idle_tcp_flow() -> Option<u64> {
     let flows = tcp_flows();
     let mut oldest: Option<(u64, u64)> = None;
@@ -454,6 +455,7 @@ async fn run_tun2socks(
 
     let tcp_accept_sem_for_task = tcp_accept_sem.clone();
     let tcp_accept_handle = tokio::spawn(async move {
+        let cap_warn_last = AtomicU64::new(0);
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
             // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it
             // when a UDP reply was truncated) inside the TUN is
@@ -470,23 +472,25 @@ async fn run_tun2socks(
                 drop(stream);
                 continue;
             }
-            // Cap-triggered eviction: when no permit is immediately available
-            // the registry is at the accept cap. Evict the longest-idle flow
-            // to free a slot, then await a permit (the aborted task drops its
-            // permit asynchronously, which unblocks the wait). The permit
-            // moves into the spawned task and drops on task exit, freeing
-            // a slot for the next accept. smoltcp keeps unaccepted SYNs in its
-            // accept queue (bounded by `stack_buffer_size`), so the cap shows
-            // up as TCP backpressure rather than dropped flows.
+            // Cap backpressure: when no permit is immediately available the
+            // registry is at the accept cap. Drop the incoming connection
+            // rather than evicting an existing flow — existing flows are
+            // doing useful work, and under a routing-loop storm (proxy
+            // connections going back through the tunnel) evicting creates
+            // more new connections that immediately hit the cap again,
+            // corrupting lwip's PCB list with rapid back-to-back
+            // tcp_abort calls (segfault / "tcp_poll: invalid pcb").
+            //
+            // The dropped stream sends a RST to the app-side socket,
+            // which retries after the usual TCP backoff. Meanwhile,
+            // existing flows drain naturally and free permits.
             let permit = match tcp_accept_sem_for_task.clone().try_acquire_owned() {
                 Ok(p) => p,
                 Err(tokio::sync::TryAcquireError::Closed) => break,
                 Err(tokio::sync::TryAcquireError::NoPermits) => {
-                    evict_oldest_idle_tcp_flow();
-                    let Ok(p) = tcp_accept_sem_for_task.clone().acquire_owned().await else {
-                        break; // semaphore closed → tunnel shutting down
-                    };
-                    p
+                    warn_capped(&cap_warn_last, "tun2socks: TCP accept cap full, dropping new connection");
+                    tokio::spawn(async move { drop(stream) });
+                    continue;
                 }
             };
             // Per-accept logging was INFO; under burst (16k accepts in 600 s
