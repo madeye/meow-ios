@@ -8,6 +8,7 @@
 #import "meow_core.h"
 #import <os/log.h>
 #import <mach/mach.h>
+#import <malloc/malloc.h>
 @import Network;
 
 // keep in sync with MeowShared/Sources/MeowIPC/DiagnosticsIPC.swift and
@@ -93,6 +94,18 @@ static os_log_t gLog;
     _ipcListener = nil;
     [self writeState:@"stopped" profileID:nil errorMessage:nil];
     completionHandler();
+}
+
+- (void)sleepWithCompletionHandler:(void (^)(void))completionHandler {
+    os_log_info(gLog, "sleep: suspending tun to shed memory before device sleep");
+    [_engine suspendTun];
+    malloc_zone_pressure_relief(NULL, 0);
+    completionHandler();
+}
+
+- (void)wake {
+    os_log_info(gLog, "wake: resuming tun");
+    [_engine resumeTun];
 }
 
 // MARK: - App messages
@@ -367,22 +380,18 @@ static os_log_t gLog;
 - (void)triggerReconnect {
     if (!_engine) return;
 
-    // Light-touch network-change handling: keep the VPN connected, keep
-    // the TUN and engine running, and just abort every in-flight TCP
-    // flow in tun2socks. Meow-tunnel's `ConnectionGuard` drops the
-    // matching `Statistics.connections` entry on each task cancel, so
-    // its state stays in sync with our flow registry. The next packet
-    // from the app for any pre-flip flow opens a fresh dispatch and
-    // dials over the new uplink. Previously we toggled `reasserting`
-    // (which iOS surfaces as a "connecting" UI flicker) and restarted
-    // the entire engine — heavy, and unnecessary now that we have a
-    // targeted way to drop stale flows.
-    //
-    // UDP is intentionally not touched: it's connectionless from the
-    // app's perspective, meow's NAT entries time out on their own,
-    // and dropping them mid-flip would clobber in-flight DNS replies.
-    int32_t aborted = meow_tun_close_all_tcp_flows();
-    os_log_info(gLog, "path: closed %d TCP flows on network change", aborted);
+    // Full tun2socks restart on network change: the gVisor netstack and
+    // per-flow state (TCP connections, UDP NAT table, dispatch futures)
+    // all bind to the pre-flip network path. Aborting individual TCP
+    // flows was insufficient — the engine's upstream connections stayed
+    // stale and accumulated retry state, eventually crashing the NE
+    // ~14 minutes after a Wi-Fi reachability flip (see meow-tunnel log
+    // 2026-05-27 crash #1). A clean stop+start gives the netstack a
+    // fresh path with zero carryover. The engine (mihomo) stays alive
+    // so proxy groups, routing rules, and the REST API persist.
+    os_log_info(gLog, "path: restarting tun2socks on network change");
+    [_engine suspendTun];
+    [_engine resumeTun];
 }
 
 @end

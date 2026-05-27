@@ -126,6 +126,37 @@ static const NSTimeInterval kReliefCooldownS  = 60.0;
     _writer = nil;
 }
 
+// MARK: - Suspend / resume tun2socks
+
+- (void)suspendTun {
+    if (!_tunStarted) return;
+
+    atomic_store_explicit(&_ingressRunning, NO, memory_order_relaxed);
+    [self stopTrafficPump];
+
+    meow_tun_stop();
+    _tunStarted = NO;
+
+    os_log_info(gLog, "engine: tun suspended (engine still running)");
+}
+
+- (void)resumeTun {
+    if (_tunStarted) return;
+    if (!_started) return;
+
+    int rc = meow_tun_start(_writerCtx, meowPacketWriterCB);
+    if (rc != 0) {
+        os_log_error(gLog, "engine: tun resume failed: %{public}@",
+                     [self lastRustError] ?: @"unknown");
+        return;
+    }
+    _tunStarted = YES;
+
+    [self startIngressLoop];
+    [self startTrafficPump];
+    os_log_info(gLog, "engine: tun resumed");
+}
+
 // MARK: - Engine state
 
 - (BOOL)isEngineRunning {
