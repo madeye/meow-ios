@@ -26,8 +26,6 @@
 		28CB589E0ACE5C617C7DCD42 /* TrafficAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729BDB9DF0375708DCD8F84E /* TrafficAccumulatorTests.swift */; };
 		2A21E16ED84D0DF4A7C140A4 /* clash_emoji_groups_realworld.yaml in Resources */ = {isa = PBXBuildFile; fileRef = F73DB7377F110302EA3E8B4B /* clash_emoji_groups_realworld.yaml */; };
 		2D71AA36DACB626D73AC50A3 /* YamlEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 415A45F45F6FA01D8DA04A95 /* YamlEditorView.swift */; };
-		C1A5B7E8F3D24A9E8B6C0D12 /* ClashYAMLTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5B7E8F3D24A9E8B6C0D13 /* ClashYAMLTextView.swift */; };
-		C1A5B7E8F3D24A9E8B6C0D14 /* ClashConfigLinter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5B7E8F3D24A9E8B6C0D15 /* ClashConfigLinter.swift */; };
 		2E27011B1AF98B38B64FCE3E /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 9A3E18C33CE07D8DE1D81356 /* MeowIPC */; };
 		2E4C5E6BA16E22D2EAD4EB22 /* MeowAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1746752AC889A678F94A02 /* MeowAPITests.swift */; };
 		2E70DD05E62B166087AA7207 /* TunnelSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE41537EBB7380469E247A65 /* TunnelSettings.swift */; };
@@ -52,6 +50,7 @@
 		54E371A3BCD0A05882842AC6 /* EditableRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992E16ADDEBA2F4304D4E797 /* EditableRule.swift */; };
 		5539FB5E77561B0464DE86DB /* VpnManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */; };
 		55FCE3874D6051B20C0A39AE /* UserDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56D18B0FBFA455C9F60134A /* UserDiagnosticsView.swift */; };
+		5633A6F5985AA9E9A03443B7 /* ClashYAMLTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8110225EBDEBDC762A0E20 /* ClashYAMLTextView.swift */; };
 		5674677A366B7F561FB8530E /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D5CF6C1DB2C326705BE75B5 /* SystemConfiguration.framework */; };
 		5915355710B88CF6038756E6 /* KeychainStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5736CEC2431764A6D333891B /* KeychainStoreTests.swift */; };
 		5AB90DB374188E502DDDD3BD /* MeowCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B807F37D85605FF0AD1427F5 /* MeowCore.xcframework */; };
@@ -99,6 +98,7 @@
 		B59F7F4EA30A8A841D561C2F /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = DE2BFC92947DFA842E612CB7 /* MeowModels */; };
 		B85AC5CED1BCB971FB7C16DB /* MWPacketWriter.m in Sources */ = {isa = PBXBuildFile; fileRef = 1C50CF82F4373D42432869C5 /* MWPacketWriter.m */; };
 		B92365F2ACFA408CA226CA7F /* RulesEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8D42838BD27620D7F278DE /* RulesEditorView.swift */; };
+		BA6EC811EDC00657072F8372 /* ClashConfigLinter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */; };
 		BA844D3302038958647DC227 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D5CF6C1DB2C326705BE75B5 /* SystemConfiguration.framework */; };
 		C05561AA0530BFF897CDEB8F /* MeowAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E114A82C37433E90AFEAD0E /* MeowAPI.swift */; };
 		C0EE6EDCE210308C46DE6856 /* RuleEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1711243E170547D1DA68FCD6 /* RuleEditorSheet.swift */; };
@@ -196,8 +196,6 @@
 		3D1746752AC889A678F94A02 /* MeowAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowAPITests.swift; sourceTree = "<group>"; };
 		40EEE34003CA284E6D9754E0 /* AppModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelContainer.swift; sourceTree = "<group>"; };
 		415A45F45F6FA01D8DA04A95 /* YamlEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YamlEditorView.swift; sourceTree = "<group>"; };
-		C1A5B7E8F3D24A9E8B6C0D13 /* ClashYAMLTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashYAMLTextView.swift; sourceTree = "<group>"; };
-		C1A5B7E8F3D24A9E8B6C0D15 /* ClashConfigLinter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashConfigLinter.swift; sourceTree = "<group>"; };
 		459136B958385ACB511D5D14 /* PacketTunnel.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		468AB5369E33BCD92920CF52 /* MWPreferences.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWPreferences.m; sourceTree = "<group>"; };
 		47CD1F1E7DD00599AF2A5238 /* clash_minimal.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_minimal.yaml; sourceTree = "<group>"; };
@@ -234,6 +232,7 @@
 		8E04BAFAE74D1434FE497EE1 /* clash_full.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_full.yaml; sourceTree = "<group>"; };
 		8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnToggleFlowTests.swift; sourceTree = "<group>"; };
 		8E6DE9E643D70646873B923B /* ConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
+		8E8110225EBDEBDC762A0E20 /* ClashYAMLTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashYAMLTextView.swift; sourceTree = "<group>"; };
 		930ED8C12FBC2859BCDC56E4 /* VpnManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManager.swift; sourceTree = "<group>"; };
 		992E16ADDEBA2F4304D4E797 /* EditableRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableRule.swift; sourceTree = "<group>"; };
 		9943546218B2F23235F1CCAD /* clash_malformed.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_malformed.yaml; sourceTree = "<group>"; };
@@ -283,6 +282,7 @@
 		F1F87C9BC53D85684F46CF05 /* TrafficView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficView.swift; sourceTree = "<group>"; };
 		F2B40C39BB5FC5957F42AC74 /* Country.mmdb */ = {isa = PBXFileReference; path = Country.mmdb; sourceTree = "<group>"; };
 		F4B2AEF174C775BBB240908B /* meow-ios.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "meow-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashConfigLinter.swift; sourceTree = "<group>"; };
 		F58373225092C298E65BB090 /* geosite.mrs */ = {isa = PBXFileReference; path = geosite.mrs; sourceTree = "<group>"; };
 		F73DB7377F110302EA3E8B4B /* clash_emoji_groups_realworld.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_emoji_groups_realworld.yaml; sourceTree = "<group>"; };
 		FA64C2503B8306CC64B9D23D /* MeowCoreBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowCoreBridgeTests.swift; sourceTree = "<group>"; };
@@ -475,6 +475,7 @@
 		82D5A212559F590D21A902F8 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				8E8110225EBDEBDC762A0E20 /* ClashYAMLTextView.swift */,
 				8E6DE9E643D70646873B923B /* ConnectionsView.swift */,
 				AF51AD7DD7946AB70970C9A8 /* ContentView.swift */,
 				CA20D7D98E7BC4663E289174 /* DiagnosticsViewController.swift */,
@@ -490,7 +491,6 @@
 				3B1E9C4360B99CC50183F32A /* SubscriptionsView.swift */,
 				F1F87C9BC53D85684F46CF05 /* TrafficView.swift */,
 				E56D18B0FBFA455C9F60134A /* UserDiagnosticsView.swift */,
-				C1A5B7E8F3D24A9E8B6C0D13 /* ClashYAMLTextView.swift */,
 				415A45F45F6FA01D8DA04A95 /* YamlEditorView.swift */,
 			);
 			path = Views;
@@ -520,11 +520,11 @@
 			isa = PBXGroup;
 			children = (
 				6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */,
+				F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */,
 				664BEEB7B966973C3D0A5074 /* DailyTrafficAccumulator.swift */,
 				20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */,
 				5E114A82C37433E90AFEAD0E /* MeowAPI.swift */,
 				A693FE7115671D717A87F1DB /* MeowAPITypes.swift */,
-				C1A5B7E8F3D24A9E8B6C0D15 /* ClashConfigLinter.swift */,
 				06D2AA0F7CC09650CF8263EF /* RulesYAMLEditor.swift */,
 				601ADF66737508CC359C4936 /* SubscriptionConverter.swift */,
 				D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */,
@@ -1086,6 +1086,8 @@
 				ADBD29F9A34A3AF34057D104 /* AppModel.swift in Sources */,
 				B2761759D155051F32B46F2D /* AppModelContainer.swift in Sources */,
 				A582A655A6EA5FF633395AD9 /* ChinaDirectKeywords.swift in Sources */,
+				BA6EC811EDC00657072F8372 /* ClashConfigLinter.swift in Sources */,
+				5633A6F5985AA9E9A03443B7 /* ClashYAMLTextView.swift in Sources */,
 				1C4A14F944F334280633F3C1 /* ConnectionsView.swift in Sources */,
 				8743C9ECD8EE078FA44E6545 /* ContentView.swift in Sources */,
 				53CECD909096DFDB00109EC4 /* DailyTraffic.swift in Sources */,
@@ -1115,8 +1117,6 @@
 				5C49A5DC6758BD9AB95DB5C2 /* TrafficView.swift in Sources */,
 				55FCE3874D6051B20C0A39AE /* UserDiagnosticsView.swift in Sources */,
 				B4CDE0AC50BC13DB22E90569 /* VpnManager.swift in Sources */,
-				C1A5B7E8F3D24A9E8B6C0D12 /* ClashYAMLTextView.swift in Sources */,
-				C1A5B7E8F3D24A9E8B6C0D14 /* ClashConfigLinter.swift in Sources */,
 				2D71AA36DACB626D73AC50A3 /* YamlEditorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
