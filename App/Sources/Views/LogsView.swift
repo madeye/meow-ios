@@ -2,11 +2,18 @@ import SwiftUI
 
 struct LogsView: View {
     @Environment(MeowAPI.self) private var api
-    @State private var entries: [LogEntry] = []
+    @State private var allEntries: [LogEntry] = []
     @State private var level = "info"
     @State private var autoScroll = true
     @State private var errorMessage: String?
     @State private var streamTask: Task<Void, Never>?
+
+    private static let levelOrder = ["debug": 0, "info": 1, "warning": 2, "error": 3]
+
+    private var entries: [LogEntry] {
+        let threshold = Self.levelOrder[level] ?? 0
+        return allEntries.filter { (Self.levelOrder[$0.type.lowercased()] ?? 0) >= threshold }
+    }
 
     var body: some View {
         VStack {
@@ -59,7 +66,7 @@ struct LogsView: View {
             "logs.nav.titleFormat \(entries.count)",
             comment: "Logs screen navigation title; %lld = entry count",
         ))
-        .task(id: level) { await subscribe() }
+        .task { await subscribe() }
     }
 
     private func row(for entry: LogEntry, index: Int) -> some View {
@@ -95,13 +102,12 @@ struct LogsView: View {
 
     private func subscribe() async {
         streamTask?.cancel()
-        entries.removeAll()
-        let stream = api.streamLogs(level: level)
+        let stream = api.streamLogs(level: "debug")
         do {
             for try await entry in stream {
                 errorMessage = nil
-                entries.append(entry)
-                if entries.count > 2000 { entries.removeFirst(entries.count - 2000) }
+                allEntries.append(entry)
+                if allEntries.count > 2000 { allEntries.removeFirst(allEntries.count - 2000) }
             }
         } catch {
             errorMessage = error.localizedDescription

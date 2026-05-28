@@ -51,10 +51,9 @@ struct LogsTests {
         .disabled("blocked on T4.7"),
     )
     func `streamLogs request URL embeds ?level= query param`() {
-        // Picker in LogsView toggles between debug/info/warning/error and
-        // restarts the stream on change (`task(id: level)`). The client
-        // must encode the level as `?level=<value>` on the WebSocket URL —
-        // meow honors this as a server-side filter.
+        // LogsView streams at level=debug and filters client-side.
+        // The client must encode the level as `?level=<value>` on the
+        // WebSocket URL — meow honors this as a server-side filter.
         Issue.record("LogsTests.streamLogsLevelQuery not implemented — skeleton gated on T4.7")
     }
 
@@ -74,9 +73,8 @@ struct LogsTests {
     )
     func `WebSocket remote close surfaces as throwing-stream error`() {
         // When the server tears down the socket (engine restart / meow
-        // panic), `ws.receive()` throws. The stream must finish(throwing:)
-        // so LogsView can recover on the next `.task(id: level)` cycle
-        // rather than silently stalling.
+        // panic), `ws.receive()` throws. `streamLogs` auto-reconnects
+        // with backoff; this test verifies the error propagation contract.
         Issue.record("LogsTests.streamLogsRemoteClosePropagates not implemented — skeleton gated on T4.7")
     }
 }

@@ -189,8 +189,8 @@ final class MeowAPI: @unchecked Sendable {
         try throwIfHTTPError(resp)
     }
 
-    /// Stream meow logs via WebSocket. Caller owns the AsyncStream — it
-    /// stops when the task is cancelled.
+    /// Stream meow logs via WebSocket with auto-reconnect.
+    /// Caller owns the AsyncStream — it stops when the task is cancelled.
     func streamLogs(level: String = "info") -> AsyncThrowingStream<LogEntry, Error> {
         AsyncThrowingStream { continuation in
             let log = self.log
@@ -198,36 +198,40 @@ final class MeowAPI: @unchecked Sendable {
                 let url = baseURL
                     .appending(path: "/logs")
                     .appending(queryItems: [.init(name: "level", value: level)])
-                var req = URLRequest(url: url)
-                if !secret.isEmpty {
-                    req.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
-                }
-                #if DEBUG
-                    // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
-                    log.info("WS upgrade \(url.absoluteString, privacy: .public)")
-                #endif
-                let ws = session.webSocketTask(with: req)
-                ws.resume()
-                do {
-                    while !Task.isCancelled {
-                        let msg = try await ws.receive()
-                        if case let .string(s) = msg {
-                            #if DEBUG
-                                // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
-                                log.info("WS frame /logs: \(s.prefix(200), privacy: .public)")
-                            #endif
-                            if let entry = LogEntry.from(jsonString: s) {
-                                continuation.yield(entry)
+                var backoff: UInt64 = 1
+                while !Task.isCancelled {
+                    var req = URLRequest(url: url)
+                    if !secret.isEmpty {
+                        req.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+                    }
+                    #if DEBUG
+                        log.info("WS upgrade \(url.absoluteString, privacy: .public)")
+                    #endif
+                    let ws = session.webSocketTask(with: req)
+                    ws.resume()
+                    do {
+                        backoff = 1
+                        while !Task.isCancelled {
+                            let msg = try await ws.receive()
+                            if case let .string(s) = msg {
+                                #if DEBUG
+                                    log.info("WS frame /logs: \(s.prefix(200), privacy: .public)")
+                                #endif
+                                if let entry = LogEntry.from(jsonString: s) {
+                                    continuation.yield(entry)
+                                }
                             }
                         }
+                    } catch {
+                        ws.cancel(with: .goingAway, reason: nil)
+                        if Task.isCancelled { break }
+                        let desc = String(describing: error)
+                        log.warning("WS /logs reconnecting in \(backoff)s: \(desc, privacy: .public)")
+                        try? await Task.sleep(for: .seconds(backoff))
+                        backoff = min(backoff * 2, 16)
                     }
-                    continuation.finish()
-                } catch {
-                    // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
-                    log.error("WS /logs error: \(String(describing: error), privacy: .public)")
-                    continuation.finish(throwing: error)
                 }
-                ws.cancel(with: .goingAway, reason: nil)
+                continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
