@@ -1640,7 +1640,7 @@ dependencies = [
 [[package]]
 name = "meow-api"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "axum",
  "base64",
@@ -1672,7 +1672,7 @@ dependencies = [
 [[package]]
 name = "meow-common"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1694,7 +1694,7 @@ dependencies = [
 [[package]]
 name = "meow-config"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1727,7 +1727,7 @@ dependencies = [
 [[package]]
 name = "meow-dns"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "async-trait",
  "dashmap 6.2.1",
@@ -1787,7 +1787,7 @@ dependencies = [
 [[package]]
 name = "meow-proxy"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1821,7 +1821,7 @@ dependencies = [
 [[package]]
 name = "meow-rules"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "ipnet",
  "iprange",
@@ -1838,7 +1838,7 @@ dependencies = [
 [[package]]
 name = "meow-transport"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "async-trait",
  "base64",
@@ -1864,7 +1864,7 @@ dependencies = [
 [[package]]
 name = "meow-trie"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "smallvec",
 ]
@@ -1872,7 +1872,7 @@ dependencies = [
 [[package]]
 name = "meow-tunnel"
 version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac97e1b387fb2762e74090f8636fe0273792a828#ac97e1b387fb2762e74090f8636fe0273792a828"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "arc-swap",
  "async-trait",
