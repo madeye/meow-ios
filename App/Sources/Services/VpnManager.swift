@@ -63,6 +63,11 @@ final class VpnManager {
         if manager == nil { await refresh() }
         guard let manager else { return }
         do {
+            let prefs = Preferences.load(from: AppGroup.defaults)
+            if prefs.onDemand, !manager.isOnDemandEnabled {
+                manager.isOnDemandEnabled = true
+                try await manager.saveToPreferences()
+            }
             try manager.connection.startVPNTunnel()
         } catch {
             lastError = error.localizedDescription
@@ -76,6 +81,10 @@ final class VpnManager {
     /// intentionally wants the VPN off.
     func disconnect() async {
         guard let manager else { return }
+        if manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            try? await manager.saveToPreferences()
+        }
         manager.connection.stopVPNTunnel()
     }
 
