@@ -37,16 +37,35 @@ final class VpnManager {
         }
     }
 
-    /// Load (or create) the packet-tunnel configuration and install it in
-    /// Preferences. Called on app launch and after user edits.
+    /// Load (or create) the packet-tunnel configuration. Called on app launch
+    /// and after user edits.
+    ///
+    /// Critical: when an existing profile is found, this attaches without
+    /// re-saving the configuration. iOS allows only one VPN profile in the
+    /// "active" slot — calling `saveToPreferences()` with `isEnabled = true`
+    /// re-claims that slot, deactivating whatever other VPN app was active.
+    /// Doing that on every cold-launch is how "opening meow disconnects my
+    /// other VPN" regressions appear. Slot ownership is claimed only by
+    /// explicit user actions: `connect()`, or the first-install branch here.
+    /// On-demand pref changes are synced only when we already own the slot.
     func refresh() async {
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
-            let mgr = managers.first ?? NETunnelProviderManager()
-            configureIfNeeded(mgr)
-            try await mgr.saveToPreferences()
-            try await mgr.loadFromPreferences()
-            attach(mgr)
+            if let existing = managers.first {
+                let want = Preferences.load(from: AppGroup.defaults).onDemand
+                if existing.isEnabled, existing.isOnDemandEnabled != want {
+                    existing.isOnDemandEnabled = want
+                    try await existing.saveToPreferences()
+                    try await existing.loadFromPreferences()
+                }
+                attach(existing)
+            } else {
+                let mgr = NETunnelProviderManager()
+                configureIfNeeded(mgr)
+                try await mgr.saveToPreferences()
+                try await mgr.loadFromPreferences()
+                attach(mgr)
+            }
         } catch {
             lastError = error.localizedDescription
             stage = .error
@@ -64,9 +83,22 @@ final class VpnManager {
         guard let manager else { return }
         do {
             let prefs = Preferences.load(from: AppGroup.defaults)
-            if prefs.onDemand, !manager.isOnDemandEnabled {
-                manager.isOnDemandEnabled = true
+            var dirty = false
+            if !manager.isEnabled {
+                manager.isEnabled = true
+                dirty = true
+            }
+            if (manager.onDemandRules ?? []).isEmpty {
+                manager.onDemandRules = [NEOnDemandRuleConnect()]
+                dirty = true
+            }
+            if manager.isOnDemandEnabled != prefs.onDemand {
+                manager.isOnDemandEnabled = prefs.onDemand
+                dirty = true
+            }
+            if dirty {
                 try await manager.saveToPreferences()
+                try await manager.loadFromPreferences()
             }
             try manager.connection.startVPNTunnel()
         } catch {
