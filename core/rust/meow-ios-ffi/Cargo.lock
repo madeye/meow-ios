@@ -1571,8 +1571,7 @@ checksum = "9106e1d747ffd48e6be5bb2d97fa706ed25b144fbee4d5c02eae110cd8d6badd"
 [[package]]
 name = "lwip"
 version = "0.3.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb7051f756d2ad2ee15f003ce2178646908a9d50bc966bd37dcd1eea8ce2bb13"
+source = "git+https://github.com/madeye/lwip?rev=f1ca6a855c57e48a2bd56a34105aaf4ae10f9e20#f1ca6a855c57e48a2bd56a34105aaf4ae10f9e20"
 dependencies = [
  "bindgen 0.69.5",
  "bytes",

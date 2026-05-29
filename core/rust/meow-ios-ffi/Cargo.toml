@@ -103,3 +103,18 @@ lto = true
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
+
+# Patched lwip: upstream 0.3.15's `Stream::poll_next` impls
+# (TcpListenerImpl / NetStackImpl / UdpSocket) mutate shared state
+# (queue/rx/waker) WITHOUT holding LWIP_MUTEX, while the lwIP callbacks
+# (tcp_accept_cb / output / udp_recv_cb) mutate the same state under the
+# lock. On the 2-worker runtime this races: a concurrent VecDeque realloc
+# in TcpListenerImpl::queue corrupts Box<TcpStreamImpl> ownership and hands
+# out a stream whose mpsc Receiver is freed -> SIGSEGV (use-after-free) in
+# TcpStreamImpl::poll_read under sustained TCP-flow churn (~115 flows/s,
+# crashes ~55s). The fork acquires LWIP_MUTEX at the top of each poll_next.
+# Verified: 20k+ flows over 180s at full churn on 2 workers, no crash, RSS
+# flat. Upstream this to https://github.com/ssrlive/lwip and drop the patch
+# once a fixed release ships.
+[patch.crates-io]
+lwip = { git = "https://github.com/madeye/lwip", rev = "f1ca6a855c57e48a2bd56a34105aaf4ae10f9e20" }
