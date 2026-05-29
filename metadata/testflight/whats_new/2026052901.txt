@@ -1,0 +1,37 @@
+Build 2026052901 (1.3.1)
+
+WHAT'S NEW
+• VPN-coexistence fix: opening meow no longer disconnects other VPN
+  apps. Previously, every app launch re-saved the NE profile with
+  isEnabled=true and silently re-claimed iOS's single active-VPN
+  slot. The slot is now claimed only on explicit Connect.
+• Logs view: WebSocket auto-reconnects with exponential backoff
+  (1s → 16s) after meow restarts; level picker filters client-side
+  instead of restarting the stream.
+• Sleep/wake lifecycle: full tun restart on network change to avoid
+  stuck-routing after Wi-Fi handoff or airplane-mode toggles.
+• lwip stability: at the TCP per-flow cap, new connections are
+  dropped instead of evicted (eviction triggered an lwip crash).
+• Memory watchdog: removed the 40 MB hard-cap exit(0); the soft-cap
+  path now calls malloc_zone_pressure_relief instead of restarting
+  the engine, reducing visible reconnects under pressure.
+• meow-rs bumped to 71871a30 (rolling fixes from upstream).
+• YAML editor: syntax highlighting, line numbers, semantic
+  validation; Cancel button now dismisses instead of reverting.
+• Config + database files are now eligible for iCloud backup.
+
+KNOWN
+• Non-DNS UDP forwarding still pending (QUIC / HTTP3 falls back to
+  TCP HTTP/2; usually transparent).
+
+FOR TESTERS
+• VPN coexistence: install another VPN, connect to it, then open
+  meow. Other VPN should stay active. Tap Connect → meow takes the
+  slot as expected.
+• Logs view: change the level filter while streaming — entries
+  shouldn't disappear; the stream should not reconnect.
+• Sleep/wake: lock phone for ~5 min, unlock; confirm tunnel still
+  routes (no stale state).
+• Heavy browsing: open 10+ tabs simultaneously; confirm VPN stays
+  connected (no jetsam kill).
+• Issues: https://github.com/madeye/meow-ios/issues
