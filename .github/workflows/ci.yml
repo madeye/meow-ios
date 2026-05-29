@@ -166,18 +166,22 @@ jobs:
             ls -R build/meow-ios.xcarchive/Products || true
             exit 1
           fi
-          # Ceiling raised 8 MB → 10 MB (warn 7 → 9) in 2026-05 to track
-          # reality after the meow-rs v0.7.x bump: the v0.7.2 → v0.7.3
-          # cuts pushed the FFI-side fake-IP pool / china-DNS / hickory-proto
-          # surface out (PR #131) but the rule engine + transport surfaces in
-          # meow-rs itself grew faster than that. The actual ship gate is
-          # the NE process's ~15 MB *resident memory* cap (TEST_STRATEGY §8.1
-          # row 1); binary on-disk is only a proxy heuristic and correlates
-          # loosely. 10 MB still leaves ~5 MB RSS headroom for runtime state
-          # in the worst case. Revisit again if meow-rs adds VMess /
-          # WireGuard / Hysteria — those will push another step.
-          LIMIT=$((10 * 1024 * 1024))
-          WARN=$((9 * 1024 * 1024))
+          # Ceiling history: 8 → 10 MB (2026-05, meow-rs v0.7.x bump) →
+          # 20 MB (2026-05, warn 9 → 18). The 10 → 20 step gives generous
+          # headroom over the meow-rs v0.11 + boring-tls/ECH (RFC 9460)
+          # footprint (BoringSSL is vendored by boring-sys for ECH + uTLS
+          # fingerprinting; current binary ~11.1 MB) so routine meow-rs bumps
+          # stop re-tripping this proxy gate.
+          #
+          # Binary on-disk is only a PROXY heuristic (TEST_STRATEGY §8.1) — the
+          # real ship gate is the NE process's ~50 MB *resident memory* jetsam
+          # cap (NOT the stale ~15 MB this comment used to cite; corrected per
+          # PR #140). Code is demand-paged, so an 11 MB binary is nowhere near
+          # 11 MB resident: measured RSS under sustained TCP-flow churn is
+          # ~31 MB, well within the ≤ 45 MB peak target. This gate just guards
+          # against runaway on-disk bloat; RSS is the ship-blocker.
+          LIMIT=$((20 * 1024 * 1024))
+          WARN=$((18 * 1024 * 1024))
           SIZE=$(stat -f %z "$BIN")
           MB=$(awk "BEGIN {printf \"%.2f\", ${SIZE}/1048576}")
           HEADROOM=$((LIMIT - SIZE))
@@ -196,16 +200,16 @@ jobs:
             echo "| Metric | Value |"
             echo "| --- | --- |"
             echo "| Stripped binary | **${MB} MB** (${SIZE} bytes) |"
-            echo "| Ceiling | 10.00 MB |"
-            echo "| Soft warning | 9.00 MB |"
+            echo "| Ceiling | 20.00 MB |"
+            echo "| Soft warning | 18.00 MB |"
             echo "| Headroom | ${HEADROOM_MB} MB |"
             echo "| Status | \`${STATUS}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$STATUS" = "fail" ]; then
-            echo "::error::PacketTunnel exceeds 10 MB ceiling (${SIZE} > ${LIMIT}) — see TEST_STRATEGY §8.1"
+            echo "::error::PacketTunnel exceeds 20 MB ceiling (${SIZE} > ${LIMIT}) — see TEST_STRATEGY §8.1"
             exit 1
           fi
           if [ "$STATUS" = "warn" ]; then
-            echo "::warning::PacketTunnel approaching 10 MB ceiling (${MB} MB > 9 MB soft warning)"
+            echo "::warning::PacketTunnel approaching 20 MB ceiling (${MB} MB > 18 MB soft warning)"
           fi

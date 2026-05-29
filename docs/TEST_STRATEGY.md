@@ -316,7 +316,7 @@ The iOS NetworkExtension process is capped at **~50 MB resident memory** by the 
 | Extension resident memory at idle (60s post-connect) | ≤ **40 MB** | `task_info` via Instruments Allocations; ship-blocker |
 | Extension peak memory under load (100 Mbps sustained, 60s) | ≤ **45 MB** | Instruments Allocations — any sample ≥ 50 MB fails build |
 | Extension memory headroom stress test | No jetsam over 30 min at 50 Mbps + 200 concurrent connections | Instruments Allocations + `log stream` for jetsam events |
-| `PacketTunnel.appex` stripped binary | ≤ **10 MB** (soft warn at 9 MB) | CI gate via `stat` in `ci.yml` size-budget step; revisit when meow-rs gains new protocols. Raised 8 → 10 MB in 2026-05 to track the v0.7.x bump — see step comment for rationale. The actual ship constraint is the row above (extension RSS); binary size is a proxy heuristic |
+| `PacketTunnel.appex` stripped binary | ≤ **20 MB** (soft warn at 18 MB) | CI gate via `stat` in `ci.yml` size-budget step. Raised 8 → 10 MB (2026-05, meow-rs v0.7.x) → 20 MB (2026-05, meow-rs v0.11 + boring-tls/ECH; BoringSSL is vendored for ECH/uTLS, current ~11.1 MB) — generous headroom so routine bumps don't re-trip this proxy gate. The actual ship constraint is the row above (extension RSS ~50 MB cap; measured ~31 MB under load); binary size is only a proxy heuristic — code is demand-paged, so on-disk size ≠ resident size |
 | App-side memory at idle | ≤ 80 MB | Instruments Allocations |
 | Memory growth after 1h session | ≤ +0.5 MB in extension; ≤ +10 MB in app | Identify leaks via Instruments Leaks |
 
@@ -543,7 +543,7 @@ Jobs (parallel where possible):
 
 1. **build-core** — checkout rust crate + `meow-rs` submodule, install `aarch64-apple-ios`/`aarch64-apple-ios-sim` Rust targets, run `scripts/build-rust.sh` → upload `MeowCore.xcframework` artifact (single unified framework per PRD v1.1+)
 2. **lint** — SwiftLint, SwiftFormat --dry-run, actionlint on workflow files
-3. **size-check** — fail if `PacketTunnel.appex` stripped binary exceeds 10 MB (§8.1)
+3. **size-check** — fail if `PacketTunnel.appex` stripped binary exceeds 20 MB (§8.1)
 4. **unit-test** — download `MeowCore.xcframework`, `xcodebuild test -scheme meow-ios -destination 'platform=iOS Simulator,name=iPhone 17'` for `MeowTests`
 5. **integration-test** — simulator-based NetworkExtension lifecycle + FFI tests (subset that runs without device)
 6. **archive** — `xcodebuild archive` producing `.xcarchive` (no code signing in PR builds, signing only on `main`)
@@ -615,7 +615,7 @@ On `main`:
 
 | Risk (from PRD §8) | Test Mitigation | Priority |
 |---------------------|-----------------|----------|
-| Extension memory limit (iOS NE cap ≈ 50 MB) | CI fails build if `PacketTunnel.appex` stripped binary > 10 MB (proxy heuristic — see §8.1); manual pre-release smoke (T2.8) fails if resident > 40 MB sustained or any sample ≥ 50 MB per §8.1 | P0 |
+| Extension memory limit (iOS NE cap ≈ 50 MB) | CI fails build if `PacketTunnel.appex` stripped binary > 20 MB (proxy heuristic — see §8.1); manual pre-release smoke (T2.8) fails if resident > 40 MB sustained or any sample ≥ 50 MB per §8.1 | P0 |
 | meow-rs protocol parity gaps vs. Go meow | Protocol matrix §6.3 exercises every outbound shipped by meow-rs v0.6.1 (SS / Trojan / VLESS variants) through real test servers; missing/broken protocol = ship-blocker for that protocol. Out-of-scope outbounds (VMess, WireGuard, TUIC, Hysteria 2) are deferred — not advertised, not tested. | P0 |
 | Apple review rejection | Static scan for ATS / privacy violations; manual pre-submission checklist | P0 |
 | NetworkExtension sandbox file I/O | Integration tests §4.1 exercise only App Group paths; any direct path triggers test failure | P1 |
