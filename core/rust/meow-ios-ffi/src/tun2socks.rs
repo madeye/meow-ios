@@ -331,6 +331,47 @@ fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
     S.get_or_init(|| Mutex::new(None))
 }
 
+/// Weak handle to the per-engine `reply_readers` set, published by
+/// `run_tun2socks` at startup. `Weak` so it never keeps the set alive past
+/// an engine stop, and so a restart's fresh set simply replaces it. Read
+/// only by `debug_counts`.
+#[allow(clippy::type_complexity)]
+fn reply_readers_slot(
+) -> &'static Mutex<Option<std::sync::Weak<Mutex<HashSet<(SocketAddr, SocketAddr)>>>>> {
+    static S: OnceLock<Mutex<Option<std::sync::Weak<Mutex<HashSet<(SocketAddr, SocketAddr)>>>>>> =
+        OnceLock::new();
+    S.get_or_init(|| Mutex::new(None))
+}
+
+/// Live sizes of the per-flow state maps the slow-leak investigation
+/// flagged (TCP flow registry, UDP reply-reader set, UDP NAT table), so the
+/// harness `rss_monitor` can chart them next to RSS and pin which structure
+/// grows under churn. All three reads are O(1)/O(shards) and only briefly
+/// locked — cheap enough for a per-tick (≥5 s) sample.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DebugCounts {
+    pub tcp_flows: u64,
+    pub reply_readers: u64,
+    pub nat_table: u64,
+}
+
+/// Snapshot [`DebugCounts`]. Returns zeros for any map whose owner isn't
+/// currently running (engine stopped, tun2socks not started).
+pub fn debug_counts() -> DebugCounts {
+    DebugCounts {
+        tcp_flows: tcp_flows().len() as u64,
+        reply_readers: reply_readers_slot()
+            .lock()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .map(|m| m.lock().len() as u64)
+            .unwrap_or(0),
+        nat_table: crate::engine::tunnel()
+            .map(|t| t.inner().nat_table.len() as u64)
+            .unwrap_or(0),
+    }
+}
+
 pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
     if TUN2SOCKS_RUNNING.swap(true, Ordering::SeqCst) {
         return Err("tun2socks already running".into());
@@ -409,6 +450,9 @@ async fn run_tun2socks(
     // same tuple meow-tunnel uses, or dedupe breaks and we leak readers.
     let reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>> =
         Arc::new(Mutex::new(HashSet::new()));
+    // Publish a weak handle so `debug_counts()` (harness RSS monitor) can
+    // sample this set's size without owning it.
+    *reply_readers_slot().lock() = Some(Arc::downgrade(&reply_readers));
 
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
@@ -1121,7 +1165,31 @@ fn spawn_udp_reply_reader(
                     }
                 }
             } else {
-                session.conn.read_packet(&mut buf).await
+                // Post-first-reply idle backstop. The NAT sweeper
+                // (`spawn_background_tasks`) evicts the `nat_table` entry once
+                // a session is idle > DEFAULT_UDP_IDLE (60 s), but this reader
+                // task holds its OWN `Arc<UdpSession>` + 4 KiB `buf`, so the
+                // sweeper alone can't unblock a `read_packet` that never
+                // returns — the task (and its buffer) would leak for any
+                // session that gets one reply then goes silent (one-shot DNS,
+                // abandoned QUIC, dead upstream). Bound the read at the same
+                // 60 s idle the tunnel already uses, so once the NAT layer
+                // considers the session dead this reader exits and reaches the
+                // cleanup below. Genuinely active sessions (data within 60 s)
+                // are never evicted; a session quiet > 60 s is one the tunnel
+                // has already dropped from `nat_table` regardless.
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(60),
+                    session.conn.read_packet(&mut buf),
+                )
+                .await
+                {
+                    Ok(res) => res,
+                    Err(_) => {
+                        info!("UDP reply reader idle > 60s for {:?}; evicting session", key);
+                        break;
+                    }
+                }
             };
             match read {
                 Ok((n, _from)) => {

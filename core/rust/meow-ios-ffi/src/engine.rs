@@ -290,6 +290,19 @@ pub fn start(config_path: &str) -> Result<()> {
     tunnel.set_mode(cfg.general.mode);
     tunnel.update_rules(cfg.rules);
     tunnel.update_proxies(cfg.proxies);
+
+    // Start the tunnel's background tasks — currently just the UDP NAT
+    // sweeper, which evicts sessions idle > DEFAULT_UDP_IDLE (60 s) every
+    // DEFAULT_SWEEP_INTERVAL (15 s). Without this call the `nat_table` (and
+    // the `reply_readers` set + detached reader tasks the FFI keys off it)
+    // grows monotonically under UDP flow churn: every new 5-tuple inserts an
+    // `Arc<UdpSession>` that is only removed on a reader-task exit that a
+    // quiet session (one-shot DNS, abandoned QUIC, dead upstream) never
+    // reaches. Over hours that slow growth crosses the ~50 MB NE jetsam cap
+    // and the PacketTunnel is killed. `meow-app` calls this after building
+    // its tunnel; the FFI must too. Idempotent — invoked once per engine.
+    tunnel.spawn_background_tasks();
+
     let stats = tunnel.statistics().clone();
 
     // No `meow_app::geodata_fetch::run_on_startup` spawn here: the iOS app

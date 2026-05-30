@@ -31,6 +31,11 @@ mod tun2socks;
 #[cfg(test)]
 mod xdg_home_dir_tests;
 
+/// Live per-flow state-map sizes (TCP flows, UDP reply readers, UDP NAT
+/// table) for the dev harness RSS monitor — see the slow-leak hunt. Not part
+/// of the C ABI; consumed by `macos-utun-harness` via the rlib.
+pub use tun2socks::{debug_counts, DebugCounts};
+
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
