@@ -301,7 +301,17 @@ pub fn start(config_path: &str) -> Result<()> {
     // reaches. Over hours that slow growth crosses the ~50 MB NE jetsam cap
     // and the PacketTunnel is killed. `meow-app` calls this after building
     // its tunnel; the FFI must too. Idempotent — invoked once per engine.
-    tunnel.spawn_background_tasks();
+    //
+    // `start()` runs on the main thread, OUTSIDE the tokio runtime, and
+    // `spawn_background_tasks` uses a bare `tokio::spawn` (unlike the
+    // `get_runtime().spawn(...)` callsites below, which carry their own
+    // handle). Enter the runtime context for the call so the sweeper task
+    // lands on `get_runtime()` instead of panicking with "no reactor
+    // running". The guard only needs to outlive the spawn.
+    {
+        let _enter = crate::get_runtime().enter();
+        tunnel.spawn_background_tasks();
+    }
 
     let stats = tunnel.statistics().clone();
 
