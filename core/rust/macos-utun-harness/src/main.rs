@@ -45,7 +45,8 @@ use utun::Utun;
 // so we are exercising the exact bytes the PacketTunnel extension runs.
 use meow_ios_ffi::{
     debug_counts, meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
-    meow_engine_stop, meow_tun_ingest, meow_tun_set_accept_cap, meow_tun_start, meow_tun_stop, rss,
+    meow_engine_stop, meow_tun_ingest, meow_tun_set_accept_cap,
+    meow_tun_set_udp_first_reply_deadline_ms, meow_tun_start, meow_tun_stop, rss,
 };
 
 #[derive(Parser, Debug)]
@@ -126,6 +127,35 @@ struct Args {
     /// per second (≈ `udp_stress_conns / interval`/s new NAT sessions).
     #[arg(long, default_value_t = 20)]
     udp_stress_interval_ms: u64,
+
+    /// If set, SYNTHETICALLY inject IPv4/UDP packets straight into the
+    /// engine via `meow_tun_ingest` — bypassing the OS route table, system
+    /// DNS, and the utun device entirely. Each injected packet carries a
+    /// fresh `(src_ip,src_port)`, so the engine inserts a new `Arc<UdpSession>`
+    /// into its NAT table per packet. Use a REAL, reachable dst that won't
+    /// answer the chosen UDP port (e.g. `8.8.8.8:4433`): DIRECT dial succeeds
+    /// (so the session is created), no reply ever arrives (so it goes idle),
+    /// and the egress goes out the default route — no fake-IP, no DNS loop,
+    /// no routing loop. This is the deterministic way to drive the UDP NAT
+    /// leak path; `--udp-stress-target` (socket-based) needs fake-IP routing.
+    /// dst port MUST NOT be 53 (that hits the DNS intercept, not the NAT).
+    #[arg(long)]
+    udp_inject_target: Option<String>,
+
+    /// Synthetic-injection rate in packets/sec (each = one new NAT session).
+    /// Steady-state live sessions ≈ rate × 60s idle window once the sweeper
+    /// is reaping. Ignored unless `--udp-inject-target` is set.
+    #[arg(long, default_value_t = 50)]
+    udp_inject_rate: u64,
+
+    /// Override the FFI's UDP first-reply deadline (ms). -1 leaves the FFI
+    /// default (10_000). Set to 0 to DISABLE it, so a session that never
+    /// replies is NOT reaped at the deadline — it then relies on the 60s NAT
+    /// sweeper / post-first-reply idle timeout. This isolates the sweeper as
+    /// the bounding mechanism: with the fix `nat_table` plateaus at
+    /// ~rate×60s; without it, it grows unbounded (the leak).
+    #[arg(long, default_value_t = -1)]
+    udp_first_reply_deadline_ms: i32,
 }
 
 /// The egress callback runs on a tokio worker thread (inside the FFI's
@@ -247,6 +277,22 @@ fn main() -> Result<()> {
         }
     }
 
+    if args.udp_first_reply_deadline_ms >= 0 {
+        let rc = meow_tun_set_udp_first_reply_deadline_ms(args.udp_first_reply_deadline_ms);
+        if rc != 0 {
+            warn!(
+                "meow_tun_set_udp_first_reply_deadline_ms({}) returned {}",
+                args.udp_first_reply_deadline_ms, rc
+            );
+        } else {
+            info!(
+                "udp first-reply deadline = {} ms{}",
+                args.udp_first_reply_deadline_ms,
+                if args.udp_first_reply_deadline_ms == 0 { " (disabled)" } else { "" }
+            );
+        }
+    }
+
     info!("registering tun egress callback");
     // SAFETY: egress_callback matches MeowWritePacket; ctx is unused (we keep
     // shared state in EGRESS_FD instead).
@@ -342,6 +388,38 @@ fn main() -> Result<()> {
         None
     };
 
+    let udp_inject_thread = if let Some(target) = args.udp_inject_target.clone() {
+        let rate = args.udp_inject_rate.max(1);
+        let duration = if args.stress_duration_secs == 0 {
+            None
+        } else {
+            Some(std::time::Duration::from_secs(args.stress_duration_secs))
+        };
+        match target.parse::<std::net::SocketAddr>() {
+            Ok(dst) if dst.is_ipv4() && dst.port() != 53 => {
+                info!("udp_inject: dst={} rate={}/s duration={:?}", dst, rate, duration);
+                let exit_after = duration.is_some();
+                Some(thread::spawn(move || {
+                    udp_inject_loop(dst, rate, duration);
+                    if exit_after {
+                        info!("udp_inject: duration elapsed — signaling shutdown");
+                        SHUTDOWN.store(true, Ordering::SeqCst);
+                    }
+                }))
+            }
+            Ok(dst) => {
+                error!("udp_inject: target {} must be an IPv4 addr with port != 53", dst);
+                None
+            }
+            Err(e) => {
+                error!("udp_inject: target must be IP:port (got {:?}): {}", target, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Park the main thread on the shutdown flag; ingestion runs on its own
     // thread so a blocking utun read doesn't gate signal handling.
     while !SHUTDOWN.load(Ordering::SeqCst) {
@@ -366,6 +444,9 @@ fn main() -> Result<()> {
         let _ = h.join();
     }
     if let Some(h) = udp_stress_thread {
+        let _ = h.join();
+    }
+    if let Some(h) = udp_inject_thread {
         let _ = h.join();
     }
     info!("clean exit");
@@ -618,6 +699,123 @@ fn udp_stress_loop(
         failed.load(Ordering::Relaxed),
         started.elapsed().as_secs_f64()
     );
+}
+
+/// Synthetic UDP NAT-churn injector. Crafts one IPv4/UDP packet per tick with
+/// a fresh `(src_ip, src_port)` and feeds it straight to `meow_tun_ingest`,
+/// bypassing the OS route table, system DNS, and the utun device. Each fresh
+/// source is a new NAT 5-tuple the engine inserts into `nat_table`; with a
+/// non-answering dst the session goes idle and the NAT sweeper must reap it.
+/// Deterministic, no network setup, no fake-IP, no routing/DNS loop.
+fn udp_inject_loop(dst: std::net::SocketAddr, rate: u64, duration: Option<std::time::Duration>) {
+    let dst_ip = match dst.ip() {
+        std::net::IpAddr::V4(v4) => v4.octets(),
+        std::net::IpAddr::V6(_) => {
+            error!("udp_inject: ipv6 dst unsupported");
+            return;
+        }
+    };
+    let dst_port = dst.port();
+    let interval = std::time::Duration::from_secs_f64(1.0 / rate as f64);
+    let started = std::time::Instant::now();
+    let mut counter: u32 = 0;
+    let mut injected: u64 = 0;
+    let mut last_report = started;
+    let payload: &[u8] = b"meow-udp-inject"; // arbitrary, non-DNS
+
+    while !SHUTDOWN.load(Ordering::Relaxed) {
+        if let Some(limit) = duration {
+            if started.elapsed() >= limit {
+                break;
+            }
+        }
+        // Map the counter to a fresh (src_ip, src_port): 10.<b2>.<b1>.<b0>
+        // with a 16-bit port window gives ~2^32 distinct keys before wrap —
+        // far beyond any run length at these rates.
+        let c = counter;
+        let src_ip = [10u8, (c >> 16) as u8, (c >> 8) as u8, c as u8];
+        let src_port = 1024u16.wrapping_add((c & 0xffff) as u16);
+        counter = counter.wrapping_add(1);
+
+        let pkt = build_udp_ipv4_packet(src_ip, src_port, dst_ip, dst_port, payload);
+        // SAFETY: `pkt` is a valid readable slice for its length; the FFI
+        // copies it into the ingress channel and does not retain the pointer.
+        unsafe {
+            meow_tun_ingest(pkt.as_ptr(), pkt.len());
+        }
+        injected += 1;
+
+        if last_report.elapsed() >= std::time::Duration::from_secs(5) {
+            info!(
+                "udp_inject: injected={} (≈{:.0}/s) elapsed={:.0}s",
+                injected,
+                injected as f64 / started.elapsed().as_secs_f64().max(0.001),
+                started.elapsed().as_secs_f64()
+            );
+            last_report = std::time::Instant::now();
+        }
+        thread::sleep(interval);
+    }
+    info!(
+        "udp_inject: done — injected={} elapsed={:.1}s",
+        injected,
+        started.elapsed().as_secs_f64()
+    );
+}
+
+/// One's-complement IPv4 header checksum (RFC 1071) over `header` (which must
+/// carry a zeroed checksum field).
+fn ipv4_checksum(header: &[u8]) -> u16 {
+    let mut sum: u32 = 0;
+    let mut i = 0;
+    while i + 1 < header.len() {
+        sum += u16::from_be_bytes([header[i], header[i + 1]]) as u32;
+        i += 2;
+    }
+    if i < header.len() {
+        sum += (header[i] as u32) << 8;
+    }
+    while (sum >> 16) != 0 {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    !(sum as u16)
+}
+
+/// Build a minimal IPv4 + UDP packet (no IP options). The IP header checksum
+/// is computed (the non-53 UDP path traverses the lwip netstack, which may
+/// validate it); the UDP checksum is left 0, which is legal on IPv4.
+fn build_udp_ipv4_packet(
+    src_ip: [u8; 4],
+    src_port: u16,
+    dst_ip: [u8; 4],
+    dst_port: u16,
+    payload: &[u8],
+) -> Vec<u8> {
+    let udp_len: u16 = 8 + payload.len() as u16;
+    let total_len: u16 = 20 + udp_len;
+
+    let mut ip = [0u8; 20];
+    ip[0] = 0x45; // version 4, IHL 5
+    ip[1] = 0x00; // DSCP/ECN
+    ip[2..4].copy_from_slice(&total_len.to_be_bytes());
+    ip[4..6].copy_from_slice(&[0x12, 0x34]); // identification
+    ip[6..8].copy_from_slice(&[0x40, 0x00]); // flags=DF, frag offset 0
+    ip[8] = 64; // TTL
+    ip[9] = 17; // protocol = UDP
+                // ip[10..12] checksum left 0 for the computation
+    ip[12..16].copy_from_slice(&src_ip);
+    ip[16..20].copy_from_slice(&dst_ip);
+    let cksum = ipv4_checksum(&ip);
+    ip[10..12].copy_from_slice(&cksum.to_be_bytes());
+
+    let mut pkt = Vec::with_capacity(total_len as usize);
+    pkt.extend_from_slice(&ip);
+    pkt.extend_from_slice(&src_port.to_be_bytes());
+    pkt.extend_from_slice(&dst_port.to_be_bytes());
+    pkt.extend_from_slice(&udp_len.to_be_bytes());
+    pkt.extend_from_slice(&[0x00, 0x00]); // UDP checksum 0 (legal on IPv4)
+    pkt.extend_from_slice(payload);
+    pkt
 }
 
 fn ingest_loop(fd: RawFd) {
