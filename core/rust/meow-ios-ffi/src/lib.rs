@@ -649,6 +649,35 @@ pub extern "C" fn meow_tun_accept_cap() -> c_int {
     tun2socks::accept_cap() as c_int
 }
 
+/// Set the concurrent-UDP-session cap (defense-in-depth, the UDP analogue of
+/// `meow_tun_set_accept_cap`). Bounds the number of live UDP NAT sessions —
+/// each pins a reply-reader buffer + outbound socket — so a UDP burst
+/// arriving faster than the 60s idle sweeper can reap cannot grow memory
+/// toward the 50 MB NE jetsam cap; new sessions over the cap are dropped
+/// (UDP is lossy; the app retries). Default 2048.
+///
+/// Takes effect on the next `meow_tun_start`. Returns 0 on success, -1 on
+/// invalid input (`cap == 0`, which would drop every UDP session).
+#[no_mangle]
+pub extern "C" fn meow_tun_set_udp_session_cap(cap: c_int) -> c_int {
+    if cap <= 0 {
+        set_error("udp session cap must be > 0".into());
+        return -1;
+    }
+    if tun2socks::set_udp_session_cap(cap as usize) {
+        0
+    } else {
+        -1
+    }
+}
+
+/// Read the currently-configured UDP session cap. Reflects the value the
+/// next `meow_tun_start` will use; does not query the running semaphore.
+#[no_mangle]
+pub extern "C" fn meow_tun_udp_session_cap() -> c_int {
+    tun2socks::udp_session_cap() as c_int
+}
+
 /// Set the per-flow dial deadline, in milliseconds. Bounds the time
 /// `dispatch_tcp` waits for the relay's first byte of progress on the
 /// netstack stream before declaring the dial hung and dropping the

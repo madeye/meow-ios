@@ -209,6 +209,38 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
 
 const UDP_BURST_CAP: usize = 512;
 
+// Concurrent live-UDP-session cap (defense-in-depth, mirrors
+// `TCP_ACCEPT_CAP`). Distinct from `UDP_BURST_CAP`: that permit is released
+// the moment dispatch setup finishes (it only rate-limits in-flight
+// dispatch), whereas this one is held for the reply-reader's whole lifetime,
+// so the held-permit count == the live-session count. The idle sweeper reaps
+// sessions quiet > 60 s, but a burst arriving faster than that window can
+// still spike `nat_table` + `reply_readers` to rate×60 s — each live session
+// pins a ~4 KiB reader buffer + an outbound socket fd. This caps concurrent
+// sessions: a new 5-tuple over the cap is dropped (UDP is lossy; the app
+// retries) rather than growing memory toward the 50 MB NE jetsam cap.
+const UDP_SESSION_CAP_DEFAULT: usize = 2048;
+static UDP_SESSION_CAP: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(UDP_SESSION_CAP_DEFAULT);
+static UDP_SESSION_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Set the concurrent-UDP-session cap. Takes effect on the next
+/// `meow_tun_start`. `cap` must be > 0 — zero would drop every UDP session.
+/// Returns true if applied, false on invalid input.
+pub fn set_udp_session_cap(cap: usize) -> bool {
+    if cap == 0 {
+        return false;
+    }
+    UDP_SESSION_CAP.store(cap, Ordering::Relaxed);
+    true
+}
+
+/// Read the configured UDP session cap — the value the next `meow_tun_start`
+/// will use, not the size of any live semaphore.
+pub fn udp_session_cap() -> usize {
+    UDP_SESSION_CAP.load(Ordering::Relaxed)
+}
+
 // In-TUN UDP/53 handler fan-out cap. Each UDP/53 packet spawns an async
 // task that may block on a real DNS round-trip (forward_dns_to_upstream
 // for non-A/AAAA, meow's resolver for A/AAAA). Without a cap, a DNS
@@ -458,6 +490,7 @@ async fn run_tun2socks(
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
 
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
+    let udp_session_sem = Arc::new(Semaphore::new(udp_session_cap()));
     let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
     let tcp_accept_sem = Arc::new(Semaphore::new(accept_cap()));
 
@@ -586,6 +619,7 @@ async fn run_tun2socks(
     let udp_reply_tx_accept = udp_reply_tx.clone();
     let reply_readers_accept = reply_readers.clone();
     let udp_sem_accept = udp_sem.clone();
+    let udp_session_sem_accept = udp_session_sem.clone();
     let udp_accept_handle = tokio::spawn(async move {
         while let Some((payload, src, dst)) = udp_read.next().await {
             let permit = match udp_sem_accept.clone().try_acquire_owned() {
@@ -600,8 +634,9 @@ async fn run_tun2socks(
             };
             let reply_tx = udp_reply_tx_accept.clone();
             let readers = reply_readers_accept.clone();
+            let session_sem = udp_session_sem_accept.clone();
             tokio::spawn(async move {
-                dispatch_udp(payload, src, dst, reply_tx, readers, permit).await;
+                dispatch_udp(payload, src, dst, reply_tx, readers, permit, session_sem).await;
             });
         }
     });
@@ -1056,6 +1091,7 @@ async fn dispatch_udp(
     reply_tx: mpsc::Sender<UdpMsg>,
     reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
     permit: OwnedSemaphorePermit,
+    session_sem: Arc<Semaphore>,
 ) {
     let Some(tunnel) = crate::engine::tunnel() else {
         logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
@@ -1118,9 +1154,39 @@ async fn dispatch_udp(
         return;
     };
 
-    spawn_udp_reply_reader(key, session, src, dst, reply_tx, reply_readers, inner);
+    // Concurrent-session cap (defense-in-depth). This is a genuinely new
+    // session (the `reply_readers.insert` above returned true). Take a permit
+    // held for the reply-reader's lifetime; if the cap is saturated, reject
+    // the session: drop the `reply_readers` entry and the `nat_table` entry
+    // `handle_udp` just created (no per-session task exists yet —
+    // `handle_udp` only inserts + sends — so removing the entry drops the
+    // `UdpSession` and closes its outbound cleanly). The app retries.
+    let session_permit = match session_sem.try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            warn_capped(
+                &UDP_SESSION_CAP_LOG_LAST_MS,
+                "tun2socks: UDP session cap reached, rejecting new session",
+            );
+            reply_readers.lock().remove(&key);
+            inner.nat_table.remove(&key);
+            return;
+        }
+    };
+
+    spawn_udp_reply_reader(
+        key,
+        session,
+        src,
+        dst,
+        reply_tx,
+        reply_readers,
+        inner,
+        session_permit,
+    );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_udp_reply_reader(
     key: (SocketAddr, SocketAddr),
     session: Arc<UdpSession>,
@@ -1129,8 +1195,14 @@ fn spawn_udp_reply_reader(
     reply_tx: mpsc::Sender<UdpMsg>,
     reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
     tunnel_inner: Arc<TunnelInner>,
+    session_permit: OwnedSemaphorePermit,
 ) {
     tokio::spawn(async move {
+        // Hold the concurrent-session-cap permit for this reader's whole
+        // lifetime: the live-session count equals the number of held permits.
+        // Released on every exit path (idle timeout, write/read error, engine
+        // stop) when this task ends and the permit drops.
+        let _session_permit = session_permit;
         // Per-session reply buffer. Sized for the iOS TUN MTU (1500) plus
         // headroom for the rare oversized UDP datagram that survives path
         // fragmentation. Was 64 KiB — at N concurrent UDP sessions (DNS,
@@ -1934,5 +2006,18 @@ mod tests {
             "0 must be accepted to opt out"
         );
         set_udp_first_reply_deadline_ms(prev);
+    }
+
+    #[test]
+    fn udp_session_cap_roundtrip_and_rejects_zero() {
+        let prev = udp_session_cap();
+        assert!(set_udp_session_cap(512));
+        assert_eq!(udp_session_cap(), 512);
+        assert!(
+            !set_udp_session_cap(0),
+            "0 must be rejected — it would drop every UDP session"
+        );
+        assert_eq!(udp_session_cap(), 512, "rejected set must not mutate");
+        set_udp_session_cap(prev);
     }
 }

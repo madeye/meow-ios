@@ -46,7 +46,8 @@ use utun::Utun;
 use meow_ios_ffi::{
     debug_counts, meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
     meow_engine_stop, meow_tun_ingest, meow_tun_set_accept_cap,
-    meow_tun_set_udp_first_reply_deadline_ms, meow_tun_start, meow_tun_stop, rss,
+    meow_tun_set_udp_first_reply_deadline_ms, meow_tun_set_udp_session_cap, meow_tun_start,
+    meow_tun_stop, rss,
 };
 
 #[derive(Parser, Debug)]
@@ -156,6 +157,13 @@ struct Args {
     /// ~rate×60s; without it, it grows unbounded (the leak).
     #[arg(long, default_value_t = -1)]
     udp_first_reply_deadline_ms: i32,
+
+    /// Override the FFI's concurrent-UDP-session cap. -1 leaves the FFI
+    /// default (2048). Set low (e.g. 500) with `--udp-first-reply-deadline-ms
+    /// 0` and a fast `--udp-inject-rate` to verify the cap holds: `nat_table`
+    /// plateaus at the cap regardless of the idle window.
+    #[arg(long, default_value_t = -1)]
+    udp_session_cap: i32,
 }
 
 /// The egress callback runs on a tokio worker thread (inside the FFI's
@@ -274,6 +282,15 @@ fn main() -> Result<()> {
             warn!("meow_tun_set_accept_cap({}) returned {}", args.tcp_accept_cap, rc);
         } else {
             info!("tcp accept cap = {}", args.tcp_accept_cap);
+        }
+    }
+
+    if args.udp_session_cap > 0 {
+        let rc = meow_tun_set_udp_session_cap(args.udp_session_cap);
+        if rc != 0 {
+            warn!("meow_tun_set_udp_session_cap({}) returned {}", args.udp_session_cap, rc);
+        } else {
+            info!("udp session cap = {}", args.udp_session_cap);
         }
     }
 

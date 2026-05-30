@@ -240,6 +240,25 @@ int meow_tun_set_accept_cap(int cap);
 int meow_tun_accept_cap(void);
 
 /**
+ * Set the concurrent-UDP-session cap (defense-in-depth, the UDP analogue of
+ * `meow_tun_set_accept_cap`). Bounds the number of live UDP NAT sessions —
+ * each pins a reply-reader buffer + outbound socket — so a UDP burst
+ * arriving faster than the 60s idle sweeper can reap cannot grow memory
+ * toward the 50 MB NE jetsam cap; new sessions over the cap are dropped
+ * (UDP is lossy; the app retries). Default 2048.
+ *
+ * Takes effect on the next `meow_tun_start`. Returns 0 on success, -1 on
+ * invalid input (`cap == 0`, which would drop every UDP session).
+ */
+int meow_tun_set_udp_session_cap(int cap);
+
+/**
+ * Read the currently-configured UDP session cap. Reflects the value the
+ * next `meow_tun_start` will use; does not query the running semaphore.
+ */
+int meow_tun_udp_session_cap(void);
+
+/**
  * Set the per-flow dial deadline, in milliseconds. Bounds the time
  * `dispatch_tcp` waits for the relay's first byte of progress on the
  * netstack stream before declaring the dial hung and dropping the
