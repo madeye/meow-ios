@@ -147,6 +147,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "aws-lc-rs"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ec2f1fc3ec205783a5da9a7e6c1509cc69dedf09a1949e412c1e18469326d00"
+dependencies = [
+ "aws-lc-sys",
+ "zeroize",
+]
+
+[[package]]
+name = "aws-lc-sys"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a2f9779ce85b93ab6170dd940ad0169b5766ff848247aff13bb788b832fe3f4"
+dependencies = [
+ "cc",
+ "cmake",
+ "dunce",
+ "fs_extra",
+]
+
+[[package]]
 name = "axum"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -572,6 +594,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32fast"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -724,6 +755,12 @@ name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590"
+
+[[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "dynosaur"
@@ -1637,6 +1674,7 @@ dependencies = [
  "ipnetwork",
  "log",
  "memchr",
+ "memmap2",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -1658,9 +1696,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "memmap2"
+version = "0.9.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "meow-api"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "axum",
  "base64",
@@ -1691,8 +1738,8 @@ dependencies = [
 
 [[package]]
 name = "meow-common"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1704,6 +1751,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smol_str",
+ "socket2 0.5.10",
  "subtle",
  "thiserror 2.0.18",
  "tokio",
@@ -1712,8 +1760,8 @@ dependencies = [
 
 [[package]]
 name = "meow-config"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1745,9 +1793,10 @@ dependencies = [
 
 [[package]]
 name = "meow-dns"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
+ "async-trait",
  "dashmap 6.2.1",
  "futures",
  "hickory-proto",
@@ -1802,15 +1851,21 @@ dependencies = [
 
 [[package]]
 name = "meow-proxy"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
+ "aes",
+ "aes-gcm",
  "async-trait",
  "base64",
  "bytes",
+ "chacha20poly1305",
+ "crc32fast",
  "futures",
  "hex",
+ "hmac",
  "libc",
+ "md-5",
  "meow-common",
  "meow-dns",
  "meow-transport",
@@ -1820,6 +1875,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shadowsocks",
+ "smol_str",
  "socket2 0.5.10",
  "tokio",
  "tokio-rustls",
@@ -1829,8 +1885,8 @@ dependencies = [
 
 [[package]]
 name = "meow-rules"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "ipnet",
  "iprange",
@@ -1838,6 +1894,7 @@ dependencies = [
  "meow-common",
  "meow-trie",
  "regex",
+ "smol_str",
  "thiserror 2.0.18",
  "tracing",
  "zstd",
@@ -1845,8 +1902,8 @@ dependencies = [
 
 [[package]]
 name = "meow-transport"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "async-trait",
  "base64",
@@ -1865,25 +1922,27 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite 0.24.0",
  "tracing",
+ "webpki-root-certs",
  "webpki-roots 0.26.11",
 ]
 
 [[package]]
 name = "meow-trie"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "smallvec",
 ]
 
 [[package]]
 name = "meow-tunnel"
-version = "0.7.6"
-source = "git+https://github.com/madeye/meow-rs?rev=0a7d702eba1c05dbedc391a776ce99121be8cec3#0a7d702eba1c05dbedc391a776ce99121be8cec3"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
 dependencies = [
  "arc-swap",
  "async-trait",
  "dashmap 6.2.1",
+ "itoa",
  "meow-common",
  "meow-dns",
  "meow-proxy",
@@ -1891,6 +1950,8 @@ dependencies = [
  "meow-trie",
  "parking_lot",
  "serde",
+ "smallvec",
+ "smol_str",
  "tokio",
  "tracing",
  "uuid",
@@ -2518,6 +2579,7 @@ version = "0.23.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
+ "aws-lc-rs",
  "log",
  "once_cell",
  "ring",
@@ -2543,6 +2605,7 @@ version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
+ "aws-lc-rs",
  "ring",
  "rustls-pki-types",
  "untrusted",
@@ -3628,6 +3691,15 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-root-certs"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f31141ce3fc3e300ae89b78c0dd67f9708061d1d2eda54b8209346fd6be9a92c"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]

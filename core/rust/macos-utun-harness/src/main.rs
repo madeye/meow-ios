@@ -44,7 +44,7 @@ use utun::Utun;
 // symbols are exported with C linkage from the staticlib that iOS links,
 // so we are exercising the exact bytes the PacketTunnel extension runs.
 use meow_ios_ffi::{
-    meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
+    debug_counts, meow_core_init, meow_core_last_error, meow_core_set_home_dir, meow_engine_start,
     meow_engine_stop, meow_tun_ingest, meow_tun_set_accept_cap, meow_tun_start, meow_tun_stop, rss,
 };
 
@@ -105,6 +105,27 @@ struct Args {
     /// Lowering this caps the steady-state per-flow buffer footprint.
     #[arg(long, default_value_t = 0)]
     tcp_accept_cap: i32,
+
+    /// If set, spawn a UDP load generator that fires datagrams at this
+    /// `host:port` from a FRESH ephemeral source port each time. Every
+    /// datagram is therefore a new `(src,dst)` 5-tuple — exactly what makes
+    /// the engine insert a new `Arc<UdpSession>` into its NAT table. This is
+    /// the load shape the slow-leak hunt identified (TCP churn does NOT
+    /// exercise it). Point it at the engine's DNS (or any UDP responder) to
+    /// also get replies, which exercises the "one reply then quiet" path.
+    /// Independent of `--stress-target`; both may run together.
+    #[arg(long)]
+    udp_stress_target: Option<String>,
+
+    /// Concurrent UDP sender threads. Ignored when `--udp-stress-target`
+    /// is unset.
+    #[arg(long, default_value_t = 32)]
+    udp_stress_conns: usize,
+
+    /// Per-worker delay between datagrams. Lower = higher 5-tuple churn
+    /// per second (≈ `udp_stress_conns / interval`/s new NAT sessions).
+    #[arg(long, default_value_t = 20)]
+    udp_stress_interval_ms: u64,
 }
 
 /// The egress callback runs on a tokio worker thread (inside the FFI's
@@ -297,6 +318,30 @@ fn main() -> Result<()> {
         None
     };
 
+    let udp_stress_thread = if let Some(target) = args.udp_stress_target.clone() {
+        let conns = args.udp_stress_conns.max(1);
+        let interval = std::time::Duration::from_millis(args.udp_stress_interval_ms);
+        let duration = if args.stress_duration_secs == 0 {
+            None
+        } else {
+            Some(std::time::Duration::from_secs(args.stress_duration_secs))
+        };
+        info!(
+            "udp_stress: target={} conns={} interval={:?} duration={:?}",
+            target, conns, interval, duration
+        );
+        let exit_after_stress = duration.is_some();
+        Some(thread::spawn(move || {
+            udp_stress_loop(target, conns, interval, duration);
+            if exit_after_stress {
+                info!("udp_stress: duration elapsed — signaling shutdown");
+                SHUTDOWN.store(true, Ordering::SeqCst);
+            }
+        }))
+    } else {
+        None
+    };
+
     // Park the main thread on the shutdown flag; ingestion runs on its own
     // thread so a blocking utun read doesn't gate signal handling.
     while !SHUTDOWN.load(Ordering::SeqCst) {
@@ -320,6 +365,9 @@ fn main() -> Result<()> {
     if let Some(h) = stress_thread {
         let _ = h.join();
     }
+    if let Some(h) = udp_stress_thread {
+        let _ = h.join();
+    }
     info!("clean exit");
     Ok(())
 }
@@ -332,11 +380,19 @@ fn rss_monitor_loop(interval: std::time::Duration) {
             if mib > peak_mib {
                 peak_mib = mib;
             }
+            // Per-flow state-map sizes alongside RSS so a multi-hour run pins
+            // WHICH structure grows: nat_table + reply_readers climbing in
+            // lockstep with RSS ⇒ the UDP NAT-session leak; tcp_flows flat
+            // rules out the TCP path. Zeros when the engine isn't running.
+            let c = debug_counts();
             info!(
-                "rss_monitor t={}s rss={:.2} MiB peak={:.2} MiB",
+                "rss_monitor t={}s rss={:.2} MiB peak={:.2} MiB tcp_flows={} reply_readers={} nat_table={}",
                 ticks * interval.as_secs(),
                 mib,
-                peak_mib
+                peak_mib,
+                c.tcp_flows,
+                c.reply_readers,
+                c.nat_table,
             );
         }
         ticks += 1;
@@ -440,6 +496,125 @@ fn stress_loop(
     info!(
         "stress: done — opened={} failed={} elapsed={:.1}s",
         opened.load(Ordering::Relaxed),
+        failed.load(Ordering::Relaxed),
+        started.elapsed().as_secs_f64()
+    );
+}
+
+/// Fire UDP datagrams at `target` from `conns` worker threads, each using a
+/// FRESH ephemeral source port per datagram so every send is a new
+/// `(src,dst)` 5-tuple — exactly what makes the engine insert a new
+/// `Arc<UdpSession>` into its NAT table, the per-session growth the slow
+/// leak lives in (TCP churn does not touch this path). After each send the
+/// worker briefly polls for a reply, so a responding target also exercises
+/// the reader task's post-first-reply path. Counters reported every 5s.
+fn udp_stress_loop(
+    target: String,
+    conns: usize,
+    interval: std::time::Duration,
+    duration: Option<std::time::Duration>,
+) {
+    use std::net::{ToSocketAddrs, UdpSocket};
+    use std::sync::atomic::AtomicU64;
+
+    let started = std::time::Instant::now();
+    let sent = std::sync::Arc::new(AtomicU64::new(0));
+    let failed = std::sync::Arc::new(AtomicU64::new(0));
+    let replies = std::sync::Arc::new(AtomicU64::new(0));
+
+    let mut workers = Vec::with_capacity(conns);
+    for w in 0..conns {
+        let target = target.clone();
+        let sent = sent.clone();
+        let failed = failed.clone();
+        let replies = replies.clone();
+        workers.push(thread::spawn(move || {
+            // Folded into the payload so a DNS/echo responder sees varying
+            // content (and, aimed at the engine DNS with distinct qnames,
+            // churns the fake-IP pool too).
+            let mut seq = 0u64;
+            while !SHUTDOWN.load(Ordering::Relaxed) {
+                if let Some(limit) = duration {
+                    if started.elapsed() >= limit {
+                        return;
+                    }
+                }
+                let addr = match target.to_socket_addrs() {
+                    Ok(mut it) => it.next(),
+                    Err(_) => None,
+                };
+                let Some(addr) = addr else {
+                    failed.fetch_add(1, Ordering::Relaxed);
+                    thread::sleep(std::time::Duration::from_millis(100));
+                    continue;
+                };
+                // Fresh socket → fresh ephemeral src port → new NAT 5-tuple.
+                let sock = match UdpSocket::bind("0.0.0.0:0") {
+                    Ok(s) => s,
+                    Err(_) => {
+                        failed.fetch_add(1, Ordering::Relaxed);
+                        thread::sleep(std::time::Duration::from_millis(50));
+                        continue;
+                    }
+                };
+                let payload = [&w.to_be_bytes()[..], &seq.to_be_bytes()[..]].concat();
+                seq = seq.wrapping_add(1);
+                match sock.send_to(&payload, addr) {
+                    Ok(_) => {
+                        sent.fetch_add(1, Ordering::Relaxed);
+                        let _ = sock.set_read_timeout(Some(std::time::Duration::from_millis(50)));
+                        let mut buf = [0u8; 1500];
+                        if sock.recv(&mut buf).is_ok() {
+                            replies.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                    Err(_) => {
+                        failed.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                drop(sock);
+                thread::sleep(interval);
+            }
+        }));
+    }
+
+    // Reporter: aggregate counters every 5s, mirroring the TCP stress loop.
+    let sent_r = sent.clone();
+    let failed_r = failed.clone();
+    let replies_r = replies.clone();
+    let reporter = thread::spawn(move || {
+        let mut last = 0u64;
+        while !SHUTDOWN.load(Ordering::Relaxed) {
+            if let Some(limit) = duration {
+                if started.elapsed() >= limit {
+                    return;
+                }
+            }
+            thread::sleep(std::time::Duration::from_secs(5));
+            let now_s = sent_r.load(Ordering::Relaxed);
+            let f = failed_r.load(Ordering::Relaxed);
+            let r = replies_r.load(Ordering::Relaxed);
+            let rate = (now_s - last) as f64 / 5.0;
+            info!(
+                "udp_stress: sent={} (Δ{:.1}/s) replies={} failed={} elapsed={:.0}s",
+                now_s,
+                rate,
+                r,
+                f,
+                started.elapsed().as_secs_f64()
+            );
+            last = now_s;
+        }
+    });
+
+    for w in workers {
+        let _ = w.join();
+    }
+    let _ = reporter.join();
+    info!(
+        "udp_stress: done — sent={} replies={} failed={} elapsed={:.1}s",
+        sent.load(Ordering::Relaxed),
+        replies.load(Ordering::Relaxed),
         failed.load(Ordering::Relaxed),
         started.elapsed().as_secs_f64()
     );
