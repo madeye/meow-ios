@@ -207,6 +207,17 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
     UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed)
 }
 
+// Live-UDP-session cap. This is NOT merely a burst/dispatch-window cap: the
+// `udp_sem` permit acquired per datagram in the accept loop is moved into the
+// per-flow reply-reader task (see `spawn_udp_reply_reader`) and held until that
+// task exits, so the permit population equals the live-flow population. It
+// therefore bounds the count of simultaneously-live UDP flows — each pinning a
+// NAT entry, a `reply_readers` entry, an `Arc<UdpSession>` and a 4 KiB reader
+// buffer — which the idle-TTL sweeper alone cannot do (the sweeper only reaps
+// flows quiet > 60 s, never active ones). 512 live flows * (UdpSession + 4 KiB)
+// is comfortably inside the ~50 MB NE jetsam budget; once full, new flows are
+// dropped (the app's UDP is lossy and retries) rather than evicting working
+// ones.
 const UDP_BURST_CAP: usize = 512;
 
 // In-TUN UDP/53 handler fan-out cap. Each UDP/53 packet spawns an async
@@ -532,7 +543,10 @@ async fn run_tun2socks(
                 Ok(p) => p,
                 Err(tokio::sync::TryAcquireError::Closed) => break,
                 Err(tokio::sync::TryAcquireError::NoPermits) => {
-                    warn_capped(&cap_warn_last, "tun2socks: TCP accept cap full, dropping new connection");
+                    warn_capped(
+                        &cap_warn_last,
+                        "tun2socks: TCP accept cap full, dropping new connection",
+                    );
                     tokio::spawn(async move { drop(stream) });
                     continue;
                 }
@@ -593,7 +607,7 @@ async fn run_tun2socks(
                 Err(_) => {
                     warn_capped(
                         &UDP_CAP_LOG_LAST_MS,
-                        "tun2socks: UDP burst cap reached, dropping datagram",
+                        "tun2socks: UDP live-session cap reached, dropping datagram",
                     );
                     continue;
                 }
@@ -1084,20 +1098,26 @@ async fn dispatch_udp(
     //   2. `pre_resolve` — re-resolves the host (if any) through the engine
     //      resolver and re-populates `dst_ip` with the real upstream IP.
     //
-    // Release the UDP burst-cap permit before pre_resolve. The permit's
-    // purpose is to bound the concurrent count of UDP *dispatch* tasks
-    // (handle_udp + NAT-insert work), not to gate DNS resolution. Holding
-    // it across pre_resolve means a slow upstream DNS shrinks the
-    // effective cap in proportion to the resolve latency — under a partial
-    // upstream outage the cap exhausts and new datagrams get silently
-    // dropped even though no real dispatch work is in flight.
+    // Hold the `udp_sem` permit across the whole flow lifetime, not just the
+    // dispatch window. `udp_sem` is a true *live-session* cap: it bounds the
+    // number of simultaneously-live UDP flows (NAT entry + reply_readers entry
+    // + reader task, each holding an `Arc<UdpSession>` + a 4 KiB buffer). The
+    // idle-TTL sweeper only reaps flows that go quiet > 60 s; it does NOT bound
+    // the count of *active* flows (QUIC, WebRTC, games, DNS fan-out, or a
+    // source-port-fanning app), so without a count cap a workload that keeps N
+    // flows each ≥1 datagram/idle-window alive grows monotonically toward the
+    // ~50 MB jetsam cap. The permit is therefore MOVED into the reply-reader
+    // task below and released only when that task exits and clears its NAT +
+    // reply_readers state — so the permit population tracks the live-session
+    // population exactly. On every early-return path here (resolve failure,
+    // handle_udp bail, dedup hit) `permit` drops at end of scope, which is
+    // correct: those paths create no live session.
     //
     // Both pre_* calls are idempotent — handle_udp invokes them again
     // internally and they short-circuit on the already-populated metadata.
     // The round-trip is unavoidable on this side because we need the
     // resolved SocketAddr to key the reply-reader registry.
     tunnel.inner().pre_handle_metadata(&mut metadata);
-    drop(permit);
     tunnel.inner().pre_resolve(&mut metadata).await;
     let Some(resolved_ip) = metadata.dst_ip else {
         // Resolution failed — handle_udp will also bail, nothing to dispatch.
@@ -1118,9 +1138,19 @@ async fn dispatch_udp(
         return;
     };
 
-    spawn_udp_reply_reader(key, session, src, dst, reply_tx, reply_readers, inner);
+    spawn_udp_reply_reader(
+        key,
+        session,
+        src,
+        dst,
+        reply_tx,
+        reply_readers,
+        inner,
+        permit,
+    );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_udp_reply_reader(
     key: (SocketAddr, SocketAddr),
     session: Arc<UdpSession>,
@@ -1129,8 +1159,14 @@ fn spawn_udp_reply_reader(
     reply_tx: mpsc::Sender<UdpMsg>,
     reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
     tunnel_inner: Arc<TunnelInner>,
+    permit: OwnedSemaphorePermit,
 ) {
     tokio::spawn(async move {
+        // Hold the `udp_sem` permit for the entire reader lifetime so the
+        // semaphore caps live sessions, not just the dispatch window. Released
+        // (along with this flow's NAT + reply_readers entries) only when the
+        // loop below breaks and the task returns.
+        let _permit = permit;
         // Per-session reply buffer. Sized for the iOS TUN MTU (1500) plus
         // headroom for the rare oversized UDP datagram that survives path
         // fragmentation. Was 64 KiB — at N concurrent UDP sessions (DNS,
@@ -1186,7 +1222,10 @@ fn spawn_udp_reply_reader(
                 {
                     Ok(res) => res,
                     Err(_) => {
-                        info!("UDP reply reader idle > 60s for {:?}; evicting session", key);
+                        info!(
+                            "UDP reply reader idle > 60s for {:?}; evicting session",
+                            key
+                        );
                         break;
                     }
                 }
