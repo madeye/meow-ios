@@ -62,8 +62,16 @@ pub fn convert(body: &[u8]) -> Result<String> {
 }
 
 fn looks_like_clash_yaml(text: &str) -> bool {
-    let prefix: String = text.chars().take(4096).collect();
-    prefix.contains("proxies:") || prefix.contains("proxy-groups:")
+    text.lines().map(str::trim_end).any(|line| {
+        is_top_level_yaml_key(line, "proxies:") || is_top_level_yaml_key(line, "proxy-groups:")
+    })
+}
+
+fn is_top_level_yaml_key(line: &str, key: &str) -> bool {
+    line == key
+        || line
+            .strip_prefix(key)
+            .is_some_and(|rest| rest.starts_with(' '))
 }
 
 fn try_base64(text: &str) -> Option<String> {
@@ -256,6 +264,21 @@ mod tests {
         let body = b"proxies:\n  - name: n1\n    type: ss\n    server: 1.2.3.4\n    port: 443\n    cipher: aes-256-gcm\n    password: p\n";
         let out = convert(body).unwrap();
         assert!(out.contains("proxies:"));
+    }
+
+    #[test]
+    fn clash_yaml_passthrough_with_late_proxies() {
+        let rules = (0..180)
+            .map(|i| format!("  - DOMAIN-SUFFIX,example{}.com,DIRECT", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let body = format!(
+            "rules:\n{}\nproxies:\n  - name: late-node\n    type: direct\nproxy-groups:\n  - name: Choose\n    type: select\n    proxies:\n      - late-node\n",
+            rules
+        );
+
+        let out = convert(body.as_bytes()).unwrap();
+        assert!(out.contains("late-node"));
     }
 
     #[test]

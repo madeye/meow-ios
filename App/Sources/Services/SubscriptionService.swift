@@ -134,8 +134,14 @@ enum SubscriptionParser {
 
     static func looksLikeClashYAML(_ data: Data) -> Bool {
         guard let text = String(data: data, encoding: .utf8) else { return false }
-        let prefix = text.prefix(4096)
-        return prefix.contains("proxies:") || prefix.contains("proxy-groups:")
+        return text
+            .split(whereSeparator: \.isNewline)
+            .contains { line in
+                guard line.first?.isWhitespace != true else { return false }
+                let text = String(line).trimmingCharacters(in: .whitespaces)
+                return isTopLevelYAMLKey("proxies:", line: text) ||
+                    isTopLevelYAMLKey("proxy-groups:", line: text)
+            }
     }
 
     static func looksLikeV2RayN(_ data: Data) -> Bool {
@@ -155,6 +161,10 @@ enum SubscriptionParser {
         }
         return text.contains("ss://") || text.contains("trojan://") ||
             text.contains("vless://") || text.contains("vmess://")
+    }
+
+    private static func isTopLevelYAMLKey(_ key: String, line: String) -> Bool {
+        line == key || line.hasPrefix("\(key) ")
     }
 }
 

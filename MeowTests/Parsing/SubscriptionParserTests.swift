@@ -40,6 +40,27 @@ struct SubscriptionParserTests {
     }
 
     @Test
+    func `detects Clash YAML when rule blocks appear before proxies`() {
+        let rules = (0 ..< 180)
+            .map { "  - DOMAIN-SUFFIX,example\($0).com,DIRECT" }
+            .joined(separator: "\n")
+        let input = Data("""
+        rules:
+        \(rules)
+        proxies:
+          - name: late-node
+            type: direct
+        proxy-groups:
+          - name: Choose
+            type: select
+            proxies:
+              - late-node
+        """.utf8)
+
+        #expect(SubscriptionParser.detectFormat(input) == .clashYaml)
+    }
+
+    @Test
     func `detects v2rayN base64 nodelist`() throws {
         let input = try loadFixture("v2rayn_ss_pair")
         #expect(SubscriptionParser.detectFormat(input) == .v2rayN)
