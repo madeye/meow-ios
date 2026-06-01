@@ -79,13 +79,18 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     NSString *homeDir = [MWAppGroup containerURL].path;
     MWPreferences *prefs = [MWPreferences loadFromDefaults:[MWAppGroup defaults]];
 
+    // Set the home dir BEFORE patching the config: meow_patch_config mints the
+    // REST-API port + secret into <home>/api-credentials.json, and HOME_DIR
+    // must already point at the App Group container or the credentials fall
+    // back to an ephemeral pair the app can't read. meow_core_init / set_home
+    // are independent of the engine and safe to run this early.
+    meow_core_init();
+    meow_core_set_home_dir(homeDir.UTF8String);
+
     if (![self writeEffectiveConfigWithPrefs:prefs error:error]) {
         _started = NO;
         return NO;
     }
-
-    meow_core_init();
-    meow_core_set_home_dir(homeDir.UTF8String);
 
     NSString *configPath = [MWAppGroup effectiveConfigURL].path;
     int rc = meow_engine_start(configPath.UTF8String);

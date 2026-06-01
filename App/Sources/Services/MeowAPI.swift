@@ -9,8 +9,8 @@ import os
 /// even when the tunnel is active.
 @Observable
 final class MeowAPI: @unchecked Sendable {
-    private let baseURL: URL
-    private let secret: String
+    private var baseURL: URL
+    private var secret: String
     private let session: URLSession
     // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
     // Mirrors the ingress-instrumentation pattern kept around #54.
@@ -43,6 +43,17 @@ final class MeowAPI: @unchecked Sendable {
         baseURL = URL(string: "http://127.0.0.1:\(port)")!
         self.secret = secret
         self.session = session
+    }
+
+    /// Point the client at the port/secret the engine actually bound. On a
+    /// fresh install the credential file doesn't exist when this client is
+    /// first constructed (no tunnel has started), so the initial instance
+    /// holds the 9090/empty fallback; once the extension mints credentials on
+    /// connect, the app calls this to retarget before issuing requests.
+    /// No-op when `port`/`secret` are unchanged.
+    func updateCredentials(port: Int, secret: String) {
+        baseURL = URL(string: "http://127.0.0.1:\(port)")!
+        self.secret = secret
     }
 
     // MARK: - Endpoints

@@ -35,9 +35,16 @@ final class AppModel {
         // the same in TunnelEngine.start.
         AppGroup.containerURL.path.withCString { meow_core_set_home_dir($0) }
 
-        let defaults = AppGroup.defaults
         vpnManager = VpnManager()
-        meowAPI = MeowAPI(port: 9090, secret: defaults.string(forKey: PreferenceKey.apiSecret) ?? "")
+        // REST-API port + secret are minted by the engine (Rust
+        // `meow_patch_config`) and shared via the App Group, so the loopback
+        // control plane is authenticated on a non-well-known port rather than
+        // open on 9090. Until the extension has patched a config once (no
+        // tunnel has ever started), the file is absent — fall back to the
+        // legacy 9090/empty pair so the pre-connect UI doesn't crash; the
+        // creds are refreshed on connect (see `refreshAPICredentials`).
+        let creds = AppGroup.apiCredentials()
+        meowAPI = MeowAPI(port: creds?.port ?? 9090, secret: creds?.secret ?? "")
         subscriptionService = SubscriptionService(
             modelContext: AppModelContainer.shared.container.mainContext,
         )
@@ -79,10 +86,19 @@ final class AppModel {
     private func replaySelectedProxies() async {
         defer { replayGeneration &+= 1 }
         let api = meowAPI
+        // Retarget the client at the credentials the extension minted while
+        // bringing the tunnel up. On a fresh install the credential file was
+        // absent at `init`, so `api` still holds the 9090/empty fallback; the
+        // extension has now written `api-credentials.json`, so pick it up
+        // before the probe below or every request would hit the wrong port /
+        // fail auth.
+        if let creds = AppGroup.apiCredentials() {
+            api.updateCredentials(port: creds.port, secret: creds.secret)
+        }
         // Cold-connect readiness probe. `meow_engine_start` returns before
-        // the spawned api_server task binds :9090, so a replay fired on the
-        // `.connected` edge can race it. 1s cap (100ms × 10) is plenty on
-        // device; we give up silently rather than retry forever.
+        // the spawned api_server task binds the controller port, so a replay
+        // fired on the `.connected` edge can race it. 1s cap (100ms × 10) is
+        // plenty on device; we give up silently rather than retry forever.
         var ready = false
         for attempt in 0 ..< 10 {
             do {

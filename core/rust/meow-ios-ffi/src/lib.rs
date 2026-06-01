@@ -445,11 +445,91 @@ pub unsafe extern "C" fn meow_proxy_select(group: *const c_char, name: *const c_
 }
 
 // ---------------------------------------------------------------------------
+// REST-API credentials (random port + bearer secret)
+// ---------------------------------------------------------------------------
+
+/// Resolve the loopback REST-API credentials, minting them once and persisting
+/// to `<home>/api-credentials.json` so the app and the packet-tunnel extension
+/// — both of which patch the config — bind and authenticate with the same
+/// values. The file lives in the App Group container (set via
+/// `meow_core_set_home_dir`), which only this app and its extension can read,
+/// so the secret never leaves the sandbox.
+///
+/// Falls back to an ephemeral in-memory pair if the home dir isn't set yet or
+/// the file can't be read/written (e.g. first-run race) — the engine still
+/// comes up authenticated; a subsequent patch will persist a stable pair.
+fn api_credentials() -> (u16, String) {
+    let path = HOME_DIR
+        .lock()
+        .clone()
+        .map(|d| std::path::Path::new(&d).join("api-credentials.json"));
+
+    if let Some(ref p) = path {
+        if let Ok(bytes) = std::fs::read(p) {
+            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if let (Some(port), Some(secret)) = (
+                    v.get("port").and_then(serde_json::Value::as_u64),
+                    v.get("secret").and_then(|s| s.as_str()),
+                ) {
+                    if (1024..=65535).contains(&port) && !secret.is_empty() {
+                        return (port as u16, secret.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let port = random_port();
+    let secret = random_hex_32();
+
+    if let Some(ref p) = path {
+        let body = serde_json::json!({ "port": port, "secret": secret }).to_string();
+        // Best-effort persist; if it fails we still return the freshly-minted
+        // pair so this engine start is authenticated.
+        let _ = std::fs::write(p, body);
+    }
+
+    (port, secret)
+}
+
+/// Fill `buf` with OS entropy from `/dev/urandom` (always present on
+/// iOS/Darwin). Avoids pulling a new RNG crate for the few bytes the
+/// credential mint needs. Panics only if the device has no `/dev/urandom`,
+/// which does not happen on a booted iOS system.
+fn os_random(buf: &mut [u8]) {
+    use std::io::Read;
+    let mut f = std::fs::File::open("/dev/urandom").expect("/dev/urandom must be readable");
+    f.read_exact(buf).expect("/dev/urandom read must succeed");
+}
+
+/// 16 random bytes of OS entropy, hex-encoded — a 128-bit bearer secret.
+fn random_hex_32() -> String {
+    let mut buf = [0u8; 16];
+    os_random(&mut buf);
+    let mut s = String::with_capacity(32);
+    for b in buf {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+/// A random port in the IANA dynamic/ephemeral range (49152–65535), drawn from
+/// OS entropy. Persisted, so it's stable across launches but not the
+/// well-known 9090.
+fn random_port() -> u16 {
+    let mut buf = [0u8; 2];
+    os_random(&mut buf);
+    let raw = u16::from_le_bytes(buf);
+    49152 + (raw % (65535 - 49152 + 1))
+}
+
+// ---------------------------------------------------------------------------
 // Config patching (replaces the Swift/Yams EffectiveConfigWriter)
 // ---------------------------------------------------------------------------
 
-/// Patch a Clash YAML config for iOS: strips `dns`, `subscriptions`, `secret`;
-/// pins `mixed-port` and `external-controller`; injects `geox-url` when absent.
+/// Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
+/// pins `mixed-port`; injects a hardened `external-controller` (random
+/// loopback port) + random bearer `secret`; injects `geox-url` when absent.
 /// Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
 /// NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
 /// Returns -1 on error (inspect `meow_core_last_error`).
@@ -482,7 +562,11 @@ pub unsafe extern "C" fn meow_patch_config(
         return -1;
     };
 
-    for key in ["dns", "subscriptions", "secret"] {
+    // Strip `dns` (iOS pins its own resolver block) and `subscriptions`
+    // (handled app-side). `secret` is intentionally NOT stripped here — we
+    // overwrite it below with a per-install random token so the REST API on
+    // loopback is authenticated rather than open.
+    for key in ["dns", "subscriptions"] {
         root.remove(serde_yaml::Value::String(key.to_string()));
     }
 
@@ -495,9 +579,27 @@ pub unsafe extern "C" fn meow_patch_config(
         serde_yaml::Value::String("mixed-port".into()),
         serde_yaml::Value::Number(port.into()),
     );
+
+    // Harden the meow external-controller. It binds on loopback, but iOS
+    // does not isolate 127.0.0.1 per app — any other process on the device
+    // could otherwise reach an open control plane (read the running config +
+    // proxy servers, dump live connections/logs, switch proxies). Two
+    // mitigations, both sourced from a per-install credential file in the
+    // App Group container (readable only by this app + its extension):
+    //   1. a random high port instead of the well-known 9090, so the surface
+    //      isn't trivially discoverable, and
+    //   2. a strong random `secret`, which meow-api enforces as
+    //      `Authorization: Bearer <secret>` on every route.
+    // The credentials are minted once and persisted, so the app and the
+    // extension (which both invoke this patch) agree on the same pair.
+    let (api_port, api_secret) = api_credentials();
     root.insert(
         serde_yaml::Value::String("external-controller".into()),
-        serde_yaml::Value::String("127.0.0.1:9090".into()),
+        serde_yaml::Value::String(format!("127.0.0.1:{api_port}")),
+    );
+    root.insert(
+        serde_yaml::Value::String("secret".into()),
+        serde_yaml::Value::String(api_secret),
     );
 
     let geox_key = serde_yaml::Value::String("geox-url".into());

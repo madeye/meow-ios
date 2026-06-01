@@ -32,6 +32,27 @@ public enum AppGroup {
         containerURL.appending(path: "traffic.json")
     }
 
+    /// Per-install REST-API credentials minted by the Rust `meow_patch_config`
+    /// (random loopback port + bearer secret) and persisted here in the App
+    /// Group container. Both the app and the extension read this so the client
+    /// authenticates against the port/secret the engine actually bound. The
+    /// file is sandboxed to this app group, so the secret never leaks to other
+    /// apps. Returns `nil` until the extension has patched a config at least
+    /// once (no tunnel ever started) — callers fall back to defaults.
+    public static var apiCredentialsURL: URL {
+        containerURL.appending(path: "api-credentials.json")
+    }
+
+    public struct APICredentials: Decodable {
+        public let port: Int
+        public let secret: String
+    }
+
+    public static func apiCredentials() -> APICredentials? {
+        guard let data = try? Data(contentsOf: apiCredentialsURL) else { return nil }
+        return try? JSONDecoder().decode(APICredentials.self, from: data)
+    }
+
     /// Directory the engine treats as its "config home": mirrors the layout
     /// `meow-config` expects under `$XDG_CONFIG_HOME/meow`, which the FFI
     /// layer points at `containerURL` via `meow_core_set_home_dir`.
@@ -49,6 +70,9 @@ public enum AppGroup {
         setBackupExclusion(effectiveConfigURL, excluded: true)
         setBackupExclusion(stateURL, excluded: true)
         setBackupExclusion(trafficURL, excluded: true)
+        // The REST-API credentials are a per-install secret regenerated on
+        // demand — never sync them to iCloud.
+        setBackupExclusion(apiCredentialsURL, excluded: true)
     }
 
     private static func setBackupExclusion(_ url: URL, excluded: Bool) {
