@@ -207,6 +207,45 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
     UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed)
 }
 
+// Per-TCP-flow idle TTL. Closes the wedge the dial deadline can't reach:
+// a relay whose dial succeeded but whose flow then goes quiet forever.
+// The canonical shape (2026-06-06 after-hours-idle incident, flow stuck
+// `in_progress` 16 h in the device log): the upstream proxy times out an
+// idle connection and EOFs, `copy_bidirectional_buf` half-closes our side
+// and waits for the app's FIN — but the app is suspended and never FINs.
+// The relay task parks forever, pinning a `tcp_accept_sem` permit and an
+// lwip pcb. Accumulate ~256 of those over hours of idle and every new
+// connection is dropped at the accept cap: "VPN connected, no traffic."
+//
+// The sweeper ticks every TCP_IDLE_SWEEP_INTERVAL and aborts flows whose
+// `last_active_ms` is older than the TTL. Aborting drops the relay future
+// (RAII cleanup on both halves, permit released) and the netstack stream
+// (RST / tcp_close to the app side, which reconnects on next use).
+//
+// 300 s default matches the industry-standard proxy connection-idle
+// timeout (v2ray `connIdle`, sing-box inactivity defaults). Long-lived
+// idle-but-legit flows (push channels) see a reconnect on next activity —
+// the standard tradeoff every proxy core makes. Tunable at runtime via
+// [`set_tcp_idle_ttl_ms`] / `meow_tun_set_tcp_idle_ttl_ms`; 0 disables.
+const TCP_IDLE_TTL_MS_DEFAULT: u64 = 300_000;
+static TCP_IDLE_TTL_MS: AtomicU64 = AtomicU64::new(TCP_IDLE_TTL_MS_DEFAULT);
+
+const TCP_IDLE_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Set the per-TCP-flow idle TTL, in milliseconds. `0` disables the
+/// sweeper (legacy behaviour: wedged flows hold their accept permit until
+/// tunnel restart). Returns true unconditionally.
+pub fn set_tcp_idle_ttl_ms(ms: u64) -> bool {
+    TCP_IDLE_TTL_MS.store(ms, Ordering::Relaxed);
+    true
+}
+
+/// Read the currently-configured TCP idle TTL, in milliseconds. `0` means
+/// the sweeper is disabled.
+pub fn tcp_idle_ttl_ms() -> u64 {
+    TCP_IDLE_TTL_MS.load(Ordering::Relaxed)
+}
+
 // Live-UDP-session cap. This is NOT merely a burst/dispatch-window cap: the
 // `udp_sem` permit acquired per datagram in the accept loop is moved into the
 // per-flow reply-reader task (see `spawn_udp_reply_reader`) and held until that
@@ -303,6 +342,49 @@ fn evict_oldest_idle_tcp_flow() -> Option<u64> {
         id, rec.src, rec.dst
     );
     Some(id)
+}
+
+/// One sweep pass: remove + abort every flow whose `last_active_ms` is at
+/// least `ttl_ms` older than `now`. Remove-then-abort order matters — an
+/// aborted task never reaches its own `tcp_flows().remove(..)` cleanup, so
+/// the sweeper owns the registry removal. Returns the number of flows
+/// reaped. Factored out of [`run_tcp_idle_sweeper`] so unit tests can
+/// drive it with a synthetic clock.
+fn sweep_idle_tcp_flows(ttl_ms: u64, now: u64) -> usize {
+    let flows = tcp_flows();
+    let expired: Vec<u64> = flows
+        .iter()
+        .filter(|e| {
+            now.saturating_sub(e.value().state.last_active_ms.load(Ordering::Relaxed)) >= ttl_ms
+        })
+        .map(|e| *e.key())
+        .collect();
+    let mut reaped = 0usize;
+    for id in expired {
+        if let Some((_, rec)) = flows.remove(&id) {
+            rec.abort.abort();
+            warn!(
+                "tun2socks: idle TTL ({} ms) exceeded, closing flow {} {} -> {}",
+                ttl_ms, id, rec.src, rec.dst
+            );
+            reaped += 1;
+        }
+    }
+    reaped
+}
+
+/// Periodic idle-flow sweeper (see `TCP_IDLE_TTL_MS` docs above for the
+/// failure mode it exists to prevent). Re-reads the TTL atomic every tick
+/// so runtime tuning applies without a tunnel restart.
+async fn run_tcp_idle_sweeper() {
+    loop {
+        tokio::time::sleep(TCP_IDLE_SWEEP_INTERVAL).await;
+        let ttl_ms = TCP_IDLE_TTL_MS.load(Ordering::Relaxed);
+        if ttl_ms == 0 {
+            continue;
+        }
+        sweep_idle_tcp_flows(ttl_ms, now_ms());
+    }
 }
 
 /// Abort every flow in the registry. Dropping the `dispatch_tcp` future
@@ -474,14 +556,27 @@ async fn run_tun2socks(
 
     let egress_tx_stack = egress_tx.clone();
     let stack_handle = tokio::spawn(async move {
+        // This task is the single driver for BOTH directions of the lwip
+        // stack — if it exits, every packet path (TCP, UDP, and eventually
+        // the DNS intercept once stack_ingress fills) dies while the NE
+        // process stays up and `ingest` keeps returning 0: a silent, total
+        // traffic blackout that only a tunnel restart clears. So per-packet
+        // errors are logged (capped) and the frame dropped; only channel
+        // closure (tunnel shutdown) breaks the loop. See the 2026-06-06
+        // after-hours-idle incident: a transient lwip ERR_MEM here used to
+        // `break` and permanently wedge the tunnel.
+        let send_err_last = AtomicU64::new(0);
+        let recv_err_last = AtomicU64::new(0);
         loop {
             tokio::select! {
                 pkt = stack_ingress_rx.recv() => {
                     match pkt {
                         Some(frame) => {
                             if let Err(e) = stack.send(frame).await {
-                                logging::bridge_log(&format!("stack send error: {}", e));
-                                break;
+                                warn_capped(
+                                    &send_err_last,
+                                    &format!("tun2socks: stack send error (frame dropped): {}", e),
+                                );
                             }
                         }
                         None => break,
@@ -498,8 +593,10 @@ async fn run_tun2socks(
                             }
                         }
                         Some(Err(e)) => {
-                            logging::bridge_log(&format!("stack recv error: {}", e));
-                            break;
+                            warn_capped(
+                                &recv_err_last,
+                                &format!("tun2socks: stack recv error (ignored): {}", e),
+                            );
                         }
                         None => break,
                     }
@@ -589,13 +686,23 @@ async fn run_tun2socks(
     // `udp_reply_tx`. Using an mpsc serializer avoids an Arc<Mutex<WriteHalf>>.
     let udp_writer_handle = tokio::spawn(async move {
         let udp_write = udp_write;
+        // `udp_sendto` fails per-datagram (ERR_MEM under heap pressure,
+        // ERR_RTE, …). Breaking here used to kill the reply path for every
+        // UDP flow — QUIC, DNS-over-UDP upstreams, games — permanently,
+        // while the tunnel otherwise looked alive. UDP is lossy by
+        // contract: log (capped) and keep serving the next reply.
+        let err_last = AtomicU64::new(0);
         while let Some(msg) = udp_reply_rx.recv().await {
             if let Err(e) = udp_write.send_to(&msg.0, &msg.1, &msg.2) {
-                logging::bridge_log(&format!("tun2socks: UDP reply send error: {}", e));
-                break;
+                warn_capped(
+                    &err_last,
+                    &format!("tun2socks: UDP reply send error (datagram dropped): {}", e),
+                );
             }
         }
     });
+
+    let tcp_idle_sweeper_handle = tokio::spawn(run_tcp_idle_sweeper());
 
     let udp_reply_tx_accept = udp_reply_tx.clone();
     let reply_readers_accept = reply_readers.clone();
@@ -723,6 +830,7 @@ async fn run_tun2socks(
     udp_accept_handle.abort();
     udp_writer_handle.abort();
     egress_handle.abort();
+    tcp_idle_sweeper_handle.abort();
     drop(udp_reply_tx);
 
     // Abort any TCP flows still held in the registry so the in-process
@@ -1837,6 +1945,107 @@ mod tests {
         assert!(flows.is_empty(), "registry should be empty after close-all");
 
         flows.clear();
+    }
+
+    /// The idle-TTL sweeper must reap exactly the flows whose
+    /// `last_active_ms` is at least `ttl_ms` in the past — the 2026-06-06
+    /// after-hours wedge shape (upstream EOF'd, app never FINs, relay
+    /// parked forever holding an accept permit) — and leave active flows
+    /// untouched.
+    #[tokio::test]
+    async fn idle_sweep_reaps_only_expired_flows() {
+        let _guard = flows_test_guard();
+        let flows = tcp_flows();
+        flows.clear();
+
+        let now = now_ms();
+        let wedged_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+        let boundary_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+        let active_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+
+        // Idle 10 min — well past a 5 min TTL.
+        flows.insert(
+            wedged_id,
+            FlowRecord {
+                state: Arc::new(FlowState {
+                    last_active_ms: AtomicU64::new(now.saturating_sub(600_000)),
+                }),
+                abort: dummy_handle(),
+                src: dummy_addr(21),
+                dst: dummy_addr(22),
+            },
+        );
+        // Idle exactly the TTL — the >= comparison must reap it.
+        flows.insert(
+            boundary_id,
+            FlowRecord {
+                state: Arc::new(FlowState {
+                    last_active_ms: AtomicU64::new(now.saturating_sub(300_000)),
+                }),
+                abort: dummy_handle(),
+                src: dummy_addr(23),
+                dst: dummy_addr(24),
+            },
+        );
+        // Active 1 s ago — must survive.
+        flows.insert(
+            active_id,
+            FlowRecord {
+                state: Arc::new(FlowState {
+                    last_active_ms: AtomicU64::new(now.saturating_sub(1_000)),
+                }),
+                abort: dummy_handle(),
+                src: dummy_addr(25),
+                dst: dummy_addr(26),
+            },
+        );
+
+        let reaped = sweep_idle_tcp_flows(300_000, now);
+        assert_eq!(reaped, 2, "wedged + boundary flows reaped");
+        assert!(flows.get(&wedged_id).is_none(), "wedged flow removed");
+        assert!(flows.get(&boundary_id).is_none(), "boundary flow removed");
+        assert!(flows.get(&active_id).is_some(), "active flow retained");
+
+        flows.clear();
+    }
+
+    /// A sweep against an empty registry — and one where everything is
+    /// fresh — must be a no-op.
+    #[tokio::test]
+    async fn idle_sweep_no_op_when_nothing_expired() {
+        let _guard = flows_test_guard();
+        let flows = tcp_flows();
+        flows.clear();
+
+        assert_eq!(sweep_idle_tcp_flows(300_000, now_ms()), 0);
+
+        let now = now_ms();
+        let fresh_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+        flows.insert(
+            fresh_id,
+            FlowRecord {
+                state: Arc::new(FlowState {
+                    last_active_ms: AtomicU64::new(now),
+                }),
+                abort: dummy_handle(),
+                src: dummy_addr(27),
+                dst: dummy_addr(28),
+            },
+        );
+        assert_eq!(sweep_idle_tcp_flows(300_000, now), 0);
+        assert!(flows.get(&fresh_id).is_some(), "fresh flow retained");
+
+        flows.clear();
+    }
+
+    #[test]
+    fn tcp_idle_ttl_setter_roundtrip() {
+        let prev = tcp_idle_ttl_ms();
+        assert!(set_tcp_idle_ttl_ms(0), "0 (disabled) is accepted");
+        assert_eq!(tcp_idle_ttl_ms(), 0);
+        assert!(set_tcp_idle_ttl_ms(42_000));
+        assert_eq!(tcp_idle_ttl_ms(), 42_000);
+        set_tcp_idle_ttl_ms(prev);
     }
 
     /// Tier 3 regression harness — see

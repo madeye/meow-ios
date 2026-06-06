@@ -114,7 +114,18 @@ panic = "abort"
 # TcpStreamImpl::poll_read under sustained TCP-flow churn (~115 flows/s,
 # crashes ~55s). The fork acquires LWIP_MUTEX at the top of each poll_next.
 # Verified: 20k+ flows over 180s at full churn on 2 workers, no crash, RSS
-# flat. Upstream this to https://github.com/ssrlive/lwip and drop the patch
-# once a fixed release ships.
+# flat.
+#
+# rev 5adf5e24 adds two idle-blackout fixes on top (2026-06-06 incident:
+# tunnel stops redirecting traffic after hours of idle):
+#   1. NetStackImpl::poll_flush returned Poll::Pending without a waker on
+#      pbuf_alloc failure, permanently deadlocking the single task that
+#      drives both stack directions. Now drops the frame (IP is lossy).
+#   2. TcpStreamImpl::drop leaked TX-half-closed pcbs in FIN_WAIT_1/2
+#      forever (TF_RXCLOSED unset -> lwIP slowtmr never reaps them); now
+#      tcp_close()s so the 20 s FIN_WAIT_2 timeout applies.
+#
+# Upstream all of this to https://github.com/ssrlive/lwip and drop the
+# patch once a fixed release ships.
 [patch.crates-io]
-lwip = { git = "https://github.com/madeye/lwip", rev = "f1ca6a855c57e48a2bd56a34105aaf4ae10f9e20" }
+lwip = { git = "https://github.com/madeye/lwip", rev = "5adf5e24b14760d2ded93290c114809e2fd68e3b" }

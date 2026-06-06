@@ -290,6 +290,31 @@ int meow_tun_set_udp_first_reply_deadline_ms(int ms);
 int meow_tun_udp_first_reply_deadline_ms(void);
 
 /**
+ * Set the per-TCP-flow idle TTL, in milliseconds. The complement to
+ * `meow_tun_set_dial_deadline_ms` for flows whose dial *succeeded* but
+ * then went permanently quiet — e.g. the upstream proxy EOF'd an idle
+ * connection and the (suspended) app never FINs back, parking the relay
+ * forever while it pins an accept-cap permit and an lwip pcb. Hours of
+ * such accumulation exhausts the accept cap and the tunnel stops
+ * passing new TCP flows ("connected but no traffic").
+ *
+ * Default 300000 ms (5 min, the conventional proxy connection-idle
+ * timeout). Pass `0` to disable the sweeper. Negative values are
+ * rejected.
+ *
+ * Takes effect on the sweeper's next 30 s tick; no restart needed.
+ *
+ * Returns 0 on success, -1 on invalid input.
+ */
+int meow_tun_set_tcp_idle_ttl_ms(int ms);
+
+/**
+ * Read the currently-configured TCP idle TTL, in milliseconds. `0`
+ * means the sweeper is disabled.
+ */
+int meow_tun_tcp_idle_ttl_ms(void);
+
+/**
  * Resident memory size of the FFI's containing process, in bytes. Same
  * number macOS jetsam compares against the 50 MiB PacketTunnel cap, so
  * Swift can poll this to chart the on-device RSS curve during a stress
