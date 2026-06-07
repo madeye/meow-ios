@@ -1,0 +1,29 @@
+Build 2026060701 (1.3.1)
+
+WHAT'S NEW
+• Long-idle fix: after hours of inactivity the tunnel could stay
+  "connected" while silently redirecting nothing (stuck relays →
+  leaked TCP state → memory exhaustion → packet-path deadlock).
+  Idle flows are now reaped after 5 minutes and the packet path
+  survives memory pressure instead of wedging.
+• Network transitions: losing or gaining IPv6 without changing
+  networks (e.g. the same Wi-Fi dropping IPv6) is now detected and
+  the packet path restarts automatically — previously stale
+  connections black-holed until they timed out.
+• UDP reliability: proxy server addresses now fall back across
+  address families, so UDP relay (QUIC) survives IPv4-only networks
+  even when DNS returns an IPv6 address first.
+• Security: the extension's internal control API moved from a fixed
+  unauthenticated port to a random port with a per-install secret.
+• Settings: removed the IPv6 toggle (it controlled nothing).
+• meow-rs engine bumped to f48dac74: bounded gRPC frame buffer,
+  periodic health checks for fallback/url-test proxy groups.
+
+FOR TESTERS
+• Overnight idle: leave the VPN connected overnight; in the morning
+  traffic should flow immediately — no toggle needed.
+• IPv6 flip: on dual-stack Wi-Fi, disable IPv6 on the router (or
+  hop to a v4-only AP); browsing should recover within seconds.
+• QUIC check: with the VPN up on an IPv4-only network, YouTube /
+  Instagram video should stream without long stalls.
+• Issues: https://github.com/madeye/meow-ios/issues
