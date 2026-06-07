@@ -93,6 +93,28 @@ static TUN2SOCKS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU6
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
+// Whether the underlying (physical) network path currently has IPv6.
+// Pushed by the iOS side from NWPathMonitor (`nw_path_has_ipv6`) on every
+// path update. When false, the DNS intercept short-circuits AAAA queries
+// to a NOERROR-empty answer without consulting the resolver: the resolver
+// already suppresses AAAA for the v4-only fake-IP pool, but the `hosts:`
+// table is consulted BEFORE that suppression and can hand out real v6
+// addresses — which the engine then cannot dial. Defaults to true so
+// consumers that never call the setter (macOS harness) keep today's
+// behavior.
+static IPV6_AVAILABLE: AtomicBool = AtomicBool::new(true);
+
+/// Record whether the physical path has IPv6. Called from Swift on every
+/// NWPathMonitor update.
+pub fn set_ipv6_available(available: bool) {
+    IPV6_AVAILABLE.store(available, Ordering::Relaxed);
+}
+
+/// Current IPv6 availability as last pushed by [`set_ipv6_available`].
+pub fn ipv6_available() -> bool {
+    IPV6_AVAILABLE.load(Ordering::Relaxed)
+}
+
 /// JoinHandle of the current (or most recent) run task. The next `start()`
 /// takes it and awaits its teardown (bounded) before building a new lwip
 /// netstack — the lwip globals (`OUTPUT_CB_PTR`, netif hooks, pcb lists)
@@ -815,7 +837,21 @@ async fn run_tun2socks(
                     };
                     let qtype = parse_dns_qtype(parsed.payload);
 
-                    let response_payload = if matches!(qtype, Some(1) | Some(28)) {
+                    let response_payload = if qtype == Some(28) && !ipv6_available() {
+                        // The physical path has no IPv6: answer AAAA with
+                        // NOERROR-empty without consulting the resolver.
+                        // The resolver's v4-only fake-IP pool already
+                        // suppresses most AAAA, but its `hosts:` table is
+                        // consulted before that suppression and can return
+                        // real v6 addresses the engine cannot dial from a
+                        // v4-only network. Empty-answer (not a silent drop)
+                        // so clients fall back to A immediately instead of
+                        // waiting out resolver timeouts.
+                        let Some(bytes) = dns_empty_response(parsed.payload) else {
+                            return;
+                        };
+                        bytes
+                    } else if matches!(qtype, Some(1) | Some(28)) {
                         let Some(tunnel) = crate::engine::tunnel() else {
                             trace!("tun2socks: UDP/53 A/AAAA dropped — engine not yet running");
                             return;
@@ -1463,6 +1499,49 @@ pub(crate) fn parse_dns_qtype(payload: &[u8]) -> Option<u16> {
     Some(u16::from_be_bytes([hi, lo]))
 }
 
+/// Build a NOERROR response with zero answers for `query`, echoing its ID,
+/// RD flag, and question section. Used by the AAAA gate when the physical
+/// path has no IPv6: an empty answer makes clients fall back to A
+/// immediately, where a silent drop would stall them for the full resolver
+/// timeout (and NXDOMAIN would negative-cache against the whole name,
+/// poisoning the A lookup too — same rationale as meow-dns upstream).
+///
+/// `None` if `query` is malformed (shorter than a header, or truncated
+/// inside the first question).
+pub(crate) fn dns_empty_response(query: &[u8]) -> Option<Vec<u8>> {
+    if query.len() < 12 {
+        return None;
+    }
+    // Walk the first question (same qname walk as parse_dns_qtype) to find
+    // its end, then truncate there: echoing the original tail with zeroed
+    // section counts would leave orphaned EDNS/additional bytes.
+    let mut pos = 12usize;
+    loop {
+        let len = *query.get(pos)? as usize;
+        if len == 0 {
+            pos = pos.checked_add(1)?;
+            break;
+        }
+        if len & 0xC0 == 0xC0 {
+            pos = pos.checked_add(2)?;
+            break;
+        }
+        pos = pos.checked_add(1 + len)?;
+    }
+    let question_end = pos.checked_add(4)?; // qtype + qclass
+    if query.len() < question_end {
+        return None;
+    }
+    let mut resp = query[..question_end].to_vec();
+    resp[2] |= 0x80; // QR = response (keeps opcode + RD as sent)
+    resp[2] &= !0x02; // clear TC
+    resp[3] = 0x80; // RA set, Z/AD/CD cleared, RCODE = NOERROR
+    resp[4] = 0; // QDCOUNT = 1 — only the first question is echoed
+    resp[5] = 1;
+    resp[6..12].fill(0); // ANCOUNT / NSCOUNT / ARCOUNT = 0
+    Some(resp)
+}
+
 /// Forward `query` verbatim to each upstream in parallel, return the
 /// first reply whose 16-bit DNS ID matches the query. `None` if every
 /// upstream times out, errors, or replies with a mismatched ID.
@@ -1676,6 +1755,51 @@ mod tests {
     fn parse_qtype_recognises_aaaa() {
         let pkt = dns_query("example.com", 28);
         assert_eq!(parse_dns_qtype(&pkt), Some(28));
+    }
+
+    #[test]
+    fn dns_empty_response_echoes_question_with_zero_answers() {
+        let query = dns_query("v6.example.com", 28);
+        let resp = dns_empty_response(&query).expect("well-formed query");
+        // ID echoed
+        assert_eq!(&resp[0..2], &query[0..2]);
+        // QR set, opcode QUERY, RD preserved, TC clear
+        assert_eq!(resp[2], 0x81);
+        // RA set, RCODE NOERROR
+        assert_eq!(resp[3], 0x80);
+        // QDCOUNT 1, AN/NS/AR 0
+        assert_eq!(&resp[4..12], &[0, 1, 0, 0, 0, 0, 0, 0]);
+        // question section echoed verbatim, nothing after it
+        assert_eq!(&resp[12..], &query[12..]);
+        assert_eq!(parse_dns_qtype(&resp), Some(28));
+    }
+
+    #[test]
+    fn dns_empty_response_truncates_edns_additional_section() {
+        let mut query = dns_query("a.example.com", 28);
+        // Append a minimal EDNS0 OPT record and bump ARCOUNT.
+        query[11] = 1;
+        query.extend_from_slice(&[0x00, 0x00, 0x29, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let bare_len = dns_query("a.example.com", 28).len();
+        let resp = dns_empty_response(&query).expect("well-formed query");
+        assert_eq!(resp.len(), bare_len, "OPT record must be truncated");
+        assert_eq!(resp[11], 0, "ARCOUNT must be zeroed");
+    }
+
+    #[test]
+    fn dns_empty_response_rejects_truncated_query() {
+        assert!(dns_empty_response(&[0u8; 5]).is_none());
+        let query = dns_query("example.com", 28);
+        assert!(dns_empty_response(&query[..query.len() - 3]).is_none());
+    }
+
+    #[test]
+    fn ipv6_available_roundtrip_defaults_true() {
+        assert!(ipv6_available(), "default must preserve legacy behavior");
+        set_ipv6_available(false);
+        assert!(!ipv6_available());
+        set_ipv6_available(true);
+        assert!(ipv6_available());
     }
 
     #[test]

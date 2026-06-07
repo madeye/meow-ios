@@ -429,6 +429,14 @@ static const int      kWatchdogFailureLimit  = 2;
         hasIPv6 = nw_path_has_ipv6(path);
     }
 
+    // Push the path's IPv6 capability into the Rust DNS intercept on every
+    // update: on a v4-only path, in-TUN AAAA queries are answered
+    // NOERROR-empty so apps fall back to A / fake-IPv4 immediately instead
+    // of receiving v6 addresses (hosts:-table entries bypass the resolver's
+    // fake-IP AAAA suppression) that the engine cannot dial. An unsatisfied
+    // path reports v6=NO, which is correct — nothing is dialable anyway.
+    meow_tun_set_ipv6_available(hasIPv6 ? 1 : 0);
+
     if (!_havePath) {
         _havePath = YES;
         _lastSatisfied = satisfied;
