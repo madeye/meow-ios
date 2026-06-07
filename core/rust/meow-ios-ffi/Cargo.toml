@@ -61,8 +61,8 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# HEAD: 71871a30
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47945cb0fdf832e5e2a4425a7bea" }
+# HEAD: f48dac74
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "f48dac7481388cab9e0b741bfb7d0de0351d9978" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -70,11 +70,11 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47945cb0fdf832e5e2a4425a7bea", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47945cb0fdf832e5e2a4425a7bea" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47945cb0fdf832e5e2a4425a7bea" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47945cb0fdf832e5e2a4425a7bea" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "71871a309e9e47945cb0fdf832e5e2a4425a7bea" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "f48dac7481388cab9e0b741bfb7d0de0351d9978", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "f48dac7481388cab9e0b741bfb7d0de0351d9978" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "f48dac7481388cab9e0b741bfb7d0de0351d9978" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "f48dac7481388cab9e0b741bfb7d0de0351d9978" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "f48dac7481388cab9e0b741bfb7d0de0351d9978" }
 
 [build-dependencies]
 cbindgen = "0.28"
