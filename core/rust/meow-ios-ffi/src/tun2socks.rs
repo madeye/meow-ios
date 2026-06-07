@@ -81,8 +81,27 @@ impl EgressEmitter {
 }
 
 static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
+// Monotonic instance id. `start()` bumps it; the spawned run task captures
+// its own value and only performs end-of-life cleanup (clearing
+// `ingress_slot`, lowering `TUN2SOCKS_RUNNING`) if it is STILL the current
+// generation. Without the guard, a rapid stop()→start() (sleep/wake +
+// path-change churn both restart tun2socks back-to-back) let the OLD task's
+// deferred cleanup steal the NEW instance's ingress sender and flag:
+// `stop()` is fire-and-forget, so the old task was still parked in `recv()`
+// when the new one started, and its teardown ran arbitrarily later.
+static TUN2SOCKS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
+
+/// JoinHandle of the current (or most recent) run task. The next `start()`
+/// takes it and awaits its teardown (bounded) before building a new lwip
+/// netstack — the lwip globals (`OUTPUT_CB_PTR`, netif hooks, pcb lists)
+/// assume a single live stack, so two overlapping `run_tun2socks` instances
+/// are never allowed.
+fn run_handle_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
+    static SLOT: OnceLock<Mutex<Option<tokio::task::JoinHandle<()>>>> = OnceLock::new();
+    SLOT.get_or_init(|| Mutex::new(None))
+}
 
 // TCP accept-side burst cap. Without this, every smoltcp-accepted flow
 // spawns a `dispatch_tcp` task immediately — and under a real burst (e.g.
@@ -475,20 +494,46 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
         cb,
     };
 
-    info!("tun2socks starting (direct-callback ingest)");
+    let my_gen = TUN2SOCKS_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    info!("tun2socks starting (direct-callback ingest, gen {my_gen})");
 
     let (ingress_tx, ingress_rx) = mpsc::channel::<Vec<u8>>(256);
     *ingress_slot().lock() = Some(ingress_tx);
 
+    // Take the previous instance's handle so the new task can wait for its
+    // teardown before touching the lwip globals.
+    let prev = run_handle_slot().lock().take();
+
     let rt = crate::get_runtime();
-    rt.spawn(async move {
+    let handle = rt.spawn(async move {
+        if let Some(prev) = prev {
+            // `stop()` is fire-and-forget: the previous run task may still
+            // be draining its channel or running its teardown. lwip's
+            // global state (OUTPUT_CB_PTR, netif hooks, pcb lists) assumes
+            // exactly one live NetStack, so wait — bounded — for the old
+            // instance to finish before building a new one. Packets that
+            // arrive meanwhile buffer (then drop) in the ingress channel,
+            // which beats corrupting the stack.
+            match tokio::time::timeout(std::time::Duration::from_secs(3), prev).await {
+                Ok(_) => {}
+                Err(_) => logging::bridge_log(
+                    "tun2socks: previous instance still tearing down after 3s; proceeding",
+                ),
+            }
+        }
         if let Err(e) = run_tun2socks(ingress_rx, emitter).await {
             logging::bridge_log(&format!("tun2socks error: {}", e));
         }
-        ingress_slot().lock().take();
-        TUN2SOCKS_RUNNING.store(false, Ordering::SeqCst);
-        info!("tun2socks exited");
+        // Generation-guarded cleanup: if a newer instance already started,
+        // these globals belong to IT — clearing them here would sever the
+        // live instance's ingest path and mark it not-running.
+        if TUN2SOCKS_GEN.load(Ordering::SeqCst) == my_gen {
+            ingress_slot().lock().take();
+            TUN2SOCKS_RUNNING.store(false, Ordering::SeqCst);
+        }
+        info!("tun2socks exited (gen {my_gen})");
     });
+    *run_handle_slot().lock() = Some(handle);
 
     Ok(())
 }
@@ -496,6 +541,8 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
 pub fn stop() {
     TUN2SOCKS_RUNNING.store(false, Ordering::SeqCst);
     // Dropping the sender terminates the ingress task on its next `recv()`.
+    // The run task's JoinHandle stays in `run_handle_slot` so the next
+    // `start()` can await the teardown it triggers here.
     ingress_slot().lock().take();
 }
 
@@ -2182,5 +2229,52 @@ mod tests {
             "0 must be accepted to opt out"
         );
         set_udp_first_reply_deadline_ms(prev);
+    }
+
+    /// Regression test for the 2026-06-07 stop()→start() clobber race: the
+    /// old run task's deferred cleanup used to clear `ingress_slot` and
+    /// lower `TUN2SOCKS_RUNNING` unconditionally — stealing them from the
+    /// instance started right after. With the generation guard, a rapid
+    /// stop/start cycle must leave the NEW instance fully wired.
+    ///
+    /// Builds two real lwip netstacks back-to-back (sequentially, as
+    /// production does on every sleep/wake) — also exercising the fork's
+    /// timeout-task abort + OUTPUT_CB_PTR self-check on teardown.
+    #[test]
+    fn rapid_stop_start_keeps_new_instance_wired() {
+        unsafe extern "C" fn noop_write(
+            _ctx: *mut std::os::raw::c_void,
+            _data: *const u8,
+            _len: usize,
+        ) {
+        }
+
+        start(std::ptr::null_mut(), noop_write).expect("first start");
+        stop();
+        start(std::ptr::null_mut(), noop_write).expect("second start");
+
+        // The first instance's deferred teardown runs within ~3s (the
+        // second instance awaits it before building its stack). The
+        // invariants must hold THROUGHOUT that window — the old bug only
+        // manifested when the stale cleanup finally ran.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+        while std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            assert!(
+                TUN2SOCKS_RUNNING.load(Ordering::SeqCst),
+                "old instance's teardown lowered TUN2SOCKS_RUNNING for the live instance"
+            );
+            assert!(
+                ingress_slot().lock().is_some(),
+                "old instance's teardown stole the live instance's ingress sender"
+            );
+        }
+        assert_eq!(
+            ingest(&[0u8; 20]),
+            0,
+            "live instance must still accept packets after the old teardown"
+        );
+
+        stop();
     }
 }

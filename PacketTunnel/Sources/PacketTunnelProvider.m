@@ -31,6 +31,13 @@ static os_log_t gLog;
     nw_interface_type_t _lastInterfaceType;
     BOOL                _lastHasIPv4;
     BOOL                _lastHasIPv6;
+    // Serializes every suspendTun/resumeTun. sleep/wake arrive on a system
+    // thread and triggerReconnect on _pathQueue; unserialized they can
+    // interleave the non-atomic _tunStarted checks in MWTunnelEngine and
+    // double-start (or double-stop) tun2socks.
+    dispatch_queue_t    _tunControlQueue;
+    dispatch_source_t   _watchdogTimer;
+    int                 _watchdogFailures;
 }
 
 + (void)initialize {
@@ -70,6 +77,8 @@ static os_log_t gLog;
                 return;
             }
             self->_engine = engine;
+            self->_tunControlQueue = dispatch_queue_create(
+                "io.github.madeye.meow.PacketTunnel.tun-control", DISPATCH_QUEUE_SERIAL);
 
             MWIPCListener *listener = [[MWIPCListener alloc]
                 initWithHandler:^(NSDictionary *intent) {
@@ -79,6 +88,7 @@ static os_log_t gLog;
             self->_ipcListener = listener;
 
             [self startPathMonitor];
+            [self startWatchdog];
 
             [self writeState:@"connected" profileID:profileID errorMessage:nil];
             completionHandler(nil);
@@ -89,6 +99,7 @@ static os_log_t gLog;
 - (void)stopTunnelWithReason:(NEProviderStopReason)reason
            completionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "stopTunnel reason=%ld", (long)reason);
+    [self stopWatchdog];
     [self stopPathMonitor];
     [_engine stop];
     _engine = nil;
@@ -100,14 +111,23 @@ static os_log_t gLog;
 
 - (void)sleepWithCompletionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "sleep: suspending tun to shed memory before device sleep");
-    [_engine suspendTun];
-    malloc_zone_pressure_relief(NULL, 0);
-    completionHandler();
+    if (!_tunControlQueue) {
+        completionHandler();
+        return;
+    }
+    dispatch_async(_tunControlQueue, ^{
+        [self->_engine suspendTun];
+        malloc_zone_pressure_relief(NULL, 0);
+        completionHandler();
+    });
 }
 
 - (void)wake {
     os_log_info(gLog, "wake: resuming tun");
-    [_engine resumeTun];
+    if (!_tunControlQueue) return;
+    dispatch_async(_tunControlQueue, ^{
+        [self->_engine resumeTun];
+    });
 }
 
 // MARK: - App messages
@@ -279,6 +299,80 @@ static os_log_t gLog;
     [MWDarwinBridge post:MWNotificationState];
 }
 
+// MARK: - Runtime watchdog
+//
+// Liveness probe for the Rust engine's tokio runtime. The 2026-06-07
+// incident wedged BOTH worker threads (leaked lwip timer tasks spinning on
+// a yield-less lock): packet path, DNS, and the control API all went dark
+// for 8+ minutes while the process looked healthy — iOS kept the tunnel
+// "connected" and nothing recovered until a manual toggle. The underlying
+// bugs are fixed, but a runtime wedge is by definition unrecoverable from
+// inside the runtime, so the watchdog is the backstop: if a trivial task
+// can't get scheduled twice in a row (~30 s of deadness), exit the
+// extension. iOS tears the tunnel down visibly; with on-demand rules it
+// reconnects automatically. A 30-second visible blip beats an invisible
+// all-day blackout.
+
+static const uint64_t kWatchdogIntervalS     = 15;
+static const uint64_t kWatchdogPingTimeoutMs = 2000;
+static const int      kWatchdogFailureLimit  = 2;
+
+- (void)startWatchdog {
+    dispatch_queue_t q = dispatch_queue_create(
+        "io.github.madeye.meow.PacketTunnel.watchdog", DISPATCH_QUEUE_SERIAL);
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
+    dispatch_source_set_timer(timer,
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kWatchdogIntervalS * NSEC_PER_SEC)),
+        kWatchdogIntervalS * NSEC_PER_SEC,
+        NSEC_PER_SEC);
+    __weak __typeof__(self) weak = self;
+    dispatch_source_set_event_handler(timer, ^{
+        __strong __typeof__(weak) self = weak;
+        if (!self) return;
+        [self watchdogTick];
+    });
+    _watchdogFailures = 0;
+    _watchdogTimer = timer;
+    dispatch_resume(timer);
+}
+
+- (void)stopWatchdog {
+    if (_watchdogTimer) {
+        dispatch_source_cancel(_watchdogTimer);
+        _watchdogTimer = nil;
+    }
+}
+
+// Caller queue: the watchdog's private serial queue. Blocking up to
+// kWatchdogPingTimeoutMs here is fine — nothing else runs on it.
+- (void)watchdogTick {
+    if (!_engine) return;
+    if (meow_tun_runtime_ping(kWatchdogPingTimeoutMs) == 0) {
+        if (_watchdogFailures > 0) {
+            os_log_info(gLog, "watchdog: runtime recovered after %d failed ping(s)",
+                        _watchdogFailures);
+        }
+        _watchdogFailures = 0;
+        return;
+    }
+    _watchdogFailures += 1;
+    os_log_error(gLog, "watchdog: runtime ping timed out (%d/%d)",
+                 _watchdogFailures, kWatchdogFailureLimit);
+    if (_watchdogFailures < kWatchdogFailureLimit) return;
+
+    os_log_fault(gLog,
+                 "watchdog: tokio runtime wedged for %llu s — exiting for clean relaunch",
+                 (unsigned long long)(kWatchdogFailureLimit * kWatchdogIntervalS));
+    [self writeState:@"error"
+           profileID:nil
+        errorMessage:@"engine runtime wedged; tunnel was restarted"];
+    // Deliberate crash-recovery: a wedged runtime cannot service any FFI
+    // teardown call (engine stop would hang on it), so a clean in-process
+    // restart is impossible. exit() lets iOS tear down the tunnel and
+    // relaunch on demand.
+    exit(EXIT_FAILURE);
+}
+
 // MARK: - Network path monitoring
 
 - (void)startPathMonitor {
@@ -401,7 +495,7 @@ static os_log_t gLog;
 }
 
 - (void)triggerReconnect {
-    if (!_engine) return;
+    if (!_engine || !_tunControlQueue) return;
 
     // Full tun2socks restart on network change: the gVisor netstack and
     // per-flow state (TCP connections, UDP NAT table, dispatch futures)
@@ -412,9 +506,15 @@ static os_log_t gLog;
     // 2026-05-27 crash #1). A clean stop+start gives the netstack a
     // fresh path with zero carryover. The engine (mihomo) stays alive
     // so proxy groups, routing rules, and the REST API persist.
+    //
+    // Serialized on _tunControlQueue with sleep/wake's suspend/resume —
+    // a wake-time resume racing a path-change restart on _pathQueue can
+    // otherwise interleave MWTunnelEngine's non-atomic _tunStarted checks.
     os_log_info(gLog, "path: restarting tun2socks on network change");
-    [_engine suspendTun];
-    [_engine resumeTun];
+    dispatch_async(_tunControlQueue, ^{
+        [self->_engine suspendTun];
+        [self->_engine resumeTun];
+    });
 }
 
 @end
