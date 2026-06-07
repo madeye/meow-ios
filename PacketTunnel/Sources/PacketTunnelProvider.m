@@ -29,6 +29,8 @@ static os_log_t gLog;
     BOOL                _havePath;
     BOOL                _lastSatisfied;
     nw_interface_type_t _lastInterfaceType;
+    BOOL                _lastHasIPv4;
+    BOOL                _lastHasIPv6;
 }
 
 + (void)initialize {
@@ -285,6 +287,8 @@ static os_log_t gLog;
     _havePath = NO;
     _lastSatisfied = NO;
     _lastInterfaceType = nw_interface_type_other;
+    _lastHasIPv4 = NO;
+    _lastHasIPv6 = NO;
 
     nw_path_monitor_t monitor = nw_path_monitor_create();
     nw_path_monitor_set_queue(monitor, _pathQueue);
@@ -317,6 +321,8 @@ static os_log_t gLog;
     BOOL satisfied = (status == nw_path_status_satisfied);
 
     nw_interface_type_t iface = nw_interface_type_other;
+    BOOL hasIPv4 = NO;
+    BOOL hasIPv6 = NO;
     if (satisfied) {
         if (nw_path_uses_interface_type(path, nw_interface_type_wifi)) {
             iface = nw_interface_type_wifi;
@@ -325,13 +331,18 @@ static os_log_t gLog;
         } else if (nw_path_uses_interface_type(path, nw_interface_type_wired)) {
             iface = nw_interface_type_wired;
         }
+        hasIPv4 = nw_path_has_ipv4(path);
+        hasIPv6 = nw_path_has_ipv6(path);
     }
 
     if (!_havePath) {
         _havePath = YES;
         _lastSatisfied = satisfied;
         _lastInterfaceType = iface;
-        os_log_info(gLog, "path: initial satisfied=%d iface=%d", satisfied, iface);
+        _lastHasIPv4 = hasIPv4;
+        _lastHasIPv6 = hasIPv6;
+        os_log_info(gLog, "path: initial satisfied=%d iface=%d v4=%d v6=%d",
+                    satisfied, iface, hasIPv4, hasIPv6);
         return;
     }
 
@@ -342,10 +353,22 @@ static os_log_t gLog;
     } else if (satisfied && iface != _lastInterfaceType) {
         os_log_info(gLog, "path: interface changed %d -> %d", _lastInterfaceType, iface);
         meaningful = YES;
+    } else if (satisfied && (hasIPv4 != _lastHasIPv4 || hasIPv6 != _lastHasIPv6)) {
+        // Same interface, same satisfied state, but the address-family set
+        // changed — e.g. the Wi-Fi network silently lost (or gained) IPv6
+        // via expired RAs or an upstream change. Without this branch the
+        // flip is invisible: upstream connections the engine established
+        // over the vanished family black-hole until the idle-TTL sweeper
+        // reaps them, while the tunnel still reports "connected".
+        os_log_info(gLog, "path: address family changed v4 %d -> %d, v6 %d -> %d",
+                    _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
+        meaningful = YES;
     }
 
     _lastSatisfied = satisfied;
     _lastInterfaceType = iface;
+    _lastHasIPv4 = hasIPv4;
+    _lastHasIPv6 = hasIPv6;
 
     if (meaningful) {
         [self scheduleReconnect];

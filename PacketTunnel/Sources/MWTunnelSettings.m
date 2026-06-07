@@ -14,7 +14,23 @@
     ipv4.excludedRoutes = [self ipv4LanExcludedRoutes];
     settings.IPv4Settings = ipv4;
 
-    // IPv6
+    // IPv6 — claimed unconditionally, even on IPv4-only networks. This is
+    // a deliberate sinkhole, not an oversight:
+    //
+    //   * Claiming ::/0 prevents IPv6 leak-around: on a v6-capable network,
+    //     apps would otherwise reach the internet natively over v6,
+    //     bypassing the proxy entirely.
+    //   * It costs nothing on a v4-only network because almost no v6
+    //     traffic enters the TUN: the engine's resolver runs fake-IP with a
+    //     v4-only pool, and meow-dns answers AAAA with NOERROR-empty in
+    //     that configuration, so clients fall back to A / fake-v4 and the
+    //     proxy connects by hostname. Only hardcoded v6 literals (rare)
+    //     ever route in, and those fail fast at the engine's dial.
+    //   * Do NOT make this conditional on path capability: re-applying
+    //     network settings mid-tunnel reasserts the whole payload (fragile —
+    //     see the loopback-route lesson in ipv4LanExcludedRoutes) and
+    //     IPv4↔IPv6 transitions are already handled by the path monitor's
+    //     address-family restart in PacketTunnelProvider.
     NEIPv6Settings *ipv6 = [[NEIPv6Settings alloc]
         initWithAddresses:@[@"fdfe:dcba:9876::1"]
      networkPrefixLengths:@[@126]];

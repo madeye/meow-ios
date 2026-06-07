@@ -155,7 +155,6 @@
 "settings.nav.title" = "Settings";
 "settings.section.general" = "General";
 "settings.toggle.allowLan" = "Allow LAN";
-"settings.toggle.ipv6" = "IPv6";
 "settings.toggle.onDemand" = "Connect On Demand";
 "settings.picker.logLevel" = "Log Level";
 "settings.logLevel.debug" = "Debug";

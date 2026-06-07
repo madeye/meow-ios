@@ -161,7 +161,6 @@
 "settings.nav.title" = "设置";
 "settings.section.general" = "通用";
 "settings.toggle.allowLan" = "允许局域网";
-"settings.toggle.ipv6" = "IPv6";
 "settings.toggle.onDemand" = "按需自动连接";
 "settings.picker.logLevel" = "日志级别";
 "settings.logLevel.debug" = "调试";

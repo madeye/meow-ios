@@ -22,8 +22,6 @@ struct SettingsView: View {
             Section("settings.section.general") {
                 Toggle("settings.toggle.allowLan", isOn: binding(\.allowLan))
                     .accessibilityIdentifier("settings.toggle.allowLan")
-                Toggle("settings.toggle.ipv6", isOn: binding(\.ipv6))
-                    .accessibilityIdentifier("settings.toggle.ipv6")
                 Toggle("settings.toggle.onDemand", isOn: binding(\.onDemand))
                     .accessibilityIdentifier("settings.toggle.onDemand")
                 Picker("settings.picker.logLevel", selection: binding(\.logLevel)) {
@@ -92,7 +90,6 @@ struct SettingsView: View {
             }
         #endif
             .onChange(of: preferences.allowLan) { _, _ in persist() }
-            .onChange(of: preferences.ipv6) { _, _ in persist() }
             .onChange(of: preferences.logLevel) { _, _ in persist() }
             .onChange(of: preferences.onDemand) { _, _ in
                 persist()
