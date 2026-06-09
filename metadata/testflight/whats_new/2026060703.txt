@@ -1,0 +1,24 @@
+Build 2026060702 (1.3.1)
+
+WHAT'S NEW
+• Hotfix for a "connected but no traffic" stall introduced in build
+  2026060701: heavy sleep/wake cycling could pile up leaked internal
+  timers until the engine stopped responding entirely (no traffic, no
+  stats, toggle required). The leak, the lock behavior that amplified
+  it, and a restart race it exposed are all fixed.
+• New engine watchdog: if the engine ever stops responding for ~30
+  seconds, the tunnel now restarts itself automatically (brief visible
+  reconnect) instead of staying silently dead until you toggle it.
+• Everything from 2026060701: long-idle fix, IPv6↔IPv4 transition
+  handling, UDP address-family fallback, control-API hardening.
+
+FOR TESTERS
+• Sleep/wake stress: use the phone normally with frequent lock/unlock
+  for a few hours; traffic should never stall. If you ever see a brief
+  disconnect+reconnect, that's the new watchdog doing its job — please
+  report it (it means something still wedged underneath).
+• Overnight idle: leave the VPN connected overnight; traffic should
+  flow immediately in the morning.
+• IPv6 flip: on dual-stack Wi-Fi, disable IPv6 on the router; browsing
+  should recover within seconds.
+• Issues: https://github.com/madeye/meow-ios/issues

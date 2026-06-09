@@ -5,7 +5,8 @@ Reads `metadata/` tree (fastlane layout) and pushes:
   - betaAppLocalizations (per locale): description, feedbackEmail, marketingUrl, privacyPolicyUrl
   - betaBuildLocalizations for the latest build (per locale): whatsNew
 
-Uses the API key JSON at /Users/mlv/.appstoreconnect/api_key.json.
+Auth: reads ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_PATH from the environment
+(source prod.env first); falls back to the api_key.json below if unset.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 import jwt
 import requests
 
-BUNDLE_ID = "io.github.madeye.meow"
+BUNDLE_ID = "com.tangzixiang.meow"
 API_KEY_JSON = Path("/Users/mlv/.appstoreconnect/api_key.json")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 METADATA_ROOT = REPO_ROOT / "metadata"
@@ -47,10 +48,16 @@ def read_text(path: Path) -> str:
 
 
 def make_token() -> str:
-    cfg = json.loads(API_KEY_JSON.read_text())
-    key_id = cfg["key_id"]
-    issuer_id = cfg["issuer_id"]
-    private_key = cfg["key"]
+    key_id = os.environ.get("ASC_KEY_ID")
+    issuer_id = os.environ.get("ASC_ISSUER_ID")
+    key_path = os.environ.get("ASC_KEY_PATH")
+    if key_id and issuer_id and key_path:
+        private_key = Path(os.path.expanduser(key_path)).read_text()
+    else:
+        cfg = json.loads(API_KEY_JSON.read_text())
+        key_id = cfg["key_id"]
+        issuer_id = cfg["issuer_id"]
+        private_key = cfg["key"]
     payload = {
         "iss": issuer_id,
         "iat": int(time.time()),
