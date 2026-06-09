@@ -18,7 +18,7 @@ pub fn init_os_logger() {
         // The subsystem is the extension's bundle id. Logs flow to Apple's
         // unified logging and can be viewed via `log stream` on macOS or the
         // Console app while a device is attached.
-        let subsystem = "io.github.madeye.meow.PacketTunnel";
+        let subsystem = "com.tangzixiang.meow.PacketTunnel";
         if let Err(e) = oslog::OsLogger::new(subsystem)
             .level_filter(log::LevelFilter::Debug)
             .init()

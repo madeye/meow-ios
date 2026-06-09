@@ -3,7 +3,7 @@ import Testing
 
 /// Keychain tests verify the shared access group works for both the app and
 /// the extension. Access group must be
-/// `$(AppIdentifierPrefix)io.github.madeye.meow` (see
+/// `$(AppIdentifierPrefix)com.tangzixiang.meow` (see
 /// `App/App.entitlements` and `PacketTunnel/PacketTunnel.entitlements`).
 @Suite("KeychainStore", .tags(.security))
 struct KeychainStoreTests {
@@ -30,7 +30,7 @@ struct KeychainStoreTests {
 
     @Test(.disabled("blocked on KeychainStore"))
     func `access group matches extension entitlement`() {
-        // kSecAttrAccessGroup = "$(AppIdentifierPrefix)io.github.madeye.meow"
+        // kSecAttrAccessGroup = "$(AppIdentifierPrefix)com.tangzixiang.meow"
     }
 }
 

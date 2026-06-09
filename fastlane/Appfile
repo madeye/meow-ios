@@ -1,4 +1,7 @@
-app_identifier("io.github.madeye.meow")
+app_identifier("com.tangzixiang.meow")
 apple_id("max.c.lv@gmail.com")
-team_id("SK4GFF6AHN")
-itc_team_id("SK4GFF6AHN")
+# Production team id is not committed — it comes from prod.env (gitignored).
+# Run `source prod.env` (or `set -a; . prod.env; set +a`) before invoking
+# fastlane so DEVELOPMENT_TEAM is set.
+team_id(ENV["DEVELOPMENT_TEAM"])
+itc_team_id(ENV["DEVELOPMENT_TEAM"])

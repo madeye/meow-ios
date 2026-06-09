@@ -71,6 +71,9 @@ local.properties
 *.p8
 *.p12
 .env
+# Production signing config (team id + ASC key path). Tracked template is
+# prod.env.example; the real prod.env stays local.
+prod.env
 .env.*
 
 # Firebase config — fetch from console.firebase.google.com per-developer.

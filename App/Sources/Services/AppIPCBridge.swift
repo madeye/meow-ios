@@ -12,7 +12,7 @@ final class AppIPCBridge {
     private(set) var currentState: VpnState = .init()
     private(set) var currentTraffic: TrafficSnapshot = .init()
 
-    private static let log = Logger(subsystem: "io.github.madeye.meow", category: "ipc-bridge")
+    private static let log = Logger(subsystem: "com.tangzixiang.meow", category: "ipc-bridge")
 
     private var stateObserver: DarwinObserver?
     private var trafficObserver: DarwinObserver?

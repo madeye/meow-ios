@@ -9,11 +9,12 @@
 #   scripts/build-adhoc.sh             -- Firebase Ad Hoc IPA
 #   scripts/upload-testflight-metadata.py -- pushes whats_new + beta info
 #
-# Auth uses the App Store Connect API key configured in CLAUDE.md:
-#   ASC_KEY_ID    = 5MC8U9Z7P9
-#   ASC_ISSUER_ID = 1200242f-e066-47cc-9ac8-b3affd0eee32
-#   ASC_KEY_PATH  = ~/.appstoreconnect/AuthKey_5MC8U9Z7P9.p8
-# Each can be overridden via env var of the same name.
+# Auth uses the production App Store Connect API key (team from prod.env):
+#   ASC_KEY_ID    = 9FU24T97RY
+#   ASC_ISSUER_ID = <set in prod.env — issuer for the 9FU24T97RY key>
+#   ASC_KEY_PATH  = ~/AuthKey_9FU24T97RY.p8
+# These defaults plus the key path load from prod.env (gitignored; see
+# prod.env.example). Each can be overridden via env var of the same name.
 #
 # Signing uses signingStyle=manual during export with the App Store
 # provisioning profiles already installed on this Mac. Defaults match
@@ -66,16 +67,30 @@ check_profile_expiry() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Production signing config (gitignored). See prod.env.example.
+if [[ -f "$ROOT/prod.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$ROOT/prod.env"
+    set +a
+fi
+
 PROJECT_PATH="$ROOT/meow-ios.xcodeproj"
 SCHEME="meow-ios"
 ARCHIVE_PATH="$ROOT/build/meow-ios-appstore.xcarchive"
 EXPORT_DIR="$ROOT/build/export-appstore"
 EXPORT_PLIST="$ROOT/build/ExportOptions-appstore.plist"
 
-TEAM_ID="${DEVELOPMENT_TEAM:-SK4GFF6AHN}"
-ASC_KEY_ID="${ASC_KEY_ID:-5MC8U9Z7P9}"
-ASC_ISSUER_ID="${ASC_ISSUER_ID:-1200242f-e066-47cc-9ac8-b3affd0eee32}"
-ASC_KEY_PATH="${ASC_KEY_PATH:-$HOME/.appstoreconnect/AuthKey_5MC8U9Z7P9.p8}"
+# Production team id + ASC key come from prod.env (gitignored, sourced above).
+# The team id is intentionally not committed.
+TEAM_ID="${DEVELOPMENT_TEAM:-}"
+if [[ -z "$TEAM_ID" ]]; then
+    echo "error: DEVELOPMENT_TEAM not set. Create prod.env from prod.env.example (it is sourced automatically) or export DEVELOPMENT_TEAM." >&2
+    exit 1
+fi
+ASC_KEY_ID="${ASC_KEY_ID:-9FU24T97RY}"
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-}"
+ASC_KEY_PATH="${ASC_KEY_PATH:-$HOME/AuthKey_9FU24T97RY.p8}"
 
 # App Store provisioning profile UUIDs already installed under
 # ~/Library/MobileDevice/Provisioning Profiles/. Override via env if
@@ -138,9 +153,9 @@ cat >"$EXPORT_PLIST" <<EOF
     <string>Apple Distribution</string>
     <key>provisioningProfiles</key>
     <dict>
-        <key>io.github.madeye.meow</key>
+        <key>com.tangzixiang.meow</key>
         <string>$APP_PROFILE</string>
-        <key>io.github.madeye.meow.PacketTunnel</key>
+        <key>com.tangzixiang.meow.PacketTunnel</key>
         <string>$PT_PROFILE</string>
     </dict>
     <key>uploadSymbols</key>

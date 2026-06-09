@@ -22,7 +22,7 @@ import SwiftData
 @MainActor
 final class DailyTrafficAccumulator {
     private let modelContext: ModelContext
-    private let log = Logger(subsystem: "io.github.madeye.meow.app", category: "daily-traffic")
+    private let log = Logger(subsystem: "com.tangzixiang.meow.app", category: "daily-traffic")
 
     private var lastUp: Int64 = 0
     private var lastDown: Int64 = 0

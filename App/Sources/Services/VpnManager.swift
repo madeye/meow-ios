@@ -124,7 +124,7 @@ final class VpnManager {
 
     private func configureIfNeeded(_ mgr: NETunnelProviderManager) {
         let proto = (mgr.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
-        proto.providerBundleIdentifier = "io.github.madeye.meow.PacketTunnel"
+        proto.providerBundleIdentifier = "com.tangzixiang.meow.PacketTunnel"
         // RFC 5737 TEST-NET-1 placeholder — iOS 26 rejects non-RFC strings
         // (e.g. "meow") at NEPacketTunnelNetworkSettings construction with
         // "invalid tunnel remote address". The real proxy endpoint lives in

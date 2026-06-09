@@ -4,7 +4,7 @@ import Observation
 import os
 import SwiftData
 
-private let replayLog = Logger(subsystem: "io.github.madeye.meow.app", category: "proxy-replay")
+private let replayLog = Logger(subsystem: "com.tangzixiang.meow.app", category: "proxy-replay")
 
 /// Top-level observable that wires the app's long-lived services together and
 /// performs first-launch setup (asset seeding, IPC observer registration).

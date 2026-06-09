@@ -40,7 +40,7 @@ static os_log_t gLog;
 
 + (void)initialize {
     if (self == [PacketTunnelProvider class]) {
-        gLog = os_log_create("io.github.madeye.meow.PacketTunnel", "provider");
+        gLog = os_log_create("com.tangzixiang.meow.PacketTunnel", "provider");
     }
 }
 
@@ -76,7 +76,7 @@ static os_log_t gLog;
             }
             self->_engine = engine;
             self->_tunControlQueue = dispatch_queue_create(
-                "io.github.madeye.meow.PacketTunnel.tun-control", DISPATCH_QUEUE_SERIAL);
+                "com.tangzixiang.meow.PacketTunnel.tun-control", DISPATCH_QUEUE_SERIAL);
 
             MWIPCListener *listener = [[MWIPCListener alloc]
                 initWithHandler:^(NSDictionary *intent) {
@@ -298,7 +298,7 @@ static os_log_t gLog;
 // MARK: - Network path monitoring
 
 - (void)startPathMonitor {
-    _pathQueue = dispatch_queue_create("io.github.madeye.meow.PacketTunnel.path",
+    _pathQueue = dispatch_queue_create("com.tangzixiang.meow.PacketTunnel.path",
                                        DISPATCH_QUEUE_SERIAL);
     _havePath = NO;
     _lastSatisfied = NO;

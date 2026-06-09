@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared App Group identifier used by the app and the packet-tunnel extension.
 public enum AppGroup {
-    public static let identifier = "group.io.github.madeye.meow"
+    public static let identifier = "group.com.tangzixiang.meow"
 
     public static var containerURL: URL {
         guard let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) else {

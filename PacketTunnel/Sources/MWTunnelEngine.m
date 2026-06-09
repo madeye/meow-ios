@@ -54,7 +54,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
 
 + (void)initialize {
     if (self == [MWTunnelEngine class]) {
-        gLog = os_log_create("io.github.madeye.meow.PacketTunnel", "engine");
+        gLog = os_log_create("com.tangzixiang.meow.PacketTunnel", "engine");
     }
 }
 

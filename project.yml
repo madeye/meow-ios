@@ -1,7 +1,7 @@
 name: meow-ios
 
 options:
-  bundleIdPrefix: io.github.madeye.meow
+  bundleIdPrefix: com.tangzixiang.meow
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -66,21 +66,21 @@ targets:
         GOOGLE_ANALYTICS_IDFA_COLLECTION_ENABLED: false
         GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED: false
         CFBundleURLTypes:
-          - CFBundleURLName: io.github.madeye.meow.deeplink
+          - CFBundleURLName: com.tangzixiang.meow.deeplink
             CFBundleURLSchemes:
               - meow
     entitlements:
       path: App/App.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.io.github.madeye.meow
+          - group.com.tangzixiang.meow
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
         keychain-access-groups:
-          - $(AppIdentifierPrefix)io.github.madeye.meow
+          - $(AppIdentifierPrefix)com.tangzixiang.meow
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.madeye.meow
+        PRODUCT_BUNDLE_IDENTIFIER: com.tangzixiang.meow
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
@@ -201,14 +201,14 @@ targets:
       path: PacketTunnel/PacketTunnel.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.io.github.madeye.meow
+          - group.com.tangzixiang.meow
         com.apple.developer.networking.networkextension:
           - packet-tunnel-provider
         keychain-access-groups:
-          - $(AppIdentifierPrefix)io.github.madeye.meow
+          - $(AppIdentifierPrefix)com.tangzixiang.meow
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.madeye.meow.PacketTunnel
+        PRODUCT_BUNDLE_IDENTIFIER: com.tangzixiang.meow.PacketTunnel
         CODE_SIGN_ENTITLEMENTS: PacketTunnel/PacketTunnel.entitlements
         GENERATE_INFOPLIST_FILE: NO
         CLANG_ENABLE_MODULES: YES

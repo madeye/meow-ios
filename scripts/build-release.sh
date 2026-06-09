@@ -5,6 +5,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Production signing config (team id + App Store Connect key path) lives in
+# prod.env — gitignored, see prod.env.example. Sourcing it here makes the
+# production branch build with the production team + ASC key without
+# committing the team id or any secret paths.
+if [[ -f "$ROOT/prod.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$ROOT/prod.env"
+    set +a
+fi
+
 PROJECT_PATH="$ROOT/meow-ios.xcodeproj"
 SCHEME="meow-ios"
 CONFIGURATION="Release"
