@@ -1169,7 +1169,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.MeowUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowUITests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = "meow-ios";
@@ -1248,7 +1248,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.MeowUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowUITests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = "meow-ios";
@@ -1337,7 +1337,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.MeowTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowTests;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = App/Sources/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1358,7 +1358,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.MeowIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowIntegrationTests;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = App/Sources/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1394,7 +1394,7 @@
 				OTHER_LDFLAGS = (
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
@@ -1431,7 +1431,7 @@
 				OTHER_LDFLAGS = (
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
@@ -1466,7 +1466,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.PacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.PacketTunnel;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1485,7 +1485,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.MeowIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowIntegrationTests;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = App/Sources/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1519,7 +1519,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.PacketTunnel;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.PacketTunnel;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1538,7 +1538,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.madeye.meow.MeowTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowTests;
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = App/Sources/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";

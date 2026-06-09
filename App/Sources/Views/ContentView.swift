@@ -1,28 +1,41 @@
 import SwiftUI
 
+/// Top-level tabs. Raw values double as the `-screenshotTab <value>` launch
+/// argument used by the App Store screenshot capture (honored only in UI-test
+/// builds — see `initialTab`).
+enum ContentTab: String {
+    case home, subscriptions, traffic, logs, settings
+}
+
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SubscriptionService.self) private var subscriptionService
     @State private var showDiagnostics = false
     @State private var importError: String?
+    @State private var selectedTab: ContentTab = initialTab()
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack { HomeView() }
                 .tabItem { Label("tabs.home", systemImage: "house.fill") }
                 .accessibilityIdentifier("Home")
+                .tag(ContentTab.home)
             NavigationStack { SubscriptionsView() }
                 .tabItem { Label("tabs.subscriptions", systemImage: "text.document.fill") }
                 .accessibilityIdentifier("Subscriptions")
+                .tag(ContentTab.subscriptions)
             NavigationStack { TrafficView() }
                 .tabItem { Label("tabs.traffic", systemImage: "chart.bar.fill") }
                 .accessibilityIdentifier("Traffic")
+                .tag(ContentTab.traffic)
             NavigationStack { LogsView() }
                 .tabItem { Label("tabs.logs", systemImage: "list.bullet.rectangle.fill") }
                 .accessibilityIdentifier("Logs")
+                .tag(ContentTab.logs)
             NavigationStack { SettingsView() }
                 .tabItem { Label("tabs.settings", systemImage: "gearshape.fill") }
                 .accessibilityIdentifier("Settings")
+                .tag(ContentTab.settings)
         }
         .tint(AppTheme.accent)
         .onOpenURL { url in
@@ -68,4 +81,15 @@ struct ContentView: View {
             importError = error.localizedDescription
         }
     }
+}
+
+/// Initial tab for the screenshot harness. Only honors `-screenshotTab <tab>`
+/// when launched with `-UITests`, so production launches always start on Home.
+private func initialTab() -> ContentTab {
+    let argv = ProcessInfo.processInfo.arguments
+    guard argv.contains("-UITests"),
+          let i = argv.firstIndex(of: "-screenshotTab"), i + 1 < argv.count,
+          let tab = ContentTab(rawValue: argv[i + 1])
+    else { return .home }
+    return tab
 }
