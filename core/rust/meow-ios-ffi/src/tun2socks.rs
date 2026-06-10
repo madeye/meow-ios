@@ -7,14 +7,17 @@
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS is delegated to meow's resolver running in fake-IP mode for the
-//! qtypes meow's `DnsServer::handle_query` knows about — A (1) and AAAA
-//! (28). Anything else (HTTPS=65, SVCB=64, TXT=16, MX=15, PTR=12, …) is
-//! forwarded as a raw UDP packet to the pinned upstream pool and the
-//! response is injected straight back. meow's DnsServer returns NXDOMAIN
-//! for non-A/AAAA queries, which kills modern iOS connection setup (Safari's
-//! HTTPS-record probe, ECH, DNS-SD, mDNS-fallback) — the passthrough path
-//! lets those queries get a real answer instead.
+//! DNS: A (1) queries are delegated to meow's resolver running in fake-IP
+//! mode (`DnsServer::handle_query`). AAAA (28) queries are answered
+//! NOERROR-empty by the intercept itself, unconditionally — only the IPv4
+//! fake-IP path is proxied, so stripping AAAA forces every client onto it
+//! instead of leaking (or black-holing) connections over v6. Anything else
+//! (HTTPS=65, SVCB=64, TXT=16, MX=15, PTR=12, …) is forwarded as a raw UDP
+//! packet to the pinned upstream pool and the response is injected straight
+//! back. meow's DnsServer returns NXDOMAIN for non-A/AAAA queries, which
+//! kills modern iOS connection setup (Safari's HTTPS-record probe, ECH,
+//! DNS-SD, mDNS-fallback) — the passthrough path lets those queries get a
+//! real answer instead.
 //!
 //! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
 //! every UDP DNS query arrives as an in-TUN IP packet; the ingress loop below
@@ -92,28 +95,6 @@ static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 static TUN2SOCKS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
-
-// Whether the underlying (physical) network path currently has IPv6.
-// Pushed by the iOS side from NWPathMonitor (`nw_path_has_ipv6`) on every
-// path update. When false, the DNS intercept short-circuits AAAA queries
-// to a NOERROR-empty answer without consulting the resolver: the resolver
-// already suppresses AAAA for the v4-only fake-IP pool, but the `hosts:`
-// table is consulted BEFORE that suppression and can hand out real v6
-// addresses — which the engine then cannot dial. Defaults to true so
-// consumers that never call the setter (macOS harness) keep today's
-// behavior.
-static IPV6_AVAILABLE: AtomicBool = AtomicBool::new(true);
-
-/// Record whether the physical path has IPv6. Called from Swift on every
-/// NWPathMonitor update.
-pub fn set_ipv6_available(available: bool) {
-    IPV6_AVAILABLE.store(available, Ordering::Relaxed);
-}
-
-/// Current IPv6 availability as last pushed by [`set_ipv6_available`].
-pub fn ipv6_available() -> bool {
-    IPV6_AVAILABLE.load(Ordering::Relaxed)
-}
 
 /// JoinHandle of the current (or most recent) run task. The next `start()`
 /// takes it and awaits its teardown (bounded) before building a new lwip
@@ -805,7 +786,10 @@ async fn run_tun2socks(
         // (172.19.0.2) as the system DNS server, so every UDP DNS query
         // arrives here as an in-TUN IP packet. Branch on qtype:
         //
-        //   * A (1) / AAAA (28)  → meow's `DnsServer::handle_query`
+        //   * AAAA (28)          → NOERROR-empty, unconditionally. Only the
+        //     IPv4 fake-IP path is intercepted and proxied; stripping AAAA
+        //     forces every client onto it.
+        //   * A (1)              → meow's `DnsServer::handle_query`
         //     (fake-IP synthesis, reverse map, hosts, TTL).
         //   * anything else      → raw UDP forward to the pinned upstream
         //     pool (HTTPS, SVCB, TXT, MX, PTR, …). meow's DnsServer
@@ -837,23 +821,26 @@ async fn run_tun2socks(
                     };
                     let qtype = parse_dns_qtype(parsed.payload);
 
-                    let response_payload = if qtype == Some(28) && !ipv6_available() {
-                        // The physical path has no IPv6: answer AAAA with
-                        // NOERROR-empty without consulting the resolver.
-                        // The resolver's v4-only fake-IP pool already
-                        // suppresses most AAAA, but its `hosts:` table is
-                        // consulted before that suppression and can return
-                        // real v6 addresses the engine cannot dial from a
-                        // v4-only network. Empty-answer (not a silent drop)
-                        // so clients fall back to A immediately instead of
-                        // waiting out resolver timeouts.
+                    let response_payload = if qtype == Some(28) {
+                        // AAAA is always answered NOERROR-empty without
+                        // consulting the resolver, forcing every client onto
+                        // A / fake-IPv4 — the only family the intercept
+                        // actually proxies (the ::/0 claim is a deliberate
+                        // sinkhole, not a working v6 path). The resolver's
+                        // v4-only fake-IP pool already suppresses most AAAA,
+                        // but its `hosts:` table is consulted before that
+                        // suppression and can hand out real v6 addresses
+                        // that would then bypass interception or fail to
+                        // dial. Empty-answer (not a silent drop) so clients
+                        // fall back to A immediately instead of waiting out
+                        // resolver timeouts.
                         let Some(bytes) = dns_empty_response(parsed.payload) else {
                             return;
                         };
                         bytes
-                    } else if matches!(qtype, Some(1) | Some(28)) {
+                    } else if qtype == Some(1) {
                         let Some(tunnel) = crate::engine::tunnel() else {
-                            trace!("tun2socks: UDP/53 A/AAAA dropped — engine not yet running");
+                            trace!("tun2socks: UDP/53 A query dropped — engine not yet running");
                             return;
                         };
                         let resolver = tunnel.resolver().clone();
@@ -1500,11 +1487,11 @@ pub(crate) fn parse_dns_qtype(payload: &[u8]) -> Option<u16> {
 }
 
 /// Build a NOERROR response with zero answers for `query`, echoing its ID,
-/// RD flag, and question section. Used by the AAAA gate when the physical
-/// path has no IPv6: an empty answer makes clients fall back to A
-/// immediately, where a silent drop would stall them for the full resolver
-/// timeout (and NXDOMAIN would negative-cache against the whole name,
-/// poisoning the A lookup too — same rationale as meow-dns upstream).
+/// RD flag, and question section. Used to strip every AAAA query: an empty
+/// answer makes clients fall back to A immediately, where a silent drop
+/// would stall them for the full resolver timeout (and NXDOMAIN would
+/// negative-cache against the whole name, poisoning the A lookup too —
+/// same rationale as meow-dns upstream).
 ///
 /// `None` if `query` is malformed (shorter than a header, or truncated
 /// inside the first question).
@@ -1791,15 +1778,6 @@ mod tests {
         assert!(dns_empty_response(&[0u8; 5]).is_none());
         let query = dns_query("example.com", 28);
         assert!(dns_empty_response(&query[..query.len() - 3]).is_none());
-    }
-
-    #[test]
-    fn ipv6_available_roundtrip_defaults_true() {
-        assert!(ipv6_available(), "default must preserve legacy behavior");
-        set_ipv6_available(false);
-        assert!(!ipv6_available());
-        set_ipv6_available(true);
-        assert!(ipv6_available());
     }
 
     #[test]

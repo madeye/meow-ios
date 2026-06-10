@@ -12,9 +12,10 @@
 //! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
 //! owns a single tokio runtime that both halves share. DNS is delegated
 //! end-to-end to meow's resolver running in fake-IP mode: the tun2socks
-//! UDP/53 intercept hands every in-TUN DNS datagram straight to
-//! `meow_dns::DnsServer::handle_query`, which synthesises the fake-IP, owns
-//! the reverse mapping, and answers AAAA / hosts / NXDOMAIN consistently.
+//! UDP/53 intercept answers AAAA queries NOERROR-empty itself (forcing
+//! clients onto the proxied IPv4 fake-IP path) and hands A queries straight
+//! to `meow_dns::DnsServer::handle_query`, which synthesises the fake-IP,
+//! owns the reverse mapping, and answers hosts / NXDOMAIN consistently.
 //! The TCP and UDP dispatch paths then pass the literal fake-IP destination
 //! to `meow_tunnel`, whose `pre_handle_metadata` reverses it back to the
 //! original hostname before rule matching. The FFI no longer carries its
@@ -693,22 +694,6 @@ pub unsafe extern "C" fn meow_tun_ingest(data: *const u8, len: usize) -> c_int {
 pub extern "C" fn meow_tun_stop() {
     logging::bridge_log("meow_tun_stop");
     tun2socks::stop();
-}
-
-/// Record whether the underlying (physical) network path currently has
-/// IPv6. Swift calls this from its NWPathMonitor update handler with
-/// `nw_path_has_ipv6(path)`.
-///
-/// When `available` is 0, the tun2socks DNS intercept answers in-TUN AAAA
-/// queries with NOERROR-empty instead of consulting the resolver, so apps
-/// fall back to A / fake-IPv4 immediately. The resolver's v4-only fake-IP
-/// pool already suppresses most AAAA, but its `hosts:` table is consulted
-/// before that suppression and can return real IPv6 addresses the engine
-/// cannot dial from a v4-only network. Safe to call at any time, including
-/// before `meow_tun_start`.
-#[no_mangle]
-pub extern "C" fn meow_tun_set_ipv6_available(available: c_int) {
-    tun2socks::set_ipv6_available(available != 0);
 }
 
 /// Liveness probe for the shared tokio runtime. Spawns a trivial task and

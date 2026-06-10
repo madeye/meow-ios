@@ -198,21 +198,6 @@ int meow_tun_ingest(const uint8_t *data, uintptr_t len);
 void meow_tun_stop(void);
 
 /**
- * Record whether the underlying (physical) network path currently has
- * IPv6. Swift calls this from its NWPathMonitor update handler with
- * `nw_path_has_ipv6(path)`.
- *
- * When `available` is 0, the tun2socks DNS intercept answers in-TUN AAAA
- * queries with NOERROR-empty instead of consulting the resolver, so apps
- * fall back to A / fake-IPv4 immediately. The resolver's v4-only fake-IP
- * pool already suppresses most AAAA, but its `hosts:` table is consulted
- * before that suppression and can return real IPv6 addresses the engine
- * cannot dial from a v4-only network. Safe to call at any time, including
- * before `meow_tun_start`.
- */
-void meow_tun_set_ipv6_available(int available);
-
-/**
  * Liveness probe for the shared tokio runtime. Spawns a trivial task and
  * waits up to `timeout_ms` for it to execute. Returns 0 if the runtime
  * scheduled it in time, -1 otherwise.

@@ -111,9 +111,10 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
 
 /// Pinned DNS block injected into every engine config. Configures meow's
 /// resolver in fake-IP mode with the FFI's chosen CIDR; the tun2socks
-/// UDP/53 intercept then hands every in-TUN datagram straight to
+/// UDP/53 intercept answers AAAA itself (NOERROR-empty, unconditionally)
+/// and hands in-TUN A queries straight to
 /// `meow_dns::DnsServer::handle_query`, so this block is the single source
-/// of truth for synthesis, reverse mapping, AAAA / hosts / NXDOMAIN, and
+/// of truth for synthesis, reverse mapping, hosts / NXDOMAIN, and
 /// upstream nameserver selection.
 ///
 /// The nameserver set is restricted to CN-side resolvers because meow's
