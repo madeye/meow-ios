@@ -6,9 +6,9 @@ tunnel provider.
 
 ## Install
 
-[<img src="https://img.shields.io/badge/TestFlight-Public%20Beta-0070F5?style=for-the-badge&logo=apple&logoColor=white" alt="Join the TestFlight public beta" height="60">](https://testflight.apple.com/join/nnDAn7ZH)
+[<img src="https://img.shields.io/badge/TestFlight-Public%20Beta-0070F5?style=for-the-badge&logo=apple&logoColor=white" alt="Join the TestFlight public beta" height="60">](https://testflight.apple.com/join/HSptQN3h)
 
-Public beta is open on TestFlight: <https://testflight.apple.com/join/nnDAn7ZH>.
+Public beta is open on TestFlight: <https://testflight.apple.com/join/HSptQN3h>.
 Requires iOS 17 or later (iPhone and iPad). Bring your own Mihomo / Clash
 subscription — meow does not provide proxy servers.
 
