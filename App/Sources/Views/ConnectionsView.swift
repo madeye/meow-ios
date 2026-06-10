@@ -48,6 +48,7 @@ struct ConnectionsView: View {
         .task { await poll() }
     }
 
+    // swiftlint:disable:next function_body_length
     private func row(for conn: Connection) -> some View {
         let slug = conn.id.identifierSlug
         // meow-rs's `/connections` doesn't ship per-connection metadata
@@ -56,10 +57,14 @@ struct ConnectionsView: View {
         let host = conn.metadata?.host ?? conn.rule
         let port = conn.metadata?.destinationPort ?? ""
         let network = conn.metadata?.network.uppercased() ?? "TCP"
+        let address = port.isEmpty ? host : "\(host):\(port)"
+        let up = ByteCountFormatter.string(fromByteCount: conn.upload, countStyle: .binary)
+        let down = ByteCountFormatter.string(fromByteCount: conn.download, countStyle: .binary)
+        let chain = conn.chains.reversed().joined(separator: " › ")
         return GlassCard {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(port.isEmpty ? host : "\(host):\(port)")
+                    Text(address)
                         .font(.headline)
                         .lineLimit(1)
                         .accessibilityIdentifier("connections.row.\(slug).host")
@@ -71,12 +76,12 @@ struct ConnectionsView: View {
                         .background(.secondary.opacity(0.15), in: .capsule)
                 }
                 HStack(spacing: 10) {
-                    let up = ByteCountFormatter.string(fromByteCount: conn.upload, countStyle: .binary)
-                    let down = ByteCountFormatter.string(fromByteCount: conn.download, countStyle: .binary)
                     Label(up, systemImage: "arrow.up")
+                        .accessibilityLabel(Text("a11y.connections.row.upload \(up)"))
                     Label(down, systemImage: "arrow.down")
+                        .accessibilityLabel(Text("a11y.connections.row.download \(down)"))
                     Spacer()
-                    Text(conn.chains.reversed().joined(separator: " › "))
+                    Text(chain)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -87,6 +92,8 @@ struct ConnectionsView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("connections.row.\(slug).rule")
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("a11y.connections.row.label \(address) \(network) \(up) \(down) \(chain)"))
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
@@ -105,6 +112,7 @@ struct ConnectionsView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)
@@ -114,6 +122,8 @@ struct ConnectionsView: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: .rect(cornerRadius: 8))
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.connections.errorBanner \(message)"))
         .accessibilityIdentifier("connections.errorBanner")
     }
 

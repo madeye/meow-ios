@@ -194,3 +194,125 @@
 
 /* Fullscreen diagnostics overlay (ContentView) */
 "content.diagnostics.nav.title" = "Diagnostics";
+
+
+/* Accessibility — ContentView / diagnostics overlay */
+"a11y.content.diagnostics.close" = "Close Diagnostics Panel";
+"a11y.content.diagnostics.closeHint" = "Dismiss the diagnostics panel and return to the home screen";
+
+
+/* Accessibility — Common */
+"a11y.common.dismissAlert" = "Dismiss Error Alert";
+
+
+/* Accessibility — Home */
+"a11y.home.proxyGroups.none" = "No groups available";
+
+
+/* Accessibility — Rules list */
+"a11y.rules.row %@ %@ %@" = "Rule %@, %@, via %@";
+"a11y.rules.error %@" = "Error: %@";
+
+
+/* Accessibility — Logs */
+"a11y.logs.row.label %@ %@" = "%1$@ %2$@";
+"a11y.logs.errorBanner.label %@" = "Error: %@";
+
+
+/* Accessibility — YAML editor */
+"yamlEditor.a11y.errorBanner %@" = "Error: %@";
+"yamlEditor.a11y.saving" = "Saving";
+"yamlEditor.a11y.save.hint" = "Validates and saves the config";
+"a11y.yamlEditor.textView" = "YAML configuration editor";
+"a11y.yamlEditor.errorLines %@" = "Errors on lines %@";
+
+
+/* Accessibility — Providers */
+"a11y.providers.row.delay.label" = "Latency";
+"a11y.providers.row.delay.value %lld" = "%lld ms";
+"a11y.providers.errorBanner.label %@" = "Error: %@";
+
+
+/* Accessibility — Connections */
+"a11y.connections.row.upload %@" = "Uploaded %@";
+"a11y.connections.row.download %@" = "Downloaded %@";
+"a11y.connections.row.label %@ %@ %@ %@ %@" = "%@, %@, uploaded %@, downloaded %@, via %@";
+"a11y.connections.errorBanner %@" = "Warning: %@";
+
+
+/* Accessibility — Rule editor (single-rule sheet) */
+"a11y.ruleEditor.noResolve.hint" = "Skip DNS resolution before matching this rule";
+"a11y.ruleEditor.save.hint" = "Saves the rule and closes the editor";
+
+
+/* Accessibility — DiagnosticsViewController (auto-run checks) */
+"a11y.diagnostics.button.run.hint" = "Runs all diagnostic checks against the active VPN tunnel";
+"a11y.diagnostics.running" = "Running diagnostics";
+"a11y.diagnostics.check.tunExists" = "TUN interface";
+"a11y.diagnostics.check.dnsOk" = "DNS resolver";
+"a11y.diagnostics.check.tcpProxyOk" = "TCP proxy";
+"a11y.diagnostics.check.http204Ok" = "HTTP 204 check";
+"a11y.diagnostics.check.memOk" = "Memory usage";
+"a11y.diagnostics.result.pass %@" = "%@: passed";
+"a11y.diagnostics.result.fail %@ %@" = "%1$@: failed, %2$@";
+
+
+/* Accessibility — Subscriptions */
+"subscriptions.row.a11y.selected" = "Selected";
+"subscriptions.row.a11y.notSelected" = "Not selected";
+"subscriptions.row.a11y.selectHint" = "Activates this subscription";
+"subscriptions.row.a11y.editHint" = "Opens YAML editor";
+"subscriptions.row.a11y.refreshHint" = "Fetches the latest config from the remote URL";
+
+
+/* Accessibility — Traffic charts */
+"a11y.traffic.speedChart.value %@ %@" = "Upload %@ per second, download %@ per second";
+"a11y.traffic.historyChart.value %@ %@" = "Total uploaded %@, total downloaded %@";
+"a11y.traffic.chart.axis.time" = "Time";
+"a11y.traffic.chart.seconds %@" = "%@ seconds";
+"a11y.traffic.chart.axis.speed" = "Speed";
+"a11y.traffic.chart.axis.day" = "Day";
+"a11y.traffic.chart.axis.data" = "Data volume";
+
+
+/* Accessibility — Settings */
+"a11y.settings.allowLan.hint" = "Allows other devices on your local network to connect through the proxy.";
+"a11y.settings.onDemand.hint" = "Automatically starts the tunnel when network activity requires it.";
+"a11y.settings.exportLogs.hint" = "Saves the last hour of app logs to a file.";
+"a11y.settings.exportLogs.inProgress" = "Export in progress";
+"a11y.settings.memory.unavailable" = "Unavailable";
+
+
+/* Accessibility — Rules editor (structured list) */
+"a11y.rulesEditor.row.payloadEmpty" = "No match value";
+"a11y.rulesEditor.row.proxy %@" = "Routes to %@";
+"a11y.rulesEditor.error %@" = "Error: %@";
+"a11y.rulesEditor.row.hint" = "Opens the rule editor.";
+"a11y.rulesEditor.row.position %lld %lld" = "Rule %1$lld of %2$lld";
+"a11y.rulesEditor.row.moveUp" = "Move up";
+"a11y.rulesEditor.row.moveDown" = "Move down";
+"a11y.rulesEditor.row.delete" = "Delete rule";
+
+
+/* Accessibility — Proxy groups */
+"a11y.proxyGroups.group.expanded" = "Expanded";
+"a11y.proxyGroups.group.collapsed" = "Collapsed";
+"a11y.proxyGroups.group.hint" = "Shows or hides the proxies in this group.";
+"a11y.proxyGroups.proxy.hint" = "Selects this proxy for the group.";
+"a11y.proxyGroups.proxy.action.ping" = "Test latency";
+"a11y.proxyGroups.proxy.delay %@" = "%@ milliseconds";
+"a11y.proxyGroups.proxy.delay.testing" = "Testing latency";
+"a11y.proxyGroups.proxy.delay.none" = "Latency not tested";
+
+
+/* Accessibility — User Diagnostics */
+"a11y.userDiagnostics.directTcp.input" = "Host and port";
+"a11y.userDiagnostics.proxyHttp.input" = "HTTP URL";
+"a11y.userDiagnostics.dns.input" = "Domain name";
+"a11y.userDiagnostics.directTcp.test" = "Test direct TCP connection";
+"a11y.userDiagnostics.proxyHttp.test" = "Test proxy HTTP request";
+"a11y.userDiagnostics.dns.test" = "Test DNS resolution";
+"a11y.userDiagnostics.result.httpStatus %@ %@" = "HTTP status %@, %@ milliseconds";
+"a11y.userDiagnostics.result.success %@" = "Succeeded, %@ milliseconds";
+"a11y.userDiagnostics.result.failure %@" = "Failed: %@";
+"a11y.userDiagnostics.errorBanner %@" = "Error: %@";

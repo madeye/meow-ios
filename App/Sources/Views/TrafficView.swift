@@ -1,3 +1,4 @@
+import Accessibility
 import Charts
 import MeowModels
 import SwiftData
@@ -5,6 +6,7 @@ import SwiftUI
 
 struct TrafficView: View {
     @Environment(AppIPCBridge.self) private var ipcBridge
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Query(sort: \DailyTraffic.date, order: .reverse) private var daily: [DailyTraffic]
     @State private var samples: [RateSample] = []
     private let window: TimeInterval = 60
@@ -74,14 +76,21 @@ struct TrafficView: View {
                 Text("traffic.label.speed")
                     .font(.caption.smallCaps())
                     .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
                 Chart(samples) { sample in
                     LineMark(x: .value("t", sample.timestamp), y: .value("up", sample.uploadRate))
                         .foregroundStyle(by: .value("series", "Upload"))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: differentiateWithoutColor ? [4, 3] : []))
                     LineMark(x: .value("t", sample.timestamp), y: .value("down", sample.downloadRate))
                         .foregroundStyle(by: .value("series", "Download"))
+                        .lineStyle(StrokeStyle(lineWidth: 2))
                 }
                 .frame(height: 180)
                 .accessibilityIdentifier("traffic.speedChart")
+                .accessibilityLabel(Text("traffic.label.speed"))
+                .accessibilityValue(speedChartValue)
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityChartDescriptor(SpeedChartDescriptor(samples: samples))
             }
         }
     }
@@ -92,6 +101,7 @@ struct TrafficView: View {
                 Text("traffic.label.last7Days")
                     .font(.caption.smallCaps())
                     .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
                 Chart(last7Days) { day in
                     BarMark(x: .value("day", day.date), y: .value("tx", day.txBytes))
                         .foregroundStyle(by: .value("series", "Upload"))
@@ -111,8 +121,24 @@ struct TrafficView: View {
                 }
                 .frame(height: 180)
                 .accessibilityIdentifier("traffic.historyChart")
+                .accessibilityLabel(Text("traffic.label.last7Days"))
+                .accessibilityValue(historyChartValue)
+                .accessibilityChartDescriptor(HistoryChartDescriptor(days: last7Days))
             }
         }
+    }
+
+    private var speedChartValue: Text {
+        let up = ByteCountFormatter.string(fromByteCount: samples.last?.uploadRate ?? 0, countStyle: .binary)
+        let down = ByteCountFormatter.string(fromByteCount: samples.last?.downloadRate ?? 0, countStyle: .binary)
+        return Text("a11y.traffic.speedChart.value \(up) \(down)")
+    }
+
+    private var historyChartValue: Text {
+        let totals = last7Days.reduce((Int64(0), Int64(0))) { ($0.0 + $1.txBytes, $0.1 + $1.rxBytes) }
+        let up = ByteCountFormatter.string(fromByteCount: totals.0, countStyle: .binary)
+        let down = ByteCountFormatter.string(fromByteCount: totals.1, countStyle: .binary)
+        return Text("a11y.traffic.historyChart.value \(up) \(down)")
     }
 
     /// Forces GB units on the 7-day chart Y-axis. Daily totals run into the
@@ -134,6 +160,90 @@ struct TrafficView: View {
         let timestamp: Date
         let uploadRate: Int64
         let downloadRate: Int64
+    }
+
+    /// Audio Graph descriptor for the live speed chart, so VoiceOver users can
+    /// sonically explore the upload/download curves.
+    private struct SpeedChartDescriptor: AXChartDescriptorRepresentable {
+        let samples: [RateSample]
+
+        func makeChartDescriptor() -> AXChartDescriptor {
+            let start = samples.first?.timestamp ?? .now
+            let end = samples.last?.timestamp ?? .now
+            let xAxis = AXNumericDataAxisDescriptor(
+                title: String(localized: "a11y.traffic.chart.axis.time"),
+                range: 0 ... max(end.timeIntervalSince(start), 1),
+                gridlinePositions: [],
+            ) { value in
+                String(localized: "a11y.traffic.chart.seconds \(String(Int(value)))")
+            }
+            let maxRate = samples.map { max($0.uploadRate, $0.downloadRate) }.max() ?? 0
+            let yAxis = AXNumericDataAxisDescriptor(
+                title: String(localized: "a11y.traffic.chart.axis.speed"),
+                range: 0 ... Double(max(maxRate, 1)),
+                gridlinePositions: [],
+            ) { value in
+                ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .binary)
+            }
+            let upload = AXDataSeriesDescriptor(
+                name: String(localized: "home.traffic.upload"),
+                isContinuous: true,
+                dataPoints: samples.map {
+                    AXDataPoint(x: $0.timestamp.timeIntervalSince(start), y: Double($0.uploadRate))
+                },
+            )
+            let download = AXDataSeriesDescriptor(
+                name: String(localized: "home.traffic.download"),
+                isContinuous: true,
+                dataPoints: samples.map {
+                    AXDataPoint(x: $0.timestamp.timeIntervalSince(start), y: Double($0.downloadRate))
+                },
+            )
+            return AXChartDescriptor(
+                title: String(localized: "traffic.label.speed"),
+                summary: nil,
+                xAxis: xAxis,
+                yAxis: yAxis,
+                series: [upload, download],
+            )
+        }
+    }
+
+    /// Audio Graph descriptor for the 7-day history bar chart.
+    private struct HistoryChartDescriptor: AXChartDescriptorRepresentable {
+        let days: [DailyTraffic]
+
+        func makeChartDescriptor() -> AXChartDescriptor {
+            let xAxis = AXCategoricalDataAxisDescriptor(
+                title: String(localized: "a11y.traffic.chart.axis.day"),
+                categoryOrder: days.map(\.date),
+            )
+            let maxBytes = days.map { max($0.txBytes, $0.rxBytes) }.max() ?? 0
+            let yAxis = AXNumericDataAxisDescriptor(
+                title: String(localized: "a11y.traffic.chart.axis.data"),
+                range: 0 ... Double(max(maxBytes, 1)),
+                gridlinePositions: [],
+            ) { value in
+                ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .binary)
+            }
+            let upload = AXDataSeriesDescriptor(
+                name: String(localized: "home.traffic.upload"),
+                isContinuous: false,
+                dataPoints: days.map { AXDataPoint(x: $0.date, y: Double($0.txBytes)) },
+            )
+            let download = AXDataSeriesDescriptor(
+                name: String(localized: "home.traffic.download"),
+                isContinuous: false,
+                dataPoints: days.map { AXDataPoint(x: $0.date, y: Double($0.rxBytes)) },
+            )
+            return AXChartDescriptor(
+                title: String(localized: "traffic.label.last7Days"),
+                summary: nil,
+                xAxis: xAxis,
+                yAxis: yAxis,
+                series: [upload, download],
+            )
+        }
     }
 
     private var last7Days: [DailyTraffic] {
@@ -164,13 +274,20 @@ private struct TotalsTile: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.caption.smallCaps()).foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
                 Label(ByteCountFormatter.string(fromByteCount: tx, countStyle: .binary), systemImage: "arrow.up")
                     .accessibilityIdentifier("\(identifier).tx")
+                    .accessibilityLabel(Text("home.traffic.upload"))
+                    .accessibilityValue(Text(ByteCountFormatter.string(fromByteCount: tx, countStyle: .binary)))
                 Label(ByteCountFormatter.string(fromByteCount: rx, countStyle: .binary), systemImage: "arrow.down")
                     .accessibilityIdentifier("\(identifier).rx")
+                    .accessibilityLabel(Text("home.traffic.download"))
+                    .accessibilityValue(Text(ByteCountFormatter.string(fromByteCount: rx, countStyle: .binary)))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(title))
         .accessibilityIdentifier(identifier)
     }
 }

@@ -42,6 +42,8 @@ struct YamlEditorView: View {
                     )
                     .disabled(saving || text.isEmpty)
                     .accessibilityLabel("yamlEditor.a11y.save")
+                    .accessibilityValue(saving ? Text("yamlEditor.a11y.saving") : Text(""))
+                    .accessibilityHint("yamlEditor.a11y.save.hint")
                     .accessibilityIdentifier("yamlEditor.saveButton")
                 }
             }
@@ -49,6 +51,11 @@ struct YamlEditorView: View {
             .onChange(of: text) { _, _ in
                 error = nil
                 errorLines = []
+            }
+            .onChange(of: error) { _, newError in
+                if newError != nil {
+                    AccessibilityNotification.LayoutChanged().post()
+                }
             }
     }
 
@@ -77,6 +84,7 @@ struct YamlEditorView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)
@@ -86,6 +94,8 @@ struct YamlEditorView: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: .rect(cornerRadius: 8))
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("yamlEditor.a11y.errorBanner \(message)"))
         .accessibilityIdentifier("yamlEditor.errorBanner")
     }
 }

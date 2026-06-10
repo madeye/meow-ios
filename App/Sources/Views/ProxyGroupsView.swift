@@ -6,6 +6,7 @@ struct ProxyGroupsView: View {
     @Environment(VpnManager.self) private var vpnManager
     @Environment(MeowAPI.self) private var meowAPI
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
     @State private var groups: [ProxyGroupModel] = []
@@ -29,6 +30,7 @@ struct ProxyGroupsView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "network.slash")
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                             Text(placeholderKey)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -42,7 +44,7 @@ struct ProxyGroupsView: View {
                             isExpanded: expandedGroupID == group.id,
                             inflight: inflightDelay,
                             onToggleExpand: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                                     expandedGroupID = expandedGroupID == group.id ? nil : group.id
                                 }
                             },
@@ -159,6 +161,7 @@ private struct ProxyGroupCard: View {
                         Image(systemName: groupSymbol)
                             .foregroundStyle(.secondary)
                             .frame(width: 24)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(group.name)
                                 .font(.headline)
@@ -177,10 +180,15 @@ private struct ProxyGroupCard: View {
                         Image(systemName: "chevron.right")
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
                             .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(isExpanded
+                    ? Text("a11y.proxyGroups.group.expanded")
+                    : Text("a11y.proxyGroups.group.collapsed"))
+                .accessibilityHint(Text("a11y.proxyGroups.group.hint"))
 
                 if isExpanded {
                     Divider()
@@ -205,12 +213,30 @@ private struct ProxyGroupCard: View {
                 .lineLimit(1)
             Spacer()
             DelayBadge(delay: child.delay, isLoading: inflight.contains(child.name))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
                 .onTapGesture { onPing(child.name) }
         }
         .frame(minHeight: 44)
         .contentShape(Rectangle())
         .onTapGesture { onSelect(child.name) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(child.name)
+        .accessibilityValue(delayValue(for: child))
+        .accessibilityAddTraits(child.name == group.now ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint(Text("a11y.proxyGroups.proxy.hint"))
+        .accessibilityAction(named: Text("a11y.proxyGroups.proxy.action.ping")) { onPing(child.name) }
         .accessibilityIdentifier("home.proxy.\(group.id.identifierSlug).\(child.name.identifierSlug)")
+    }
+
+    private func delayValue(for child: ProxyGroupModel.Child) -> Text {
+        if inflight.contains(child.name) {
+            Text("a11y.proxyGroups.proxy.delay.testing")
+        } else if let delay = child.delay, delay > 0 {
+            Text("a11y.proxyGroups.proxy.delay \(String(delay))")
+        } else {
+            Text("a11y.proxyGroups.proxy.delay.none")
+        }
     }
 
     private var groupSymbol: String {
@@ -225,6 +251,8 @@ private struct ProxyGroupCard: View {
 }
 
 private struct DelayBadge: View {
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+
     let delay: Int?
     let isLoading: Bool
 
@@ -233,12 +261,19 @@ private struct DelayBadge: View {
             if isLoading {
                 ProgressView().controlSize(.mini)
             } else if let delay, delay > 0 {
-                Text("\(delay) ms")
-                    .font(.caption.monospacedDigit())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(tint(for: delay).opacity(0.18), in: Capsule())
-                    .foregroundStyle(tint(for: delay))
+                HStack(spacing: 2) {
+                    if differentiateWithoutColor {
+                        Image(systemName: symbol(for: delay))
+                            .imageScale(.small)
+                            .accessibilityHidden(true)
+                    }
+                    Text("\(delay) ms")
+                        .font(.caption.monospacedDigit())
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(tint(for: delay).opacity(0.18), in: Capsule())
+                .foregroundStyle(tint(for: delay))
             } else {
                 Image(systemName: "minus.circle")
                     .foregroundStyle(.tertiary)
@@ -252,6 +287,14 @@ private struct DelayBadge: View {
         case ..<200: .green
         case 200 ..< 500: .yellow
         default: .red
+        }
+    }
+
+    private func symbol(for delay: Int) -> String {
+        switch delay {
+        case ..<200: "checkmark.circle.fill"
+        case 200 ..< 500: "exclamationmark.circle"
+        default: "exclamationmark.circle.fill"
         }
     }
 }

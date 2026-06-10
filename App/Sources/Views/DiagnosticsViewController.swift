@@ -59,6 +59,7 @@ final class DiagnosticsViewController: UIViewController {
             self?.runDiagnostics()
         })
         runButton.accessibilityIdentifier = Self.runButtonAccessibilityID
+        runButton.accessibilityHint = String(localized: "a11y.diagnostics.button.run.hint")
         runButton.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(stack)
@@ -83,6 +84,10 @@ final class DiagnosticsViewController: UIViewController {
             currentResults[check] = .fail(reason: "running")
         }
         refreshLabels()
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: String(localized: "a11y.diagnostics.running"),
+        )
 
         Task { [weak self] in
             let report = await DiagnosticsClient.requestReport()
@@ -92,13 +97,19 @@ final class DiagnosticsViewController: UIViewController {
                 self.refreshLabels()
                 self.isRunning = false
                 self.runButton.isEnabled = true
+                UIAccessibility.post(
+                    notification: .layoutChanged,
+                    argument: self.rowLabels[DiagnosticsCheck.allCases.first!],
+                )
             }
         }
     }
 
     private func refreshLabels() {
         for check in DiagnosticsCheck.allCases {
-            rowLabels[check]?.text = formattedRow(for: check)
+            let label = rowLabels[check]
+            label?.text = formattedRow(for: check)
+            label?.accessibilityLabel = accessibilityLabel(for: check)
         }
     }
 
@@ -106,6 +117,25 @@ final class DiagnosticsViewController: UIViewController {
         switch currentResults[check] ?? .fail(reason: "missing") {
         case .pass: "\(check.rawValue): PASS"
         case let .fail(reason): "\(check.rawValue): FAIL(\(reason))"
+        }
+    }
+
+    /// Human-readable label for VoiceOver. The visible text intentionally stays
+    /// in the OCR-stable "KEY: PASS/FAIL(reason)" format (PRD §4.4); this
+    /// separate label gives VoiceOver users a friendlier description.
+    private func accessibilityLabel(for check: DiagnosticsCheck) -> String {
+        let checkName = switch check {
+        case .tunExists: String(localized: "a11y.diagnostics.check.tunExists")
+        case .dnsOk: String(localized: "a11y.diagnostics.check.dnsOk")
+        case .tcpProxyOk: String(localized: "a11y.diagnostics.check.tcpProxyOk")
+        case .http204Ok: String(localized: "a11y.diagnostics.check.http204Ok")
+        case .memOk: String(localized: "a11y.diagnostics.check.memOk")
+        }
+        switch currentResults[check] ?? .fail(reason: "missing") {
+        case .pass:
+            return String(localized: "a11y.diagnostics.result.pass \(checkName)")
+        case let .fail(reason):
+            return String(localized: "a11y.diagnostics.result.fail \(checkName) \(reason)")
         }
     }
 }

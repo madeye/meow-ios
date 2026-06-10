@@ -22,8 +22,10 @@ struct SettingsView: View {
             Section("settings.section.general") {
                 Toggle("settings.toggle.allowLan", isOn: binding(\.allowLan))
                     .accessibilityIdentifier("settings.toggle.allowLan")
+                    .accessibilityHint(Text("a11y.settings.allowLan.hint"))
                 Toggle("settings.toggle.onDemand", isOn: binding(\.onDemand))
                     .accessibilityIdentifier("settings.toggle.onDemand")
+                    .accessibilityHint(Text("a11y.settings.onDemand.hint"))
                 Picker("settings.picker.logLevel", selection: binding(\.logLevel)) {
                     Text("settings.logLevel.debug").tag("debug")
                     Text("settings.logLevel.info").tag("info")
@@ -48,11 +50,14 @@ struct SettingsView: View {
                         Spacer()
                         if exportingLogs {
                             ProgressView()
+                                .accessibilityHidden(true)
                         }
                     }
                 }
                 .disabled(exportingLogs)
                 .accessibilityIdentifier("settings.button.exportLogs")
+                .accessibilityValue(exportingLogs ? String(localized: "a11y.settings.exportLogs.inProgress") : "")
+                .accessibilityHint(Text("a11y.settings.exportLogs.hint"))
             }
             Section("settings.section.about") {
                 LabeledContent("settings.about.version", value: appVersion)
@@ -60,9 +65,14 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.about.version")
                 #if DEBUG
                     .onTapGesture(count: 3) { showDebugPanel = true }
+                    // The triple-tap easter egg is unreachable for VoiceOver
+                    // and Switch Control users; expose it as a named action.
+                    .accessibilityAction(named: Text(verbatim: "Open debug panel")) { showDebugPanel = true }
                 #endif
-                LabeledContent("settings.about.memory", value: memoryMB.map { "\($0) MB" } ?? "—")
+                LabeledContent("settings.about.memory", value: memoryText ?? "—")
                     .accessibilityIdentifier("settings.about.memory")
+                    .accessibilityValue(memoryText ?? String(localized: "a11y.settings.memory.unavailable"))
+                    .accessibilityAddTraits(.updatesFrequently)
             }
             #if DEBUG
                 Section("Debug Tunnel") {
@@ -160,6 +170,10 @@ struct SettingsView: View {
             }
         }
         memoryMB = bytes.map { Int64($0 / (1024 * 1024)) }
+    }
+
+    private var memoryText: String? {
+        memoryMB.map { "\($0) MB" }
     }
 
     private var appVersion: String {

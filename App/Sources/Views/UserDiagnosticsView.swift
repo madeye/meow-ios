@@ -25,6 +25,7 @@ import SwiftUI
 /// worse signal than one clear "needs VPN" message.
 struct UserDiagnosticsView: View {
     @Environment(VpnManager.self) private var vpnManager
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var error: String?
 
     var body: some View {
@@ -78,6 +79,7 @@ struct UserDiagnosticsView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)
@@ -85,9 +87,19 @@ struct UserDiagnosticsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: .rect(cornerRadius: 8))
+        .background(
+            reduceTransparency
+                ? AnyShapeStyle(Color(.secondarySystemBackground))
+                : AnyShapeStyle(.regularMaterial),
+            in: .rect(cornerRadius: 8),
+        )
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.userDiagnostics.errorBanner \(message)"))
         .accessibilityIdentifier("userDiagnostics.errorBanner")
+        .onAppear {
+            AccessibilityNotification.Announcement(message).post()
+        }
     }
 }
 
@@ -105,14 +117,20 @@ private struct DirectTcpCard: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
-                .accessibilityLabel("Host and port")
+                .accessibilityLabel("a11y.userDiagnostics.directTcp.input")
                 .accessibilityIdentifier("userDiagnostics.directTcp.input")
             HStack {
-                Button(
-                    LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"),
-                    action: runTest,
-                )
+                Button(action: runTest) {
+                    Text(LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
                 .disabled(running || input.isEmpty)
+                .accessibilityLabel(
+                    running
+                        ? Text("userDiagnostics.button.testing")
+                        : Text("a11y.userDiagnostics.directTcp.test"),
+                )
                 .accessibilityIdentifier("userDiagnostics.directTcp.button")
                 Spacer()
                 if let result {
@@ -167,14 +185,20 @@ private struct ProxyHttpCard: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
-                .accessibilityLabel("HTTP URL")
+                .accessibilityLabel("a11y.userDiagnostics.proxyHttp.input")
                 .accessibilityIdentifier("userDiagnostics.proxyHttp.input")
             HStack {
-                Button(
-                    LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"),
-                    action: runTest,
-                )
+                Button(action: runTest) {
+                    Text(LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
                 .disabled(running || input.isEmpty)
+                .accessibilityLabel(
+                    running
+                        ? Text("userDiagnostics.button.testing")
+                        : Text("a11y.userDiagnostics.proxyHttp.test"),
+                )
                 .accessibilityIdentifier("userDiagnostics.proxyHttp.button")
                 Spacer()
                 if let result {
@@ -211,14 +235,20 @@ private struct DnsCard: View {
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
-                .accessibilityLabel("Domain name")
+                .accessibilityLabel("a11y.userDiagnostics.dns.input")
                 .accessibilityIdentifier("userDiagnostics.dns.input")
             HStack {
-                Button(
-                    LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"),
-                    action: runTest,
-                )
+                Button(action: runTest) {
+                    Text(LocalizedStringKey(running ? "userDiagnostics.button.testing" : "userDiagnostics.button.test"))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
                 .disabled(running || input.isEmpty)
+                .accessibilityLabel(
+                    running
+                        ? Text("userDiagnostics.button.testing")
+                        : Text("a11y.userDiagnostics.dns.test"),
+                )
                 .accessibilityIdentifier("userDiagnostics.dns.button")
                 Spacer()
                 if let result {
@@ -266,16 +296,21 @@ private func resultLabel(_ result: UserDiagnosticsCardResult) -> some View {
             Text("\(httpStatus) · \(latencyMs) ms")
                 .font(.caption.monospaced())
                 .foregroundStyle(httpStatus >= 200 && httpStatus < 400 ? .green : .orange)
+                .accessibilityLabel(
+                    Text("a11y.userDiagnostics.result.httpStatus \(String(httpStatus)) \(String(latencyMs))"),
+                )
         } else {
             Text("\(latencyMs) ms")
                 .font(.caption.monospaced())
                 .foregroundStyle(.green)
+                .accessibilityLabel(Text("a11y.userDiagnostics.result.success \(String(latencyMs))"))
         }
     case let .failure(reason):
         Text(reason)
             .font(.caption.monospaced())
             .foregroundStyle(.red)
             .lineLimit(2)
+            .accessibilityLabel(Text("a11y.userDiagnostics.result.failure \(reason)"))
     }
 }
 

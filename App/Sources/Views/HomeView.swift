@@ -61,12 +61,15 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
+            .accessibilityElement(children: .combine)
             Spacer(minLength: 8)
             Button {
                 vpnManager.clearError()
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("home.error.dismiss")
@@ -75,6 +78,11 @@ struct HomeView: View {
         .padding(12)
         .background(.regularMaterial, in: .rect(cornerRadius: 12))
         .accessibilityIdentifier("home.error.banner")
+        .onAppear {
+            AccessibilityNotification.Announcement(
+                String(localized: "home.error.tunnelFailed.title"),
+            ).post()
+        }
     }
 
     // MARK: - Primary card
@@ -121,9 +129,11 @@ struct HomeView: View {
             HStack(spacing: 8) {
                 if isInFlight {
                     ProgressView().controlSize(.small).tint(.white)
+                        .accessibilityHidden(true)
                 }
                 Image(systemName: isConnected ? "power.circle.fill" : "power.circle")
                     .imageScale(.large)
+                    .accessibilityHidden(true)
                 Text(toggleTitle)
                     .font(.headline)
             }
@@ -179,6 +189,7 @@ struct HomeView: View {
                 Image(systemName: "arrow.triangle.swap")
                     .foregroundStyle(AppTheme.accent)
                     .frame(width: 24)
+                    .accessibilityHidden(true)
                 Text("home.routeMode.title")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
@@ -208,6 +219,7 @@ struct HomeView: View {
                     Image(systemName: "rectangle.stack")
                         .foregroundStyle(AppTheme.accent)
                         .frame(width: 24)
+                        .accessibilityHidden(true)
                     Text("home.proxyGroups.header")
                         .font(.subheadline)
                         .foregroundStyle(.primary)
@@ -215,9 +227,11 @@ struct HomeView: View {
                     Text(groupCountText)
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel(groupCountAccessibilityLabel)
                         .accessibilityIdentifier("home.proxyGroups.count")
                     Image(systemName: "chevron.right")
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -228,6 +242,11 @@ struct HomeView: View {
 
     private var groupCountText: String {
         groupCount == 0 ? "—" : "\(groupCount)"
+    }
+
+    /// "—" is unspeakable for VoiceOver and Voice Control; substitute a real phrase.
+    private var groupCountAccessibilityLabel: Text {
+        groupCount == 0 ? Text("a11y.home.proxyGroups.none") : Text("\(groupCount)")
     }
 
     // MARK: - Auxiliary nav
@@ -439,6 +458,10 @@ private struct PacketStat: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(label))
+        .accessibilityValue(Text("\(count)"))
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 
@@ -524,6 +547,8 @@ private struct TrafficTile: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 
@@ -540,6 +565,7 @@ private struct NavRow<Destination: View>: View {
                     .foregroundStyle(AppTheme.accent)
                     .frame(width: 30, height: 30)
                     .background(AppTheme.accent.opacity(0.10), in: Circle())
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
@@ -547,6 +573,7 @@ private struct NavRow<Destination: View>: View {
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
             .frame(minHeight: 48)
             .contentShape(Rectangle())

@@ -87,6 +87,8 @@ struct RulesView: View {
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.rules.row \(rule.type) \(rule.payload) \(rule.proxy)"))
         .accessibilityIdentifier("rules.row.\(index)")
     }
 
@@ -94,6 +96,7 @@ struct RulesView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)
@@ -103,6 +106,8 @@ struct RulesView: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: .rect(cornerRadius: 8))
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.rules.error \(message)"))
         .accessibilityIdentifier("rules.errorBanner")
     }
 

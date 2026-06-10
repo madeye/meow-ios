@@ -17,6 +17,7 @@ struct SubscriptionsView: View {
                     HStack {
                         Image(systemName: profile.isSelected ? "largecircle.fill.circle" : "circle")
                             .foregroundStyle(profile.isSelected ? .green : .secondary)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(profile.name).font(.headline)
                             Text(
@@ -26,6 +27,14 @@ struct SubscriptionsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue(Text(
+                            profile.isSelected
+                                ? "subscriptions.row.a11y.selected"
+                                : "subscriptions.row.a11y.notSelected",
+                        ))
+                        .accessibilityHint(Text("subscriptions.row.a11y.selectHint"))
+                        .accessibilityAddTraits(.isButton)
                         Spacer()
                         Button {
                             editing = profile
@@ -36,6 +45,7 @@ struct SubscriptionsView: View {
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel(Text("subscriptions.row.a11y.edit \(profile.name)"))
+                        .accessibilityHint(Text("subscriptions.row.a11y.editHint"))
                         .accessibilityIdentifier("subscriptions.row.editYaml")
                         if !profile.url.isEmpty {
                             Button {
@@ -47,6 +57,7 @@ struct SubscriptionsView: View {
                             }
                             .buttonStyle(.borderless)
                             .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
+                            .accessibilityHint(Text("subscriptions.row.a11y.refreshHint"))
                         }
                     }
                 }

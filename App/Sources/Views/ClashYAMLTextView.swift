@@ -61,7 +61,10 @@ final class GutteredTextView: UIView {
     var errorLines: Set<Int> = []
 
     private static let gutterWidth: CGFloat = 44
-    private static let monoFont = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+    private static var monoFont: UIFont {
+        UIFontMetrics(forTextStyle: .body)
+            .scaledFont(for: UIFont.monospacedSystemFont(ofSize: 14, weight: .regular))
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -83,11 +86,22 @@ final class GutteredTextView: UIView {
         textView.backgroundColor = .clear
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
         textView.alwaysBounceVertical = true
+        textView.accessibilityLabel = String(localized: "a11y.yamlEditor.textView")
 
         gutterView.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.5)
 
         addSubview(gutterView)
         addSubview(textView)
+
+        registerForTraitChanges(
+            [UITraitPreferredContentSizeCategory.self],
+            action: #selector(contentSizeCategoryDidChange),
+        )
+    }
+
+    @objc private func contentSizeCategoryDidChange() {
+        textView.font = Self.monoFont
+        applyHighlighting()
     }
 
     override func layoutSubviews() {
@@ -117,6 +131,7 @@ final class GutteredTextView: UIView {
         storage.removeAttribute(.backgroundColor, range: fullRange)
         guard !errorLines.isEmpty else {
             storage.endEditing()
+            updateErrorAccessibility()
             return
         }
         let errorBg = UIColor.systemRed.withAlphaComponent(0.12)
@@ -140,6 +155,21 @@ final class GutteredTextView: UIView {
             lineNumber += 1
         }
         storage.endEditing()
+        updateErrorAccessibility()
+    }
+
+    /// Exposes the gutter's error markers to VoiceOver: the dots and red line
+    /// highlights are otherwise invisible to assistive technologies.
+    private func updateErrorAccessibility() {
+        if errorLines.isEmpty {
+            gutterView.isAccessibilityElement = false
+            gutterView.accessibilityLabel = nil
+        } else {
+            let lines = errorLines.sorted().map(String.init).joined(separator: ", ")
+            gutterView.isAccessibilityElement = true
+            gutterView.accessibilityTraits = .staticText
+            gutterView.accessibilityLabel = String(localized: "a11y.yamlEditor.errorLines \(lines)")
+        }
     }
 
     private func computeLineInfo() -> [GutterView.LineInfo] {
@@ -195,10 +225,13 @@ final class GutterView: UIView {
 
     var lineInfo: [LineInfo] = []
 
-    private let numberAttributes: [NSAttributedString.Key: Any] = [
-        .font: UIFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-        .foregroundColor: UIColor.tertiaryLabel,
-    ]
+    private var numberAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFontMetrics(forTextStyle: .caption2)
+                .scaledFont(for: UIFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)),
+            .foregroundColor: UIColor.tertiaryLabel,
+        ]
+    }
 
     override func draw(_ rect: CGRect) {
         super.draw(rect)
@@ -216,11 +249,24 @@ final class GutterView: UIView {
             numStr.draw(at: CGPoint(x: x, y: y), withAttributes: numberAttributes)
 
             if info.hasError {
-                let dotSize: CGFloat = 6
-                let dotX: CGFloat = 4
-                let dotY = info.y + (info.height - dotSize) / 2
-                UIColor.systemRed.setFill()
-                UIBezierPath(ovalIn: CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize)).fill()
+                if UIAccessibility.shouldDifferentiateWithoutColor {
+                    // A red dot alone carries meaning by color; draw an
+                    // exclamation mark instead so the marker reads by shape.
+                    let mark = "!" as NSString
+                    let markAttributes: [NSAttributedString.Key: Any] = [
+                        .font: UIFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold),
+                        .foregroundColor: UIColor.systemRed,
+                    ]
+                    let markSize = mark.size(withAttributes: markAttributes)
+                    let markY = info.y + (info.height - markSize.height) / 2
+                    mark.draw(at: CGPoint(x: 4, y: markY), withAttributes: markAttributes)
+                } else {
+                    let dotSize: CGFloat = 6
+                    let dotX: CGFloat = 4
+                    let dotY = info.y + (info.height - dotSize) / 2
+                    UIColor.systemRed.setFill()
+                    UIBezierPath(ovalIn: CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize)).fill()
+                }
             }
         }
     }

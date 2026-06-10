@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LogsView: View {
     @Environment(MeowAPI.self) private var api
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var allEntries: [LogEntry] = []
     @State private var level = "info"
     @State private var autoScroll = true
@@ -51,8 +52,12 @@ struct LogsView: View {
                 }
                 .onChange(of: entries.count) { _, count in
                     guard autoScroll, count > 0 else { return }
-                    withAnimation(.linear(duration: 0.1)) {
+                    if reduceMotion {
                         proxy.scrollTo(count - 1, anchor: .bottom)
+                    } else {
+                        withAnimation(.linear(duration: 0.1)) {
+                            proxy.scrollTo(count - 1, anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -81,6 +86,8 @@ struct LogsView: View {
                 .textSelection(.enabled)
                 .accessibilityIdentifier("logs.row.\(index).message")
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.logs.row.label \(entry.type.uppercased()) \(entry.payload)"))
         .accessibilityIdentifier("logs.row.\(index)")
     }
 
@@ -88,6 +95,7 @@ struct LogsView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)
@@ -97,6 +105,8 @@ struct LogsView: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: .rect(cornerRadius: 8))
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.logs.errorBanner.label \(message)"))
         .accessibilityIdentifier("logs.errorBanner")
     }
 

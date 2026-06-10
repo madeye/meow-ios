@@ -43,14 +43,25 @@ struct ContentView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("common.close") { showDiagnostics = false }
+                                .accessibilityLabel(String(localized: "a11y.content.diagnostics.close"))
+                                .accessibilityHint(String(localized: "a11y.content.diagnostics.closeHint"))
                         }
                     }
+            }
+            .onAppear {
+                AccessibilityNotification.ScreenChanged().post()
             }
         }
         .alert("subscriptions.import.errorTitle", isPresented: .constant(importError != nil)) {
             Button("common.ok") { importError = nil }
+                .accessibilityLabel(String(localized: "a11y.common.dismissAlert"))
         } message: {
             Text(importError ?? "")
+        }
+        .onChange(of: importError) { _, newError in
+            if newError != nil {
+                AccessibilityNotification.Announcement(String(localized: "subscriptions.import.errorTitle")).post()
+            }
         }
     }
 

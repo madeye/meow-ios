@@ -30,6 +30,8 @@ struct RuleEditorSheet: View {
     /// silently dropping a `src` flag we don't know about yet).
     @State private var otherFlags: [String]
 
+    @AccessibilityFocusState private var focusedOnType: Bool
+
     init(
         availableProxies: [String],
         initial: EditableRule,
@@ -56,6 +58,7 @@ struct RuleEditorSheet: View {
                         }
                     }
                     .accessibilityIdentifier("ruleEditor.typePicker")
+                    .accessibilityFocused($focusedOnType)
                 }
 
                 if type.takesPayload {
@@ -99,6 +102,7 @@ struct RuleEditorSheet: View {
                     Section {
                         Toggle("ruleEditor.field.noResolve", isOn: $noResolve)
                             .accessibilityIdentifier("ruleEditor.noResolveToggle")
+                            .accessibilityHint(Text("a11y.ruleEditor.noResolve.hint"))
                     } footer: {
                         Text("ruleEditor.field.noResolve.footer")
                     }
@@ -115,7 +119,11 @@ struct RuleEditorSheet: View {
                     Button("ruleEditor.button.save", action: save)
                         .disabled(!canSave)
                         .accessibilityIdentifier("ruleEditor.saveButton")
+                        .accessibilityHint(Text("a11y.ruleEditor.save.hint"))
                 }
+            }
+            .onAppear {
+                focusedOnType = true
             }
         }
     }

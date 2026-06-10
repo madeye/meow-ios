@@ -200,3 +200,125 @@
 
 /* Fullscreen diagnostics overlay (ContentView) */
 "content.diagnostics.nav.title" = "诊断";
+
+
+/* Accessibility — ContentView / diagnostics overlay */
+"a11y.content.diagnostics.close" = "关闭诊断面板";
+"a11y.content.diagnostics.closeHint" = "关闭诊断面板并返回首页";
+
+
+/* Accessibility — Common */
+"a11y.common.dismissAlert" = "关闭错误提示";
+
+
+/* Accessibility — Home */
+"a11y.home.proxyGroups.none" = "暂无代理组";
+
+
+/* Accessibility — Rules list */
+"a11y.rules.row %@ %@ %@" = "规则 %@，%@，通过 %@";
+"a11y.rules.error %@" = "错误：%@";
+
+
+/* Accessibility — Logs */
+"a11y.logs.row.label %@ %@" = "%1$@ %2$@";
+"a11y.logs.errorBanner.label %@" = "错误：%@";
+
+
+/* Accessibility — YAML editor */
+"yamlEditor.a11y.errorBanner %@" = "错误：%@";
+"yamlEditor.a11y.saving" = "保存中";
+"yamlEditor.a11y.save.hint" = "验证并保存配置";
+"a11y.yamlEditor.textView" = "YAML 配置编辑器";
+"a11y.yamlEditor.errorLines %@" = "第 %@ 行存在错误";
+
+
+/* Accessibility — Providers */
+"a11y.providers.row.delay.label" = "延迟";
+"a11y.providers.row.delay.value %lld" = "%lld 毫秒";
+"a11y.providers.errorBanner.label %@" = "错误：%@";
+
+
+/* Accessibility — Connections */
+"a11y.connections.row.upload %@" = "已上传 %@";
+"a11y.connections.row.download %@" = "已下载 %@";
+"a11y.connections.row.label %@ %@ %@ %@ %@" = "%@，%@，已上传 %@，已下载 %@，经由 %@";
+"a11y.connections.errorBanner %@" = "警告：%@";
+
+
+/* Accessibility — Rule editor (single-rule sheet) */
+"a11y.ruleEditor.noResolve.hint" = "匹配此规则前跳过 DNS 解析";
+"a11y.ruleEditor.save.hint" = "保存规则并关闭编辑器";
+
+
+/* Accessibility — DiagnosticsViewController (auto-run checks) */
+"a11y.diagnostics.button.run.hint" = "对当前 VPN 隧道运行所有诊断检查";
+"a11y.diagnostics.running" = "正在运行诊断";
+"a11y.diagnostics.check.tunExists" = "TUN 接口";
+"a11y.diagnostics.check.dnsOk" = "DNS 解析";
+"a11y.diagnostics.check.tcpProxyOk" = "TCP 代理";
+"a11y.diagnostics.check.http204Ok" = "HTTP 204 检查";
+"a11y.diagnostics.check.memOk" = "内存用量";
+"a11y.diagnostics.result.pass %@" = "%@：通过";
+"a11y.diagnostics.result.fail %@ %@" = "%1$@：失败，%2$@";
+
+
+/* Accessibility — Subscriptions */
+"subscriptions.row.a11y.selected" = "已选中";
+"subscriptions.row.a11y.notSelected" = "未选中";
+"subscriptions.row.a11y.selectHint" = "激活此订阅";
+"subscriptions.row.a11y.editHint" = "打开 YAML 编辑器";
+"subscriptions.row.a11y.refreshHint" = "从远程地址获取最新配置";
+
+
+/* Accessibility — Traffic charts */
+"a11y.traffic.speedChart.value %@ %@" = "上传 %@/秒，下载 %@/秒";
+"a11y.traffic.historyChart.value %@ %@" = "共上传 %@，共下载 %@";
+"a11y.traffic.chart.axis.time" = "时间";
+"a11y.traffic.chart.seconds %@" = "%@ 秒";
+"a11y.traffic.chart.axis.speed" = "速度";
+"a11y.traffic.chart.axis.day" = "日期";
+"a11y.traffic.chart.axis.data" = "流量";
+
+
+/* Accessibility — Settings */
+"a11y.settings.allowLan.hint" = "允许局域网内的其他设备通过代理连接。";
+"a11y.settings.onDemand.hint" = "在需要网络连接时自动启动隧道。";
+"a11y.settings.exportLogs.hint" = "将最近一小时的应用日志保存为文件。";
+"a11y.settings.exportLogs.inProgress" = "正在导出";
+"a11y.settings.memory.unavailable" = "不可用";
+
+
+/* Accessibility — Rules editor (structured list) */
+"a11y.rulesEditor.row.payloadEmpty" = "无匹配项";
+"a11y.rulesEditor.row.proxy %@" = "路由至 %@";
+"a11y.rulesEditor.error %@" = "错误：%@";
+"a11y.rulesEditor.row.hint" = "打开规则编辑器。";
+"a11y.rulesEditor.row.position %lld %lld" = "第 %1$lld 条，共 %2$lld 条规则";
+"a11y.rulesEditor.row.moveUp" = "上移";
+"a11y.rulesEditor.row.moveDown" = "下移";
+"a11y.rulesEditor.row.delete" = "删除规则";
+
+
+/* Accessibility — Proxy groups */
+"a11y.proxyGroups.group.expanded" = "已展开";
+"a11y.proxyGroups.group.collapsed" = "已折叠";
+"a11y.proxyGroups.group.hint" = "显示或隐藏该组中的代理。";
+"a11y.proxyGroups.proxy.hint" = "为该组选择此代理。";
+"a11y.proxyGroups.proxy.action.ping" = "测试延迟";
+"a11y.proxyGroups.proxy.delay %@" = "%@ 毫秒";
+"a11y.proxyGroups.proxy.delay.testing" = "正在测试延迟";
+"a11y.proxyGroups.proxy.delay.none" = "尚未测试延迟";
+
+
+/* Accessibility — User Diagnostics */
+"a11y.userDiagnostics.directTcp.input" = "主机和端口";
+"a11y.userDiagnostics.proxyHttp.input" = "HTTP URL";
+"a11y.userDiagnostics.dns.input" = "域名";
+"a11y.userDiagnostics.directTcp.test" = "测试直连 TCP";
+"a11y.userDiagnostics.proxyHttp.test" = "测试代理 HTTP";
+"a11y.userDiagnostics.dns.test" = "测试 DNS 解析";
+"a11y.userDiagnostics.result.httpStatus %@ %@" = "HTTP 状态码 %@，耗时 %@ 毫秒";
+"a11y.userDiagnostics.result.success %@" = "成功，耗时 %@ 毫秒";
+"a11y.userDiagnostics.result.failure %@" = "失败：%@";
+"a11y.userDiagnostics.errorBanner %@" = "错误：%@";

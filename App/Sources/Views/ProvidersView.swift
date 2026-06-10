@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ProvidersView: View {
     @Environment(MeowAPI.self) private var api
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @State private var providers: [Provider] = []
     @State private var errorMessage: String?
 
@@ -46,6 +47,7 @@ struct ProvidersView: View {
         let slug = provider.name.identifierSlug
         return HStack {
             Text(provider.name)
+                .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("providers.section.\(slug).header")
             Spacer()
             Button {
@@ -70,20 +72,36 @@ struct ProvidersView: View {
         }
     }
 
+    private func delayBadge(delay: Int, providerSlug: String, proxySlug: String) -> some View {
+        HStack(spacing: 2) {
+            if differentiateWithoutColor {
+                Image(systemName: delay > 500 ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+            }
+            Text("\(delay) ms")
+                .font(.caption.monospaced())
+                .foregroundStyle(delay > 500 ? .red : .green)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.providers.row.delay.label"))
+        .accessibilityValue(Text("a11y.providers.row.delay.value \(delay)"))
+        .accessibilityIdentifier("providers.row.\(providerSlug).\(proxySlug).delay")
+    }
+
     private func row(for proxy: Proxy, providerSlug: String) -> some View {
         let proxySlug = proxy.name.identifierSlug
         return GlassCard {
             HStack {
-                Text(proxy.name)
-                    .lineLimit(1)
-                    .accessibilityIdentifier("providers.row.\(providerSlug).\(proxySlug).name")
-                Spacer()
-                if let delay = proxy.history?.last?.delay {
-                    Text("\(delay) ms")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(delay > 500 ? .red : .green)
-                        .accessibilityIdentifier("providers.row.\(providerSlug).\(proxySlug).delay")
+                VStack(alignment: .leading) {
+                    Text(proxy.name)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("providers.row.\(providerSlug).\(proxySlug).name")
+                    if let delay = proxy.history?.last?.delay {
+                        delayBadge(delay: delay, providerSlug: providerSlug, proxySlug: proxySlug)
+                    }
                 }
+                Spacer()
                 Button {
                     Task {
                         do {
@@ -117,6 +135,7 @@ struct ProvidersView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)
@@ -126,6 +145,8 @@ struct ProvidersView: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: .rect(cornerRadius: 8))
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.providers.errorBanner.label \(message)"))
         .accessibilityIdentifier("providers.errorBanner")
     }
 

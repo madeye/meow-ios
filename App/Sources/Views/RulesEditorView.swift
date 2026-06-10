@@ -1,3 +1,4 @@
+import Accessibility
 import MeowModels
 import SwiftUI
 
@@ -118,6 +119,15 @@ struct RulesEditorView: View {
                 }
             }
             .task { await loadInitial() }
+            .onChange(of: error) { _, newValue in
+                // The banner is inserted dynamically above the list;
+                // announce it so VoiceOver users hear validation/save
+                // failures without having to hunt for the new element.
+                guard let newValue else { return }
+                AccessibilityNotification.Announcement(
+                    String(localized: "a11y.rulesEditor.error \(newValue)"),
+                ).post()
+            }
         }
     }
 
@@ -139,17 +149,35 @@ struct RulesEditorView: View {
                 Text(rule.payload.isEmpty ? "—" : rule.payload)
                     .lineLimit(1)
                     .foregroundStyle(.primary)
+                    .accessibilityLabel(
+                        rule.payload.isEmpty ? Text("a11y.rulesEditor.row.payloadEmpty") : Text(rule.payload),
+                    )
                     .accessibilityIdentifier("rulesEditor.row.\(index).payload")
                 Spacer()
                 Text(rule.proxy)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .accessibilityLabel(Text("a11y.rulesEditor.row.proxy \(rule.proxy)"))
                     .accessibilityIdentifier("rulesEditor.row.\(index).proxy")
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("rulesEditor.row.\(index)")
+        .accessibilityHint(Text("a11y.rulesEditor.row.hint"))
+        // Rule order decides match precedence, so surface the position —
+        // it's the context VoiceOver users need when invoking the
+        // move-up / move-down actions below.
+        .accessibilityValue(Text("a11y.rulesEditor.row.position \(index + 1) \(rules.count)"))
+        .accessibilityAction(named: Text("a11y.rulesEditor.row.moveUp")) {
+            move(id: rule.id, by: -1)
+        }
+        .accessibilityAction(named: Text("a11y.rulesEditor.row.moveDown")) {
+            move(id: rule.id, by: 1)
+        }
+        .accessibilityAction(named: Text("a11y.rulesEditor.row.delete")) {
+            deleteRule(id: rule.id)
+        }
     }
 
     // MARK: - Mutation
@@ -161,6 +189,23 @@ struct RulesEditorView: View {
 
     private func delete(at offsets: IndexSet) {
         rules.remove(atOffsets: offsets)
+        hasUnsavedChanges = true
+    }
+
+    /// VoiceOver / Switch Control alternative to the edit-mode drag
+    /// gesture: shift one rule a single position up (-1) or down (+1).
+    private func move(id: UUID, by offset: Int) {
+        guard let i = rules.firstIndex(where: { $0.id == id }) else { return }
+        let target = i + offset
+        guard rules.indices.contains(target) else { return }
+        rules.move(fromOffsets: IndexSet(integer: i), toOffset: offset > 0 ? target + 1 : target)
+        hasUnsavedChanges = true
+    }
+
+    /// VoiceOver / Switch Control alternative to swipe-to-delete.
+    private func deleteRule(id: UUID) {
+        guard let i = rules.firstIndex(where: { $0.id == id }) else { return }
+        rules.remove(at: i)
         hasUnsavedChanges = true
     }
 
@@ -241,6 +286,8 @@ struct RulesEditorView: View {
         .padding(.vertical, 8)
         .background(.regularMaterial, in: .rect(cornerRadius: 8))
         .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("a11y.rulesEditor.error \(message)"))
         .accessibilityIdentifier("rulesEditor.errorBanner")
     }
 }
