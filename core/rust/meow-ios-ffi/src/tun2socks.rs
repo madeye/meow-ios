@@ -50,6 +50,7 @@ use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{mpsc, Notify, OwnedSemaphorePermit, Semaphore};
+use tokio_util::task::TaskTracker;
 use tracing::{info, trace, warn};
 
 type UdpMsg = (Vec<u8>, SocketAddr, SocketAddr);
@@ -460,6 +461,15 @@ fn warn_capped(slot: &AtomicU64, msg: &str) {
     }
 }
 
+async fn abort_and_join(name: &str, handle: tokio::task::JoinHandle<()>) {
+    handle.abort();
+    if let Err(e) = handle.await {
+        if !e.is_cancelled() {
+            warn!("tun2socks: {name} task stopped with join error: {e}");
+        }
+    }
+}
+
 fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
     static S: OnceLock<Mutex<Option<mpsc::Sender<Vec<u8>>>>> = OnceLock::new();
     S.get_or_init(|| Mutex::new(None))
@@ -532,15 +542,14 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
             // `stop()` is fire-and-forget: the previous run task may still
             // be draining its channel or running its teardown. lwip's
             // global state (OUTPUT_CB_PTR, netif hooks, pcb lists) assumes
-            // exactly one live NetStack, so wait — bounded — for the old
-            // instance to finish before building a new one. Packets that
-            // arrive meanwhile buffer (then drop) in the ingress channel,
-            // which beats corrupting the stack.
-            match tokio::time::timeout(std::time::Duration::from_secs(3), prev).await {
-                Ok(_) => {}
-                Err(_) => logging::bridge_log(
-                    "tun2socks: previous instance still tearing down after 3s; proceeding",
-                ),
+            // exactly one live NetStack, so wait for the old instance to
+            // finish before building a new one. Packets that arrive meanwhile
+            // buffer (then drop) in the ingress channel, which beats
+            // corrupting the stack.
+            if let Err(e) = prev.await {
+                logging::bridge_log(&format!(
+                    "tun2socks: previous instance stopped with join error: {e}"
+                ));
             }
         }
         if let Err(e) = run_tun2socks(ingress_rx, emitter).await {
@@ -622,6 +631,7 @@ async fn run_tun2socks(
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
     let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
     let tcp_accept_sem = Arc::new(Semaphore::new(accept_cap()));
+    let tcp_flow_tasks = TaskTracker::new();
 
     let egress_tx_stack = egress_tx.clone();
     let stack_handle = tokio::spawn(async move {
@@ -675,6 +685,7 @@ async fn run_tun2socks(
     });
 
     let tcp_accept_sem_for_task = tcp_accept_sem.clone();
+    let tcp_flow_tasks_for_accept = tcp_flow_tasks.clone();
     let tcp_accept_handle = tokio::spawn(async move {
         let cap_warn_last = AtomicU64::new(0);
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
@@ -728,20 +739,24 @@ async fn run_tun2socks(
                 last_active_ms: AtomicU64::new(now_ms()),
             });
             let state_for_task = state.clone();
-            let task = tokio::spawn(async move {
+            let task = tcp_flow_tasks_for_accept.spawn(async move {
                 let _permit = permit;
                 dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
                 tcp_flows().remove(&flow_id);
             });
+            let abort = task.abort_handle();
             tcp_flows().insert(
                 flow_id,
                 FlowRecord {
                     state,
-                    abort: task.abort_handle(),
+                    abort,
                     src: local_addr,
                     dst: remote_addr,
                 },
             );
+            if task.is_finished() {
+                tcp_flows().remove(&flow_id);
+            }
         }
     });
 
@@ -908,21 +923,26 @@ async fn run_tun2socks(
         }
     }
 
-    stack_handle.abort();
-    tcp_accept_handle.abort();
-    udp_accept_handle.abort();
-    udp_writer_handle.abort();
-    egress_handle.abort();
-    tcp_idle_sweeper_handle.abort();
-    drop(udp_reply_tx);
+    // Await cancellation of lwIP-owning tasks before this outer generation
+    // finishes. Dropping JoinHandles after `abort()` would detach those tasks,
+    // letting the next `start()` build a fresh NetStack while old NetStack,
+    // TcpListener, UdpSocket, or TcpStream drops are still mutating lwIP globals
+    // on another runtime worker.
+    abort_and_join("tcp accept", tcp_accept_handle).await;
 
-    // Abort any TCP flows still held in the registry so the in-process
-    // meow dispatch tasks don't outlive the tunnel.
-    let flows = tcp_flows();
-    for entry in flows.iter() {
-        entry.abort.abort();
-    }
-    flows.clear();
+    close_all_tcp_flows();
+    tcp_flow_tasks.close();
+    tcp_flow_tasks.wait().await;
+
+    // UdpSocket::drop in the pinned lwip fork does not take LWIP_MUTEX, so keep
+    // the socket alive until both possible concurrent users have stopped: the
+    // UDP writer's send_to path and the stack driver's input/callback path.
+    abort_and_join("udp writer", udp_writer_handle).await;
+    abort_and_join("stack driver", stack_handle).await;
+    abort_and_join("udp accept", udp_accept_handle).await;
+    abort_and_join("egress", egress_handle).await;
+    abort_and_join("tcp idle sweeper", tcp_idle_sweeper_handle).await;
+    drop(udp_reply_tx);
 
     logging::bridge_log("tun2socks: exiting");
     Ok(())

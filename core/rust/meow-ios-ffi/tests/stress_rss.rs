@@ -31,7 +31,7 @@
 use meow_ios_ffi::{meow_core_init, meow_tun_ingest, meow_tun_start, meow_tun_stop, rss};
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 static EGRESS_BYTES: AtomicU64 = AtomicU64::new(0);
@@ -45,6 +45,11 @@ unsafe extern "C" fn count_egress(_ctx: *mut c_void, _data: *const u8, len: usiz
 fn ensure_init() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| meow_core_init());
+}
+
+fn test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 /// Hand-built minimal IPv4 + UDP packet bound for 172.19.0.2:53 (the
@@ -99,6 +104,7 @@ fn rss_mib() -> f64 {
 
 #[test]
 fn tun_start_stop_cycles_do_not_leak() {
+    let _guard = test_lock().lock().expect("stress tests lock");
     ensure_init();
 
     // Warm-up: the very first start spins up the tokio runtime, allocates
@@ -140,6 +146,7 @@ fn tun_start_stop_cycles_do_not_leak() {
 
 #[test]
 fn sustained_ingest_burst_drops_under_load() {
+    let _guard = test_lock().lock().expect("stress tests lock");
     ensure_init();
     EGRESS_BYTES.store(0, Ordering::Relaxed);
     EGRESS_PACKETS.store(0, Ordering::Relaxed);

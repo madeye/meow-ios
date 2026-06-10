@@ -22,6 +22,7 @@ needless_return = "allow"
 [dependencies]
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "macros", "time", "signal"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 parking_lot = "0.12"
 futures = "0.3"
 # Explicit pin — transitive through meow-tunnel, but engine.rs builds
