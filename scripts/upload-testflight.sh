@@ -174,7 +174,7 @@ fi
 if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
     echo "==> Archiving (App Store)"
     xcodebuild -allowProvisioningUpdates \
-        "${XCCONFIG_ARG[@]}" \
+        ${XCCONFIG_ARG[@]+"${XCCONFIG_ARG[@]}"} \
         -project "$PROJECT_PATH" \
         -scheme "$SCHEME" \
         -configuration Release \
