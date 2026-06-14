@@ -314,6 +314,12 @@ static STACK_INGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
+// Throttle slot for the UDP reply-writer-backpressure drop log. When the
+// shared `udp_reply_tx` channel is momentarily full the reply reader drops the
+// datagram (UDP is lossy) and keeps the session alive; without a log this
+// silent loss has no on-device signal. Throttled via warn_capped.
+static UDP_REPLY_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
 static TCP_FLOW_ID_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Per-active-flow timestamp. The Arc-shared cell lets `IdleTrackingConn`
@@ -1421,6 +1427,30 @@ async fn dispatch_udp(
     );
 }
 
+/// Forward one upstream→app UDP reply onto the shared writer channel.
+///
+/// A full `reply_tx` is treated as lossy packet drop (UDP semantics), NOT as a
+/// reason to terminate the reply reader. Earlier this site did
+/// `if reply_tx.try_send(msg).is_err() { break; }`, which tore the whole NAT
+/// session + reader down on a single transient full queue: every subsequent
+/// datagram on that 5-tuple then went through a full re-dispatch + re-dial
+/// (fresh source port), and under multi-session bursts — where the single
+/// shared writer is the bottleneck — that became a pathological
+/// destroy-and-rebuild loop across every live session (online-gaming flows the
+/// worst hit). Dropping the datagram instead keeps the session alive; a
+/// genuinely dead session is still reaped by the first-reply deadline, the 60 s
+/// idle backstop, and read errors. A blocking `send().await` is deliberately
+/// avoided here: it would let one backed-up writer apply head-of-line
+/// backpressure across the shared channel and stall every other session.
+fn forward_udp_reply(reply_tx: &mpsc::Sender<UdpMsg>, msg: UdpMsg) {
+    if reply_tx.try_send(msg).is_err() {
+        warn_capped(
+            &UDP_REPLY_DROP_LOG_LAST_MS,
+            "tun2socks: UDP reply writer backed up, dropping datagram",
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_udp_reply_reader(
     key: (SocketAddr, SocketAddr),
@@ -1509,11 +1539,7 @@ fn spawn_udp_reply_reader(
                     // TO the app (app_src). netstack's Sink builds the header
                     // from (src, dst) in that argument order.
                     let msg: UdpMsg = (buf[..n].to_vec(), app_dst, app_src);
-                    // UDP is inherently lossy; drop if writer is backed up
-                    // rather than accumulating unbounded Vec<u8> allocations.
-                    if reply_tx.try_send(msg).is_err() {
-                        break;
-                    }
+                    forward_udp_reply(&reply_tx, msg);
                 }
                 Err(e) => {
                     info!("UDP reply reader closing for {:?}: {}", key, e);
@@ -2042,6 +2068,42 @@ mod tests {
         assert_eq!(parsed.src_port, 54321);
         assert_eq!(parsed.dst_port, 53);
         assert_eq!(parsed.payload, b"QQQQ");
+    }
+
+    /// Regression: a momentarily-full reply-writer channel must DROP the
+    /// datagram (UDP is lossy) and leave the reply reader running — a full
+    /// queue is transient backpressure, not a dead flow. Before this fix the
+    /// reader did `if reply_tx.try_send(msg).is_err() { break; }`, so a single
+    /// full-queue hiccup tore down the whole NAT session and forced a re-dial
+    /// (fresh source port) on the next datagram — a destroy-and-rebuild loop
+    /// under burst that broke long-lived UDP apps (online gaming).
+    /// `forward_udp_reply` must absorb the full-channel case as a drop and stay
+    /// usable afterwards.
+    #[test]
+    fn forward_udp_reply_drops_when_full_without_terminating() {
+        let src = SocketAddr::from((Ipv4Addr::new(10, 0, 0, 1), 5000));
+        let dst = SocketAddr::from((Ipv4Addr::new(1, 1, 1, 1), 443));
+
+        // Capacity-1 channel; the first forward fills the only slot.
+        let (tx, mut rx) = mpsc::channel::<UdpMsg>(1);
+        forward_udp_reply(&tx, (vec![1u8], dst, src));
+
+        // Second forward hits a full channel. The pre-fix code signalled
+        // teardown here; the helper must simply drop the datagram and return.
+        forward_udp_reply(&tx, (vec![2u8], dst, src));
+
+        let first = rx.try_recv().expect("first datagram delivered");
+        assert_eq!(first.0, vec![1u8]);
+        assert!(
+            rx.try_recv().is_err(),
+            "second datagram must be dropped, not queued behind the first"
+        );
+
+        // The channel is still open and usable — i.e. the session was NOT torn
+        // down by the full-queue drop. A drained slot accepts the next reply.
+        forward_udp_reply(&tx, (vec![3u8], dst, src));
+        let third = rx.try_recv().expect("post-drop datagram still deliverable");
+        assert_eq!(third.0, vec![3u8]);
     }
 
     /// All tests in this module mutate the process-wide `tcp_flows()`
