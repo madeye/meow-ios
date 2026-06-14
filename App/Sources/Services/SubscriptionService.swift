@@ -60,6 +60,16 @@ final class SubscriptionService {
         try modelContext.save()
     }
 
+    /// Edit a profile's display name and update URL without touching its YAML
+    /// body. A changed URL takes effect on the next `refresh(_:)` — the stored
+    /// config is left as-is here. Attaching a URL to a previously local-only
+    /// import (empty `url`) promotes it to a refreshable subscription.
+    func updateInfo(_ profile: Profile, name: String, url: String) throws {
+        profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        profile.url = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        try modelContext.save()
+    }
+
     func select(_ profile: Profile) throws {
         let fetch = FetchDescriptor<Profile>()
         let all = try modelContext.fetch(fetch)

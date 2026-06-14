@@ -74,6 +74,10 @@
 "subscriptions.add.field.url" = "网址";
 "subscriptions.add.button.add" = "添加";
 "subscriptions.add.button.adding" = "添加中…";
+"subscriptions.editInfo.swipe" = "编辑信息";
+"subscriptions.editInfo.nav.title" = "编辑订阅";
+"subscriptions.editInfo.button.save" = "保存";
+"subscriptions.editInfo.footer" = "网址的更改将在下次刷新时生效。";
 "subscriptions.import.errorTitle" = "导入订阅失败";
 "subscriptions.row.updatedAgo %@" = "%@前更新";
 "subscriptions.row.a11y.edit %@" = "编辑 %@ 的 YAML";

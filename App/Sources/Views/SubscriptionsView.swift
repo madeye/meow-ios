@@ -8,6 +8,7 @@ struct SubscriptionsView: View {
     @State private var showingAdd = false
     @State private var showingImporter = false
     @State private var editing: Profile?
+    @State private var editingInfo: Profile?
     @State private var error: String?
 
     var body: some View {
@@ -65,6 +66,15 @@ struct SubscriptionsView: View {
                 .listRowSeparator(.hidden)
                 .contentShape(Rectangle())
                 .onTapGesture { try? service.select(profile) }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        editingInfo = profile
+                    } label: {
+                        Label("subscriptions.editInfo.swipe", systemImage: "square.and.pencil")
+                    }
+                    .tint(.blue)
+                    .accessibilityIdentifier("subscriptions.row.editInfo")
+                }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
                         try? service.delete(profile)
@@ -125,6 +135,9 @@ struct SubscriptionsView: View {
             NavigationStack {
                 YamlEditorView(profile: profile)
             }
+        }
+        .sheet(item: $editingInfo) { profile in
+            EditSubscriptionInfoSheet(profile: profile, error: $error)
         }
         .alert("common.error", isPresented: .constant(error != nil)) {
             Button("common.ok") { error = nil }
@@ -225,6 +238,59 @@ private struct AddSubscriptionSheet: View {
                         }
                     }
                     .disabled(name.isEmpty || url.isEmpty || submitting)
+                }
+            }
+        }
+    }
+}
+
+/// Edits a subscription's name and update URL only — the YAML body is left
+/// untouched (that's what the pencil / `YamlEditorView` is for). A changed URL
+/// is picked up on the next refresh, not immediately. See issue #182.
+private struct EditSubscriptionInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionService.self) private var service
+    let profile: Profile
+    @Binding var error: String?
+    @State private var name: String
+    @State private var url: String
+
+    init(profile: Profile, error: Binding<String?>) {
+        self.profile = profile
+        _error = error
+        _name = State(initialValue: profile.name)
+        _url = State(initialValue: profile.url)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("subscriptions.add.field.name", text: $name)
+                    TextField("subscriptions.add.field.url", text: $url)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                } footer: {
+                    Text("subscriptions.editInfo.footer")
+                }
+            }
+            .navigationTitle("subscriptions.editInfo.nav.title")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("common.cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("subscriptions.editInfo.button.save") {
+                        do {
+                            try service.updateInfo(profile, name: name, url: url)
+                            dismiss()
+                        } catch {
+                            self.error = error.localizedDescription
+                        }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }

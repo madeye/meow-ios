@@ -68,6 +68,10 @@
 "subscriptions.add.field.url" = "URL";
 "subscriptions.add.button.add" = "Add";
 "subscriptions.add.button.adding" = "Adding…";
+"subscriptions.editInfo.swipe" = "Edit Info";
+"subscriptions.editInfo.nav.title" = "Edit Subscription";
+"subscriptions.editInfo.button.save" = "Save";
+"subscriptions.editInfo.footer" = "Changes to the URL take effect on the next refresh.";
 "subscriptions.import.errorTitle" = "Couldn't import subscription";
 "subscriptions.row.updatedAgo %@" = "Updated %@ ago";
 "subscriptions.row.a11y.edit %@" = "Edit YAML for %@";
