@@ -564,6 +564,52 @@ pub fn stop() {
     ingress_slot().lock().take();
 }
 
+/// Blocking shutdown: signal stop, then wait (bounded) for the run task to
+/// fully tear down before returning.
+///
+/// The egress write callback can only be invoked from inside the run task —
+/// its `egress` task is `abort_and_join`ed as part of `run_tun2socks`'s
+/// teardown — so once this returns the FFI caller is guaranteed the callback
+/// will never fire again and may safely release the egress `ctx` it passed to
+/// [`start`].
+///
+/// [`stop`] alone is fire-and-forget: it only drops the ingress sender and
+/// lowers the running flag, leaving the run task to drain on the runtime.
+/// Swift's terminal `stop` `CFBridgingRelease`s the writer immediately after
+/// the FFI returns, so without this join the still-draining egress task can
+/// call the write callback on a freed Objective-C object — a use-after-free.
+/// `suspendTun` deliberately keeps using [`stop`] because it does NOT release
+/// the ctx (it is reused by the following `resumeTun`, whose `start` awaits
+/// the previous teardown via `run_handle_slot`).
+///
+/// MUST be called from a NON-runtime thread (the Swift control queue): it
+/// `block_on`s the shared runtime. Bounded by `JOIN_TIMEOUT` so a
+/// pathological teardown hang can't freeze iOS's `stopTunnel` grace window;
+/// if the bound trips we log and return anyway (a hung teardown is a separate
+/// failure, and freezing shutdown is worse than a vanishingly-rare late
+/// callback). Idempotent.
+pub fn stop_blocking() {
+    stop();
+    let Some(handle) = run_handle_slot().lock().take() else {
+        return;
+    };
+    const JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+    crate::get_runtime().block_on(async move {
+        match tokio::time::timeout(JOIN_TIMEOUT, handle).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                logging::bridge_log(&format!("tun2socks: stop_blocking join error: {e}"));
+            }
+            Err(_) => {
+                warn!(
+                    "tun2socks: stop_blocking timed out after {:?}; run task still draining, releasing ctx anyway",
+                    JOIN_TIMEOUT
+                );
+            }
+        }
+    });
+}
+
 /// Push a raw IP packet produced by `NEPacketTunnelFlow.readPackets` into the
 /// netstack. Returns 0 on success, -1 if tun2socks isn't running or the queue
 /// is closed. Swift-side flow-control lives inside the mpsc channel: when full
@@ -2006,6 +2052,15 @@ mod tests {
         GUARD.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// Serializes the lifecycle tests that drive the process-global tun2socks
+    /// start/stop state (`TUN2SOCKS_RUNNING`, `ingress_slot`, `run_handle_slot`).
+    /// Default `cargo test` parallelism would otherwise let one test's `start()`
+    /// observe another's still-running instance and fail with "already running".
+    fn lifecycle_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static GUARD: StdMutex<()> = StdMutex::new(());
+        GUARD.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     fn dummy_addr(port: u16) -> SocketAddr {
         SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
     }
@@ -2399,6 +2454,8 @@ mod tests {
     /// timeout-task abort + OUTPUT_CB_PTR self-check on teardown.
     #[test]
     fn rapid_stop_start_keeps_new_instance_wired() {
+        let _guard = lifecycle_test_guard();
+
         unsafe extern "C" fn noop_write(
             _ctx: *mut std::os::raw::c_void,
             _data: *const u8,
@@ -2432,6 +2489,51 @@ mod tests {
             "live instance must still accept packets after the old teardown"
         );
 
-        stop();
+        stop_blocking();
+    }
+
+    /// `stop_blocking()` must JOIN the run task before returning — unlike the
+    /// fire-and-forget `stop()`. The egress write callback can only fire from
+    /// inside the run task, so a drained `run_handle_slot` on return is the
+    /// invariant that lets Swift's terminal `stop` `CFBridgingRelease` the
+    /// writer ctx without a use-after-free. Builds a real lwip netstack.
+    #[test]
+    fn stop_blocking_joins_run_task_synchronously() {
+        let _guard = lifecycle_test_guard();
+
+        unsafe extern "C" fn noop_write(
+            _ctx: *mut std::os::raw::c_void,
+            _data: *const u8,
+            _len: usize,
+        ) {
+        }
+
+        start(std::ptr::null_mut(), noop_write).expect("start");
+        assert!(
+            run_handle_slot().lock().is_some(),
+            "start must publish the run handle"
+        );
+
+        stop_blocking();
+
+        // Synchronous teardown: the handle is taken and joined before return,
+        // so the slot is empty and the run task (incl. its egress callback
+        // loop) is guaranteed gone — the ctx is now safe to free.
+        assert!(
+            run_handle_slot().lock().is_none(),
+            "stop_blocking must take and join the run handle before returning"
+        );
+        assert!(
+            !TUN2SOCKS_RUNNING.load(Ordering::SeqCst),
+            "stop_blocking must leave the tunnel not-running"
+        );
+        assert_eq!(
+            ingest(&[0u8; 20]),
+            -1,
+            "ingress must be closed after stop_blocking"
+        );
+
+        // Idempotent: a second call with nothing to join is a no-op.
+        stop_blocking();
     }
 }

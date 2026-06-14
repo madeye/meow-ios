@@ -41,6 +41,12 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
 
     BOOL _started;
     _Atomic BOOL _ingressRunning;
+    // Bumped on every suspend/stop. A readPackets completion handler captures
+    // the epoch when it arms and drops itself if the epoch advanced in the
+    // meantime — so an in-flight handler from a superseded suspend/resume
+    // generation can neither ingest into the new tun2socks instance nor re-arm
+    // a second concurrent read chain.
+    _Atomic uint64_t _ingressEpoch;
     _Atomic int64_t _ingressPackets;
     dispatch_source_t _trafficTimer;
     int64_t _lastUp;
@@ -63,6 +69,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     if (self) {
         _flow = flow;
         atomic_init(&_ingressRunning, NO);
+        atomic_init(&_ingressEpoch, 0);
         atomic_init(&_ingressPackets, 0);
     }
     return self;
@@ -134,10 +141,17 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     _started = NO;
 
     atomic_store_explicit(&_ingressRunning, NO, memory_order_relaxed);
+    atomic_fetch_add_explicit(&_ingressEpoch, 1, memory_order_relaxed);
 
     [self stopTrafficPump];
 
-    meow_tun_stop();
+    // BLOCKING stop: wait for the tun2socks run task — and its egress callback
+    // loop — to fully terminate before releasing the writer ctx below.
+    // meow_tun_stop() is fire-and-forget, so CFBridgingRelease-ing the
+    // CFBridgingRetain'd writer right after it returned could free the object
+    // while the still-draining egress task calls meowPacketWriterCB on it: a
+    // use-after-free. meow_tun_stop_blocking() joins the run task first.
+    meow_tun_stop_blocking();
     _tunStarted = NO;
     meow_engine_stop();
 
@@ -154,8 +168,13 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     if (!_tunStarted) return;
 
     atomic_store_explicit(&_ingressRunning, NO, memory_order_relaxed);
+    atomic_fetch_add_explicit(&_ingressEpoch, 1, memory_order_relaxed);
     [self stopTrafficPump];
 
+    // Fire-and-forget here (unlike -stop): the writer ctx is NOT released on
+    // suspend — it is reused by the following -resumeTun, whose meow_tun_start
+    // awaits the previous teardown via run_handle_slot — so there is no ctx to
+    // free underneath the egress task and no UAF window.
     meow_tun_stop();
     _tunStarted = NO;
 
@@ -203,6 +222,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
 
 - (void)readNextPackets {
     if (!atomic_load_explicit(&_ingressRunning, memory_order_relaxed)) return;
+    uint64_t epoch = atomic_load_explicit(&_ingressEpoch, memory_order_relaxed);
     __weak __typeof__(self) weak = self;
     [_flow readPacketsWithCompletionHandler:^(NSArray<NSData *> *packets,
                                               NSArray<NSNumber *> *protocols) {
@@ -210,6 +230,12 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
             __strong __typeof__(weak) self = weak;
             if (!self) return;
             if (!atomic_load_explicit(&self->_ingressRunning, memory_order_relaxed)) return;
+            // Epoch guard: a suspend/stop after this read was armed bumps
+            // _ingressEpoch. Drop the stale completion so an in-flight handler
+            // from a superseded generation neither ingests into the new
+            // tun2socks instance nor re-arms a second concurrent readPackets
+            // chain (NEPacketTunnelFlow expects one outstanding read at a time).
+            if (atomic_load_explicit(&self->_ingressEpoch, memory_order_relaxed) != epoch) return;
             for (NSData *pkt in packets) {
                 meow_tun_ingest((const uint8_t *)pkt.bytes, (uintptr_t)pkt.length);
                 atomic_fetch_add_explicit(&self->_ingressPackets, 1, memory_order_relaxed);

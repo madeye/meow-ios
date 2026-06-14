@@ -689,11 +689,26 @@ pub unsafe extern "C" fn meow_tun_ingest(data: *const u8, len: usize) -> c_int {
     tun2socks::ingest(slice)
 }
 
-/// Stop the tun2socks task. Idempotent.
+/// Stop the tun2socks task. Idempotent. Fire-and-forget: the run task drains
+/// on the runtime after this returns. Use for suspend/resume, where the egress
+/// `ctx` is retained for reuse.
 #[no_mangle]
 pub extern "C" fn meow_tun_stop() {
     logging::bridge_log("meow_tun_stop");
     tun2socks::stop();
+}
+
+/// Stop the tun2socks task and BLOCK until its run task (including the egress
+/// callback loop) has fully torn down. Once this returns, the egress write
+/// callback is guaranteed never to fire again, so the caller may safely
+/// release the `ctx` it passed to `meow_tun_start` — required for a terminal
+/// stop, where releasing the writer while the egress task is still draining
+/// is a use-after-free. Call from a NON-runtime thread (the Swift tunnel
+/// control queue). Idempotent.
+#[no_mangle]
+pub extern "C" fn meow_tun_stop_blocking() {
+    logging::bridge_log("meow_tun_stop_blocking");
+    tun2socks::stop_blocking();
 }
 
 /// Liveness probe for the shared tokio runtime. Spawns a trivial task and
