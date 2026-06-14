@@ -306,6 +306,12 @@ const DNS_TASK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 // with no on-device signal. Throttled via warn_capped to once per second.
 static EGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
+// Throttle slot for the silent stack-ingress-drop log. The main ingress loop
+// drops inbound frames non-blockingly when the stack-driver queue is saturated
+// (see the drop site in `run_tun2socks`); without a log the user sees a
+// throughput cliff with no on-device signal. Throttled via warn_capped.
+static STACK_INGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 static TCP_FLOW_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -889,7 +895,17 @@ async fn run_tun2socks(
                     let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
                         return;
                     };
-                    let _ = egress.send(reply_pkt).await;
+                    // Match the rest of this file's "log, don't swallow" policy:
+                    // a send error here means egress_rx was dropped (tunnel
+                    // teardown), so the reply is lost. Surface it at trace so a
+                    // shutdown-time DNS stall has an on-device signal instead of
+                    // a silent discard.
+                    if let Err(e) = egress.send(reply_pkt).await {
+                        trace!(
+                            "tun2socks: DNS reply egress send failed (egress closed?): {}",
+                            e
+                        );
+                    }
                 };
                 if tokio::time::timeout(DNS_TASK_TIMEOUT, work).await.is_err() {
                     trace!(
@@ -903,8 +919,19 @@ async fn run_tun2socks(
 
         match stack_ingress_tx.try_send(ip_data) {
             Ok(()) => {}
-            Err(mpsc::error::TrySendError::Full(frame)) => {
-                let _ = stack_ingress_tx.send(frame).await;
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                // Never block the ingress loop on stack backpressure. Awaiting a
+                // full stack queue stalls DNS interception and packet intake for
+                // the entire tunnel, and can wedge against the single stack
+                // driver when it is itself parked in `stack.send().await`
+                // draining into lwip while egress can't drain (the 2026-06-06
+                // blackout shape). Drop instead — TCP retransmits, and every
+                // other saturation point in this file already drops rather than
+                // blocks (ingest, egress, UDP cap, DNS cap).
+                warn_capped(
+                    &STACK_INGRESS_DROP_LOG_LAST_MS,
+                    "tun2socks: stack ingress queue full, dropping inbound frame (stack driver backpressure)",
+                );
             }
             Err(mpsc::error::TrySendError::Closed(_)) => break,
         }
@@ -1577,10 +1604,18 @@ pub(crate) async fn forward_dns_to_upstream(
         let q = query_shared.clone();
         futs.push(Box::pin(async move {
             let socket = tokio::net::UdpSocket::bind(("0.0.0.0", 0u16)).await.ok()?;
-            socket.send_to(&q, addr).await.ok()?;
+            // `connect` pins the socket to this upstream so the kernel delivers
+            // only datagrams whose source is `addr`. Without it, `recv_from`
+            // accepts a reply from ANY source: an off-path attacker who forges
+            // the upstream's src IP/port and guesses the 16-bit transaction ID
+            // could race a spoofed answer in ahead of the real resolver, and
+            // ID-matching alone would accept it. connect() closes that hole and
+            // also lets the OS surface ICMP port-unreachable as a recv error.
+            socket.connect(addr).await.ok()?;
+            socket.send(&q).await.ok()?;
             let mut buf = [0u8; 1500];
-            let recv = tokio::time::timeout(timeout, socket.recv_from(&mut buf)).await;
-            let (n, _) = recv.ok()?.ok()?;
+            let recv = tokio::time::timeout(timeout, socket.recv(&mut buf)).await;
+            let n = recv.ok()?.ok()?;
             if n >= 2 && u16::from_be_bytes([buf[0], buf[1]]) == query_id {
                 Some(buf[..n].to_vec())
             } else {
