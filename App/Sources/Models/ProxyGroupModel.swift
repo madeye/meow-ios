@@ -27,8 +27,17 @@ struct ProxyGroupModel: Identifiable, Equatable {
             .filter { selectable.contains($0.type) && $0.all != nil && $0.name != "GLOBAL" }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             .map { group in
-                let children = (group.all ?? []).compactMap { childName -> Child? in
-                    guard let p = dict[childName] else { return nil }
+                let children = (group.all ?? []).map { childName -> Child in
+                    // A member name may be absent from the flat `/proxies`
+                    // dict — most often because it's a proxy sourced from a
+                    // `proxy-providers:` slot, which meow only exposes via
+                    // `/providers/proxies`. Render those as stub rows (unknown
+                    // type, no delay) instead of dropping them, so nested
+                    // group references and provider proxies still show up and
+                    // stay selectable. See issue #180.
+                    guard let p = dict[childName] else {
+                        return Child(id: childName, name: childName, type: "", delay: nil)
+                    }
                     return Child(
                         id: childName,
                         name: p.name,

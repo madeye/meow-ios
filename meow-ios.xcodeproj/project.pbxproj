@@ -33,6 +33,7 @@
 		34358821D3A262F7D08C62D9 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 0CA41BA11AE3954D104A7AB8 /* MeowIPC */; };
 		34B4F8F808C424CBAF8E7EA9 /* MWSharedStore.m in Sources */ = {isa = PBXBuildFile; fileRef = AB83B7A37D165EF0E16A47BA /* MWSharedStore.m */; };
 		3BAE21D06E5B9935E58FDF1B /* MeowAPITypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A693FE7115671D717A87F1DB /* MeowAPITypes.swift */; };
+		3C3A5AA885F5F213EAF992D8 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 2A4941A69C1277E700B9010C /* GoogleService-Info.plist */; };
 		45310440BCC0654BDE996BA2 /* SubscriptionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */; };
 		458E58A53D18E7E14542FAB8 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC4AC97B3877B1A566FBFF6 /* Profile.swift */; };
 		4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08020B398C102C110F6A8567 /* SharedStoreTests.swift */; };
@@ -108,6 +109,7 @@
 		CADE5E260230B0FEB1F6786C /* MWTunnelSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = E8B56935362D1576450CB4A3 /* MWTunnelSettings.m */; };
 		CF37C3706513F515FED5B6FC /* SettingsScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD1BBDA36A305FAAF4B003E /* SettingsScreenTests.swift */; };
 		D0918A7D5C1B3C007EADE22E /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 027ADE8989FBD1E3F91B7209 /* MeowIPC */; };
+		D2FF19F899EE357591812068 /* ProxyGroupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2EC54BA19FA9CC57BDD2AD /* ProxyGroupModelTests.swift */; };
 		D95EF7A2FB411B4088E3255C /* URLValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA1935B322CD5DD66E23F0 /* URLValidationTests.swift */; };
 		DC1D5D2FD5AFDC3D1D3F2602 /* TrafficScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC73D84B5978335B9C07A8A /* TrafficScreenTests.swift */; };
 		DCC6938C0A43984B033BCD68 /* AppIPCBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */; };
@@ -183,6 +185,7 @@
 		20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoAssetStager.swift; sourceTree = "<group>"; };
 		24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManagerTests.swift; sourceTree = "<group>"; };
 		24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDarwinBridge.m; sourceTree = "<group>"; };
+		2A4941A69C1277E700B9010C /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		2E2B37B72F11B1B2B1118221 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		3172561A6CE70D61D7666597 /* ChinaDirectKeywords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinaDirectKeywords.swift; sourceTree = "<group>"; };
 		329B260F122D91D5DDB24C44 /* MWIPCListener.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWIPCListener.m; sourceTree = "<group>"; };
@@ -231,6 +234,7 @@
 		8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnToggleFlowTests.swift; sourceTree = "<group>"; };
 		8E6DE9E643D70646873B923B /* ConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
 		8E8110225EBDEBDC762A0E20 /* ClashYAMLTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashYAMLTextView.swift; sourceTree = "<group>"; };
+		8F2EC54BA19FA9CC57BDD2AD /* ProxyGroupModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyGroupModelTests.swift; sourceTree = "<group>"; };
 		930ED8C12FBC2859BCDC56E4 /* VpnManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManager.swift; sourceTree = "<group>"; };
 		992E16ADDEBA2F4304D4E797 /* EditableRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableRule.swift; sourceTree = "<group>"; };
 		9943546218B2F23235F1CCAD /* clash_malformed.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_malformed.yaml; sourceTree = "<group>"; };
@@ -423,6 +427,7 @@
 				0F6E991913B1D605FBA1C392 /* GeoData */,
 				8895187DE158A91BFC1775BE /* Localizable.strings */,
 				00F3DBAD225AF1027B18873A /* Assets.xcassets */,
+				2A4941A69C1277E700B9010C /* GoogleService-Info.plist */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -500,6 +505,7 @@
 				67B54369F081E1B728712CC9 /* IdentifierSlugTests.swift */,
 				A7002E0BC1FFE0A41FEBE8F6 /* LocalizableParityTests.swift */,
 				CF2336C906828FDB560633D6 /* ProfileTests.swift */,
+				8F2EC54BA19FA9CC57BDD2AD /* ProxyGroupModelTests.swift */,
 				C2BB9ECB4E5C46D70B0CE6B2 /* RulesYAMLEditorTests.swift */,
 			);
 			path = Models;
@@ -934,6 +940,7 @@
 				895396717485D8A14A828E2B /* Assets.xcassets in Resources */,
 				63B152B9AED7714B67D9FA21 /* Country.mmdb in Resources */,
 				5D4A6997EDAAC8F162E93EE5 /* GeoLite2-ASN.mmdb in Resources */,
+				3C3A5AA885F5F213EAF992D8 /* GoogleService-Info.plist in Resources */,
 				16FA48C705C2691763DE4187 /* Localizable.strings in Resources */,
 				78FF8F364FDA872B48B74344 /* geosite.mrs in Resources */,
 			);
@@ -1060,6 +1067,7 @@
 				2E4C5E6BA16E22D2EAD4EB22 /* MeowAPITests.swift in Sources */,
 				2063EF5A21DBDB2E5097D885 /* MeowCoreBridgeTests.swift in Sources */,
 				8C45959FE9EE5CD0D3F06BB7 /* ProfileTests.swift in Sources */,
+				D2FF19F899EE357591812068 /* ProxyGroupModelTests.swift in Sources */,
 				4E366621A02CAF97E4AA2EF2 /* RulesTests.swift in Sources */,
 				C7B7EACD6297D7AA66065602 /* RulesYAMLEditorTests.swift in Sources */,
 				4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */,
