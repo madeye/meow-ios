@@ -1,0 +1,18 @@
+Build 2026061402 (1.3.2)
+
+WHAT'S NEW
+• Fixed QUIC / HTTP-3 apps (notably Xiaohongshu / RedNote) failing to
+  load or bypassing the proxy. Their HTTPS DNS records were handing the
+  app the origin's real IP, so HTTP-3 connections went straight out
+  instead of through the tunnel — breaking routing for exactly those
+  apps, and stalling on slow lookups. Those address hints are now
+  stripped in fake-IP mode, so the connection stays on the proxy.
+• The tunnel is now IPv4-only. The TUN no longer claims IPv6 and AAAA is
+  suppressed, so every connection rides the proxied IPv4 path.
+
+FOR TESTERS
+• Xiaohongshu / RedNote: open the app, scroll the feed, load images and
+  videos — content should load normally over the proxy.
+• General browsing and streaming should be unaffected; please report any
+  site or app that worked before but now stalls or fails to load.
+• Issues: https://github.com/madeye/meow-ios/issues
