@@ -245,15 +245,31 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
 // (RAII cleanup on both halves, permit released) and the netstack stream
 // (RST / tcp_close to the app side, which reconnects on next use).
 //
-// 300 s default matches the industry-standard proxy connection-idle
-// timeout (v2ray `connIdle`, sing-box inactivity defaults). Long-lived
-// idle-but-legit flows (push channels) see a reconnect on next activity —
-// the standard tradeoff every proxy core makes. Tunable at runtime via
+// 600 s default. Raised from 300 s after the 2026-06-14 long-lived-TCP audit:
+// 300 s (v2ray `connIdle` / sing-box inactivity defaults) reaps a no-keepalive
+// server-push channel (live feed, SSE, some game lobbies) whenever its quiet
+// gap between pushes exceeds 5 min, even though the flow is alive. `touch()`
+// refreshes on BOTH directions, so any flow with traffic — including a
+// well-behaved WebSocket sending ping/pong — never hits this; only a flow
+// genuinely silent in both directions is reaped. 10 min covers the common
+// push-interval range while still reclaiming a wedged-but-silent pcb (the
+// after-hours-idle failure mode above) well inside the time it would take to
+// accumulate ~256 of them against the accept cap. Tunable at runtime via
 // [`set_tcp_idle_ttl_ms`] / `meow_tun_set_tcp_idle_ttl_ms`; 0 disables.
-const TCP_IDLE_TTL_MS_DEFAULT: u64 = 300_000;
+const TCP_IDLE_TTL_MS_DEFAULT: u64 = 600_000;
 static TCP_IDLE_TTL_MS: AtomicU64 = AtomicU64::new(TCP_IDLE_TTL_MS_DEFAULT);
 
 const TCP_IDLE_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+// After the app half-closes (local FIN), how long the relay may stay quiet in
+// the DOWNLOAD direction before `dispatch_tcp` drops it. The window is
+// *idle-based*, not absolute: each downstream byte refreshes it (see the
+// local-FIN arm in `dispatch_tcp`), so a slow/large half-closed response — a
+// raw TCP half-close that keeps receiving, an HTTP/1.1 request-body EOF before
+// a big response — drains fully instead of being truncated by a fixed timer.
+// Only a half-closed flow that also goes download-silent is dropped, and the
+// 300/600 s idle sweeper is the ultimate backstop regardless.
+const HALF_CLOSE_IDLE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Set the per-TCP-flow idle TTL, in milliseconds. `0` disables the
 /// sweeper (legacy behaviour: wedged flows hold their accept permit until
@@ -1113,6 +1129,11 @@ async fn dispatch_tcp(
 
     // Dial-deadline watchdog (see DIAL_DEADLINE_MS docs above and
     // `run_dial_watchdog` for the actual polling logic).
+    // `watchdog_state` is moved into the watchdog; keep a handle to the same
+    // FlowState so the local-FIN arm can watch download progress via
+    // `last_active_ms` (bumped by `IdleTracking::poll_write` on each
+    // downstream byte).
+    let eof_state = watchdog_state.clone();
     let dial_watchdog = run_dial_watchdog(watchdog_state, accepted_at_ms, dial_deadline);
     tokio::pin!(dial_watchdog);
 
@@ -1120,15 +1141,31 @@ async fn dispatch_tcp(
         biased;
         _ = &mut fut => {}
         _ = local_eof.notified() => {
-            // 250 ms is enough for the relay to land its
-            // `poll_shutdown` on the outbound write half (rustls
-            // writes close_notify + the encrypted record fits in
-            // one TCP segment) without holding the task indefinitely
-            // if the proxy peer is wedged.
-            let _ = tokio::time::timeout(
-                std::time::Duration::from_millis(250),
-                &mut fut,
-            ).await;
+            // The app sent FIN. `handle_tcp` already half-closes correctly
+            // (poll_shutdown upstream) and keeps the DOWNLOAD direction alive,
+            // but then waits forever for the peer's FIN — which wedges
+            // long-poll / SSE / dead-peer flows. Don't truncate a still-
+            // flowing download with a fixed window (the old 250 ms drop):
+            // extend the grace as long as downstream bytes keep arriving, and
+            // give up only once the download side has been quiet for
+            // HALF_CLOSE_IDLE_GRACE. A wedged/dead peer is dropped ~2 s after
+            // FIN; a slow large response drains in full.
+            loop {
+                let before = eof_state.last_active_ms.load(Ordering::Relaxed);
+                match tokio::time::timeout(HALF_CLOSE_IDLE_GRACE, &mut fut).await {
+                    // Relay finished (peer FIN'd / closed) — clean done.
+                    Ok(_) => break,
+                    // No completion within the window. If a downstream byte
+                    // landed (last_active_ms advanced) the response is still
+                    // draining, so loop and extend; otherwise it's quiet —
+                    // drop the future (RAII close on every layer).
+                    Err(_) => {
+                        if eof_state.last_active_ms.load(Ordering::Relaxed) == before {
+                            break;
+                        }
+                    }
+                }
+            }
         }
         _ = &mut dial_watchdog => {
             warn!(

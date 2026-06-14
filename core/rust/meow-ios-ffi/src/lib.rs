@@ -864,9 +864,10 @@ pub extern "C" fn meow_tun_udp_first_reply_deadline_ms() -> c_int {
 /// such accumulation exhausts the accept cap and the tunnel stops
 /// passing new TCP flows ("connected but no traffic").
 ///
-/// Default 300000 ms (5 min, the conventional proxy connection-idle
-/// timeout). Pass `0` to disable the sweeper. Negative values are
-/// rejected.
+/// Default 600000 ms (10 min). Raised from the conventional 5-min proxy
+/// idle timeout so no-keepalive server-push channels with multi-minute quiet
+/// gaps aren't reaped while alive (2026-06-14 long-lived-TCP audit). Pass `0`
+/// to disable the sweeper. Negative values are rejected.
 ///
 /// Takes effect on the sweeper's next 30 s tick; no restart needed.
 ///
