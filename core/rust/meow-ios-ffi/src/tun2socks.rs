@@ -7,17 +7,20 @@
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS: A (1) queries are delegated to meow's resolver running in fake-IP
-//! mode (`DnsServer::handle_query`). AAAA (28) queries are answered
-//! NOERROR-empty by the intercept itself, unconditionally — only the IPv4
-//! fake-IP path is proxied, so stripping AAAA forces every client onto it
-//! instead of leaking (or black-holing) connections over v6. Anything else
-//! (HTTPS=65, SVCB=64, TXT=16, MX=15, PTR=12, …) is forwarded as a raw UDP
-//! packet to the pinned upstream pool and the response is injected straight
-//! back. meow's DnsServer returns NXDOMAIN for non-A/AAAA queries, which
-//! kills modern iOS connection setup (Safari's HTTPS-record probe, ECH,
-//! DNS-SD, mDNS-fallback) — the passthrough path lets those queries get a
-//! real answer instead.
+//! DNS: A (1), HTTPS (65) and SVCB (64) queries are delegated to meow's
+//! resolver (`DnsServer::handle_query`). A gets fake-IP synthesis; HTTPS/SVCB
+//! take meow-dns's generic-forward path, which in fake-IP mode strips the
+//! ipv4hint/ipv6hint SvcParams from the answer (meow-rs #215) so an HTTP/3
+//! client can't read the origin's real IP out of the HTTPS record and connect
+//! QUIC straight there, bypassing the fake-IP mapping the tunnel routes on.
+//! AAAA (28) queries are answered NOERROR-empty by the intercept itself,
+//! unconditionally — only the IPv4 fake-IP path is proxied, so stripping AAAA
+//! forces every client onto it instead of leaking (or black-holing)
+//! connections over v6. Anything else (TXT=16, MX=15, PTR=12, …) is forwarded
+//! as a raw UDP packet to the pinned upstream pool and the response is injected
+//! straight back. meow's DnsServer returns NXDOMAIN for those, which kills
+//! modern iOS connection setup (DNS-SD, mDNS-fallback) — the passthrough path
+//! lets them get a real answer instead.
 //!
 //! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
 //! every UDP DNS query arrives as an in-TUN IP packet; the ingress loop below
@@ -878,10 +881,15 @@ async fn run_tun2socks(
         //   * AAAA (28)          → NOERROR-empty, unconditionally. Only the
         //     IPv4 fake-IP path is intercepted and proxied; stripping AAAA
         //     forces every client onto it.
-        //   * A (1)              → meow's `DnsServer::handle_query`
-        //     (fake-IP synthesis, reverse map, hosts, TTL).
+        //   * A (1) / SVCB (64)  → meow's `DnsServer::handle_query`. A gets
+        //     / HTTPS (65)         fake-IP synthesis; SVCB/HTTPS take the
+        //                          generic-forward path which strips the
+        //                          ipv4hint/ipv6hint SvcParams in fake-IP mode
+        //                          (meow-rs #215), keeping HTTP/3 origins on
+        //                          the fake-IP A record instead of letting the
+        //                          client connect direct to the real IP.
         //   * anything else      → raw UDP forward to the pinned upstream
-        //     pool (HTTPS, SVCB, TXT, MX, PTR, …). meow's DnsServer
+        //     pool (TXT, MX, PTR, …). meow's DnsServer
         //     synthesises NXDOMAIN for non-A/AAAA, which kills iOS's
         //     HTTPS-record probe + ECH + Safari's modern connect path; the
         //     passthrough route lets those queries reach a real resolver.
@@ -927,9 +935,25 @@ async fn run_tun2socks(
                             return;
                         };
                         bytes
-                    } else if qtype == Some(1) {
+                    } else if matches!(qtype, Some(1) | Some(64) | Some(65)) {
+                        // A (1) + SVCB (64) / HTTPS (65) → meow's resolver
+                        // pipeline. A gets fake-IP synthesis; SVCB/HTTPS take
+                        // meow-dns's generic-forward path, which (meow-rs #215,
+                        // fake-IP mode) strips the ipv4hint/ipv6hint SvcParams
+                        // from the answer. Without that strip an HTTP/3 client
+                        // reads the origin's real IP out of the HTTPS record and
+                        // connects QUIC straight there — bypassing the fake-IP
+                        // mapping, so domain routing / sniffing / proxy-select
+                        // silently break for exactly the dual-stack HTTP/3
+                        // origins (Xiaohongshu et al.). With the hints gone the
+                        // client falls back to the A / fake-IPv4 record and the
+                        // flow rides the proxy. On upstream failure handle_query
+                        // returns SERVFAIL, which also drives the client to the
+                        // A path — strictly better than the old plaintext-UDP/53
+                        // passthrough, which left the real-IP hints intact AND
+                        // stalled ~2 s on censored type-65 lookups.
                         let Some(tunnel) = crate::engine::tunnel() else {
-                            trace!("tun2socks: UDP/53 A query dropped — engine not yet running");
+                            trace!("tun2socks: UDP/53 query dropped — engine not yet running");
                             return;
                         };
                         let resolver = tunnel.resolver().clone();
@@ -941,11 +965,10 @@ async fn run_tun2socks(
                             }
                         }
                     } else {
-                        // Non-A/AAAA: forward verbatim to the upstream pool,
-                        // first response wins. Falls through to NXDOMAIN-shaped
-                        // dropped reply if every upstream times out — better
-                        // than meow's blanket NXDOMAIN, which actively
-                        // misleads the client.
+                        // Remaining non-address qtypes (TXT, MX, PTR, …):
+                        // forward verbatim to the upstream pool, first response
+                        // wins. Falls through to a dropped reply if every
+                        // upstream times out — the client retries on its own.
                         match forward_dns_to_upstream(
                             parsed.payload,
                             DNS_PASSTHROUGH_UPSTREAMS,

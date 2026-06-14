@@ -64,7 +64,7 @@ lwip = "0.3"
 #
 # HEAD: 21ad771e — v0.14.0 main + pub UdpSession::touch/idle_for (merged via
 # meow-rs#212).
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a0ed3f486bcd65e08a6a8da2018" }
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "27156845bd0a1f892b914d53a2db6026841794ad" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -72,11 +72,11 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a0ed3f486bcd65e08a6a8da2018", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a0ed3f486bcd65e08a6a8da2018" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a0ed3f486bcd65e08a6a8da2018" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a0ed3f486bcd65e08a6a8da2018" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "21ad771e329c8a0ed3f486bcd65e08a6a8da2018" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "27156845bd0a1f892b914d53a2db6026841794ad", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "27156845bd0a1f892b914d53a2db6026841794ad" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "27156845bd0a1f892b914d53a2db6026841794ad" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "27156845bd0a1f892b914d53a2db6026841794ad" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "27156845bd0a1f892b914d53a2db6026841794ad" }
 
 [build-dependencies]
 cbindgen = "0.28"
