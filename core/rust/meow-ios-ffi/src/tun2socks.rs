@@ -1427,6 +1427,17 @@ async fn dispatch_udp(
     );
 }
 
+/// Poll cadence for the post-first-reply UDP reply reader. Short so the reader
+/// re-checks the bidirectional idle clock (which an outbound forward may have
+/// just refreshed) promptly, without busy-spinning. Worst-case eviction
+/// latency is `UDP_REPLY_IDLE_TTL + UDP_REPLY_POLL_INTERVAL`.
+const UDP_REPLY_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Both-directions-idle TTL after which the post-first-reply reply reader
+/// evicts its session. Matches meow-tunnel's `DEFAULT_UDP_IDLE` (60 s) so the
+/// FFI backstop and the NAT sweeper agree on when a session is dead.
+const UDP_REPLY_IDLE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// Forward one upstream→app UDP reply onto the shared writer channel.
 ///
 /// A full `reply_tx` is treated as lossy packet drop (UDP semantics), NOT as a
@@ -1484,7 +1495,7 @@ fn spawn_udp_reply_reader(
         // active session on quiet idle periods (long-poll, NAT keepalive).
         let first_reply_deadline_ms = UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed);
         let mut had_first_reply = false;
-        loop {
+        'reader: loop {
             let read = if !had_first_reply && first_reply_deadline_ms > 0 {
                 match tokio::time::timeout(
                     std::time::Duration::from_millis(first_reply_deadline_ms),
@@ -1498,42 +1509,63 @@ fn spawn_udp_reply_reader(
                             "UDP first-reply deadline exceeded for {:?} after {} ms; evicting session",
                             key, first_reply_deadline_ms,
                         );
-                        break;
+                        break 'reader;
                     }
                 }
             } else {
-                // Post-first-reply idle backstop. The NAT sweeper
-                // (`spawn_background_tasks`) evicts the `nat_table` entry once
-                // a session is idle > DEFAULT_UDP_IDLE (60 s), but this reader
-                // task holds its OWN `Arc<UdpSession>` + 4 KiB `buf`, so the
-                // sweeper alone can't unblock a `read_packet` that never
-                // returns — the task (and its buffer) would leak for any
-                // session that gets one reply then goes silent (one-shot DNS,
-                // abandoned QUIC, dead upstream). Bound the read at the same
-                // 60 s idle the tunnel already uses, so once the NAT layer
-                // considers the session dead this reader exits and reaches the
-                // cleanup below. Genuinely active sessions (data within 60 s)
-                // are never evicted; a session quiet > 60 s is one the tunnel
-                // has already dropped from `nat_table` regardless.
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(60),
-                    session.conn.read_packet(&mut buf),
-                )
-                .await
-                {
-                    Ok(res) => res,
-                    Err(_) => {
-                        info!(
-                            "UDP reply reader idle > 60s for {:?}; evicting session",
-                            key
-                        );
-                        break;
+                // Post-first-reply idle backstop — BIDIRECTIONAL.
+                //
+                // The NAT sweeper (`spawn_background_tasks`) evicts the
+                // `nat_table` entry once a session is idle > DEFAULT_UDP_IDLE
+                // (60 s), but this reader task holds its OWN `Arc<UdpSession>`
+                // + 4 KiB `buf`, so the sweeper alone can't unblock a
+                // `read_packet` that never returns — the task would leak for
+                // any session that gets one reply then goes silent.
+                //
+                // This used to bound each read at a flat 60 s and evict on
+                // INBOUND silence alone, which diverged from the sweeper's
+                // OUTBOUND-stamped clock: a session where the client keeps
+                // sending (game input) while the server is briefly quiet > 60 s
+                // got torn down here even though the NAT layer still considered
+                // it active — forcing a re-dial on a fresh source port and
+                // dropping in-flight replies. Instead, poll on a short interval
+                // and evict only when BOTH directions have been idle for the
+                // TTL: `idle_for()` reads the same `last_activity_ms` that
+                // `handle_udp` bumps on every outbound forward AND that we now
+                // bump on every inbound reply (touch() below). So an active
+                // flow in EITHER direction keeps the reader alive; only a
+                // genuinely two-way-silent session is reaped.
+                loop {
+                    match tokio::time::timeout(
+                        UDP_REPLY_POLL_INTERVAL,
+                        session.conn.read_packet(&mut buf),
+                    )
+                    .await
+                    {
+                        Ok(res) => break res,
+                        Err(_) => {
+                            if session.idle_for() >= UDP_REPLY_IDLE_TTL {
+                                info!(
+                                    "UDP reply reader idle (both directions) > {}s for {:?}; evicting session",
+                                    UDP_REPLY_IDLE_TTL.as_secs(),
+                                    key
+                                );
+                                break 'reader;
+                            }
+                            // Outbound-active: the shared clock was refreshed
+                            // elsewhere, so keep polling for inbound replies.
+                        }
                     }
                 }
             };
             match read {
                 Ok((n, _from)) => {
                     had_first_reply = true;
+                    // Inbound traffic is activity too: refresh the shared NAT
+                    // idle clock so neither the sweeper nor the backstop above
+                    // evicts a receive-active / send-quiet session while data
+                    // is still arriving.
+                    session.touch();
                     // Reply injection: the IP frame handed back to the app
                     // must look like it came FROM the external peer (app_dst)
                     // TO the app (app_src). netstack's Sink builds the header
@@ -1543,7 +1575,7 @@ fn spawn_udp_reply_reader(
                 }
                 Err(e) => {
                     info!("UDP reply reader closing for {:?}: {}", key, e);
-                    break;
+                    break 'reader;
                 }
             }
         }

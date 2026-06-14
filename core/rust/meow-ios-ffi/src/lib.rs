@@ -425,8 +425,7 @@ pub unsafe extern "C" fn meow_proxy_select(group: *const c_char, name: *const c_
         set_error("engine not running".into());
         return -2;
     };
-    let proxies = tunnel.proxies();
-    let Some(proxy) = proxies.get(group_name) else {
+    let Some(proxy) = tunnel.proxy(group_name) else {
         set_error(format!("proxy group not found: {group_name}"));
         return -3;
     };
