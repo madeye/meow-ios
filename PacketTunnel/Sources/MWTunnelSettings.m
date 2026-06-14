@@ -14,29 +14,19 @@
     ipv4.excludedRoutes = [self ipv4LanExcludedRoutes];
     settings.IPv4Settings = ipv4;
 
-    // IPv6 — claimed unconditionally, even on IPv4-only networks. This is
-    // a deliberate sinkhole, not an oversight:
+    // IPv6 — intentionally NOT configured. This tunnel is IPv4-only:
+    // settings.IPv6Settings is left nil, so the TUN claims no IPv6 address
+    // and installs no IPv6 routes.
     //
-    //   * Claiming ::/0 prevents IPv6 leak-around: on a v6-capable network,
-    //     apps would otherwise reach the internet natively over v6,
-    //     bypassing the proxy entirely.
-    //   * It costs nothing on a v4-only network because almost no v6
-    //     traffic enters the TUN: the engine's resolver runs fake-IP with a
-    //     v4-only pool, and meow-dns answers AAAA with NOERROR-empty in
-    //     that configuration, so clients fall back to A / fake-v4 and the
-    //     proxy connects by hostname. Only hardcoded v6 literals (rare)
-    //     ever route in, and those fail fast at the engine's dial.
-    //   * Do NOT make this conditional on path capability: re-applying
-    //     network settings mid-tunnel reasserts the whole payload (fragile —
-    //     see the loopback-route lesson in ipv4LanExcludedRoutes) and
-    //     IPv4↔IPv6 transitions are already handled by the path monitor's
-    //     address-family restart in PacketTunnelProvider.
-    NEIPv6Settings *ipv6 = [[NEIPv6Settings alloc]
-        initWithAddresses:@[@"fdfe:dcba:9876::1"]
-     networkPrefixLengths:@[@126]];
-    ipv6.includedRoutes = @[[NEIPv6Route defaultRoute]];
-    ipv6.excludedRoutes = [self ipv6LanExcludedRoutes];
-    settings.IPv6Settings = ipv6;
+    // Leak-around note: with no ::/0 route claimed, apps on a v6-capable
+    // network could in principle reach the internet natively over IPv6,
+    // bypassing the proxy. In practice meow-dns strips AAAA unconditionally
+    // (fake-IP runs a v4-only pool), so clients fall back to A / fake-v4 and
+    // the proxy connects by hostname. The residual surface is hardcoded v6
+    // literals (rare), which simply fail to reach the proxy.
+    //
+    // IPv4↔IPv6 path transitions are handled by the path monitor's
+    // address-family restart in PacketTunnelProvider.
 
     // DNS
     NEDNSSettings *dns = [[NEDNSSettings alloc] initWithServers:@[@"172.19.0.2"]];
@@ -74,14 +64,6 @@
         // 127/8 intentionally omitted — iOS rejects loopback and drops the whole excludedRoutes payload
         [[NEIPv4Route alloc] initWithDestinationAddress:@"224.0.0.0"     subnetMask:@"240.0.0.0"],
         [[NEIPv4Route alloc] initWithDestinationAddress:@"255.255.255.255" subnetMask:@"255.255.255.255"],
-    ];
-}
-
-+ (NSArray<NEIPv6Route *> *)ipv6LanExcludedRoutes {
-    // ::1/128 intentionally omitted — iOS rejects loopback destinations
-    return @[
-        [[NEIPv6Route alloc] initWithDestinationAddress:@"fe80::" networkPrefixLength:@10],
-        [[NEIPv6Route alloc] initWithDestinationAddress:@"ff00::" networkPrefixLength:@8],
     ];
 }
 

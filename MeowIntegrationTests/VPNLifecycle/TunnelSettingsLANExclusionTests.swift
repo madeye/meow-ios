@@ -93,25 +93,11 @@ final class TunnelSettingsLANExclusionTests: XCTestCase {
         )
     }
 
-    func testMakeAppliesIPv6LANExcludedRoutesInDeclaredOrder() {
-        // fc00::/7 (ULA) is intentionally absent for this iteration. The
-        // tunnel's own fdfe:dcba:9876::/126 sits inside that block, so the
-        // same shadowing risk as 172.16/12 applies. A split ULA exclusion
-        // will land in a follow-up once the v4 narrow fix is confirmed green.
-        let expected: [(String, Int)] = [
-            ("fe80::", 10),
-            ("ff00::", 8),
-        ]
-
+    /// The tunnel is IPv4-only: ipv6Settings must be left nil so the TUN
+    /// claims no IPv6 address and installs no IPv6 routes.
+    func testMakeConfiguresNoIPv6() {
         let settings = TunnelSettings.make(serverAddress: "192.0.2.1")
-        let routes = settings.ipv6Settings?.excludedRoutes ?? []
-
-        XCTAssertEqual(routes.count, expected.count, "excludedRoutes count mismatch")
-        for (index, (address, prefix)) in expected.enumerated() {
-            let route = routes[index]
-            XCTAssertEqual(route.destinationAddress, address, "index \(index) destinationAddress")
-            XCTAssertEqual(route.destinationNetworkPrefixLength.intValue, prefix, "index \(index) prefix length")
-        }
+        XCTAssertNil(settings.ipv6Settings, "tunnel must be IPv4-only; ipv6Settings must stay nil")
     }
 
     func testMakeStillRoutesAllTrafficByDefault() {
@@ -120,9 +106,5 @@ final class TunnelSettingsLANExclusionTests: XCTestCase {
         let ipv4Included = settings.ipv4Settings?.includedRoutes ?? []
         XCTAssertEqual(ipv4Included.count, 1, "catch-all default route should remain")
         XCTAssertEqual(ipv4Included.first?.destinationAddress, "0.0.0.0")
-
-        let ipv6Included = settings.ipv6Settings?.includedRoutes ?? []
-        XCTAssertEqual(ipv6Included.count, 1)
-        XCTAssertEqual(ipv6Included.first?.destinationAddress, "::")
     }
 }

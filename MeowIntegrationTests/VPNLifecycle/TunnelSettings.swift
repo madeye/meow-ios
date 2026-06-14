@@ -32,24 +32,6 @@ enum TunnelSettings {
         ]
     }
 
-    /// IPv6 equivalents: ULA + link-local + loopback + multicast. Computed
-    /// for the same Sendable reason as `ipv4LanExcludedRoutes`.
-    static var ipv6LanExcludedRoutes: [NEIPv6Route] {
-        // TODO: add split ULA (fc00::/7) exclusion back in a follow-up once
-        // the v4 narrow fix is confirmed green. Dropped here to minimise the
-        // diff for the recovery PR — tunnel uses fdfe:dcba:9876::/126, which
-        // sits inside fc00::/7, so the same interface-route shadowing risk
-        // applies until we split this the same way IPv4 is split.
-        // Loopback (::1/128) intentionally omitted: NEIPv6Route validator
-        // rejects loopback destinations and drops the entire settings payload
-        // when present — same failure mode as IPv4 127/8. Kernel handles
-        // loopback host-locally without a TUN exclusion.
-        [
-            route6(address: "fe80::", prefix: 10), // Link-local
-            route6(address: "ff00::", prefix: 8), // Multicast
-        ]
-    }
-
     static func make(serverAddress: String) -> NEPacketTunnelNetworkSettings {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: serverAddress)
 
@@ -58,10 +40,9 @@ enum TunnelSettings {
         ipv4.excludedRoutes = ipv4LanExcludedRoutes
         settings.ipv4Settings = ipv4
 
-        let ipv6 = NEIPv6Settings(addresses: ["fdfe:dcba:9876::1"], networkPrefixLengths: [126])
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        ipv6.excludedRoutes = ipv6LanExcludedRoutes
-        settings.ipv6Settings = ipv6
+        // IPv4-only tunnel: ipv6Settings is intentionally left nil so the TUN
+        // claims no IPv6 address and installs no IPv6 routes. Mirrors
+        // MWTunnelSettings.makeWithServerAddress:.
 
         let dns = NEDNSSettings(servers: ["172.19.0.2"])
         // Leaving matchDomains at its default (nil) — see NEDNSSettings.h,
@@ -76,9 +57,5 @@ enum TunnelSettings {
 
     private static func route(address: String, mask: String) -> NEIPv4Route {
         NEIPv4Route(destinationAddress: address, subnetMask: mask)
-    }
-
-    private static func route6(address: String, prefix: Int) -> NEIPv6Route {
-        NEIPv6Route(destinationAddress: address, networkPrefixLength: NSNumber(value: prefix))
     }
 }
