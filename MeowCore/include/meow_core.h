@@ -211,25 +211,6 @@ void meow_tun_stop(void);
 void meow_tun_stop_blocking(void);
 
 /**
- * Liveness probe for the shared tokio runtime. Spawns a trivial task and
- * waits up to `timeout_ms` for it to execute. Returns 0 if the runtime
- * scheduled it in time, -1 otherwise.
- *
- * A -1 means the worker threads are wedged (deadlock or livelock): the
- * packet path, DNS, and the control API are all dead even though the
- * process looks healthy from outside. The 2026-06-07 on-device incident —
- * leaked lwip timer tasks spinning on a yield-less lock across both
- * workers — presented exactly this way for 8+ minutes until a manual
- * toggle. The Swift watchdog polls this and force-exits the extension on
- * repeated failure, converting any future silent blackout into a visible
- * reconnect.
- *
- * Call from a non-runtime thread only (Swift watchdog queue): the caller
- * blocks on a channel the spawned task signals.
- */
-int meow_tun_runtime_ping(uint64_t timeout_ms);
-
-/**
  * Abort every in-flight TCP flow tracked by tun2socks. Used by the iOS
  * PacketTunnel side when the underlying network interface changes
  * (Wi-Fi → cellular, etc.) and we want to drop stale flows so they
@@ -330,9 +311,10 @@ int meow_tun_udp_first_reply_deadline_ms(void);
  * such accumulation exhausts the accept cap and the tunnel stops
  * passing new TCP flows ("connected but no traffic").
  *
- * Default 300000 ms (5 min, the conventional proxy connection-idle
- * timeout). Pass `0` to disable the sweeper. Negative values are
- * rejected.
+ * Default 600000 ms (10 min). Raised from the conventional 5-min proxy
+ * idle timeout so no-keepalive server-push channels with multi-minute quiet
+ * gaps aren't reaped while alive (2026-06-14 long-lived-TCP audit). Pass `0`
+ * to disable the sweeper. Negative values are rejected.
  *
  * Takes effect on the sweeper's next 30 s tick; no restart needed.
  *

@@ -710,33 +710,6 @@ pub extern "C" fn meow_tun_stop_blocking() {
     tun2socks::stop_blocking();
 }
 
-/// Liveness probe for the shared tokio runtime. Spawns a trivial task and
-/// waits up to `timeout_ms` for it to execute. Returns 0 if the runtime
-/// scheduled it in time, -1 otherwise.
-///
-/// A -1 means the worker threads are wedged (deadlock or livelock): the
-/// packet path, DNS, and the control API are all dead even though the
-/// process looks healthy from outside. The 2026-06-07 on-device incident —
-/// leaked lwip timer tasks spinning on a yield-less lock across both
-/// workers — presented exactly this way for 8+ minutes until a manual
-/// toggle. The Swift watchdog polls this and force-exits the extension on
-/// repeated failure, converting any future silent blackout into a visible
-/// reconnect.
-///
-/// Call from a non-runtime thread only (Swift watchdog queue): the caller
-/// blocks on a channel the spawned task signals.
-#[no_mangle]
-pub extern "C" fn meow_tun_runtime_ping(timeout_ms: u64) -> c_int {
-    let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
-    crate::get_runtime().spawn(async move {
-        let _ = tx.send(());
-    });
-    match rx.recv_timeout(std::time::Duration::from_millis(timeout_ms)) {
-        Ok(()) => 0,
-        Err(_) => -1,
-    }
-}
-
 /// Abort every in-flight TCP flow tracked by tun2socks. Used by the iOS
 /// PacketTunnel side when the underlying network interface changes
 /// (Wi-Fi → cellular, etc.) and we want to drop stale flows so they
