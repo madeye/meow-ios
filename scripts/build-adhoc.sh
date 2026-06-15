@@ -63,9 +63,13 @@ EXPORT_DIR="$ROOT/build/export-adhoc"
 EXPORT_PLIST="$ROOT/build/ExportOptions-adhoc.plist"
 
 # Ad Hoc profiles installed on this Mac (UUIDs from
-# ~/Library/MobileDevice/Provisioning Profiles/)
-APP_PROFILE="${APP_PROFILE:-1530eda1-0fae-4c05-bbae-d07cde47ac39}"
-PT_PROFILE="${PT_PROFILE:-67929e8a-de89-4046-a21a-fad19f92071b}"
+# ~/Library/MobileDevice/Provisioning Profiles/). These must be Ad Hoc
+# profiles for the CURRENT bundle ids (com.tangzixiang.meow[.PacketTunnel])
+# under team 32B45SMMQL — "meow AdHoc" / "meow PT AdHoc". The old UUIDs here
+# were for the retired io.github.madeye.meow ids on team SK4GFF6AHN and made
+# exportArchive fall back to App Store profiles ("not an iOS Ad Hoc profile").
+APP_PROFILE="${APP_PROFILE:-699c208a-87ed-4d21-a5c1-2c4e9ad9a4b9}"
+PT_PROFILE="${PT_PROFILE:-a10c12ac-cbb5-4ec4-bfb4-1208f7c35252}"
 
 # Production team id + ASC key come from prod.env (gitignored, sourced above).
 # The team id is intentionally not committed.

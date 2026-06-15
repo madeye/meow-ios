@@ -62,9 +62,9 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# HEAD: 21ad771e — v0.14.0 main + pub UdpSession::touch/idle_for (merged via
-# meow-rs#212).
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd40413f6ec176b00b1339e3149699d" }
+# HEAD: 619499b5 — fake-ip HTTPS/SVCB dual-stack-correct (ADR-0013, meow-rs#217)
+# on top of the UDP NAT-table shard-guard deadlock fix (1454ef24).
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -72,11 +72,11 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd404
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd40413f6ec176b00b1339e3149699d", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd40413f6ec176b00b1339e3149699d" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd40413f6ec176b00b1339e3149699d" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd40413f6ec176b00b1339e3149699d" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "1454ef24dfd40413f6ec176b00b1339e3149699d" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
 
 [build-dependencies]
 cbindgen = "0.28"
