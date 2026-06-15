@@ -1,0 +1,15 @@
+Build 2026061502 (1.3.2)
+
+更新内容
+• 改进了对 HTTPS / SVCB DNS 记录的处理（现代应用和 Safari 用它来
+  协商 HTTP/3）。fake-IP 模式下对这类记录的处理现在做到了双栈正确，
+  HTTP/3 应用能可靠地解析并经隧道路由，不再会偶尔从记录里读到真实
+  源站地址而绕过代理。
+• 包含上一个版本的全部修复：UDP NAT 死锁修复（"时不时"静默断流）、
+  QUIC/HTTP-3 fake-IP 修复，以及仅 IPv4 隧道。
+
+测试要点
+• 重点测试 HTTP/3 较多的应用和 Safari（小红书、YouTube、Instagram）。
+  页面和媒体应正常加载并保持经代理路由。如果出现无法解析或疑似绕过
+  隧道的情况，请反馈并附上应用名称和大致时间。
+• 问题反馈：https://github.com/madeye/meow-ios/issues

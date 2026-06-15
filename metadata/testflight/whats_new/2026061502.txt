@@ -1,0 +1,18 @@
+Build 2026061502 (1.3.2)
+
+WHAT'S NEW
+• Improved DNS handling of HTTPS / SVCB records (the records modern
+  apps and Safari use to negotiate HTTP/3). Fake-IP handling of these
+  records is now dual-stack-correct, so HTTP/3 apps resolve and route
+  through the tunnel reliably instead of occasionally reading a real
+  origin address out of the record and bypassing the proxy.
+• Includes everything from the previous build: the UDP NAT deadlock
+  fix (silent "from time to time" traffic stalls), the QUIC/HTTP-3
+  fake-IP fix, and the IPv4-only tunnel.
+
+FOR TESTERS
+• Exercise HTTP/3-heavy apps and Safari (Xiaohongshu / RedNote,
+  YouTube, Instagram). Pages and media should load normally and stay
+  routed through the proxy. If anything fails to resolve or appears to
+  bypass the tunnel, please report it with the app and rough time.
+• Issues: https://github.com/madeye/meow-ios/issues
