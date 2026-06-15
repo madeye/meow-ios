@@ -1601,7 +1601,7 @@ checksum = "9106e1d747ffd48e6be5bb2d97fa706ed25b144fbee4d5c02eae110cd8d6badd"
 [[package]]
 name = "lwip"
 version = "0.3.15"
-source = "git+https://github.com/madeye/lwip?rev=1dd61a5bfd9763f7d578a3d3bdaab0dae55cbc00#1dd61a5bfd9763f7d578a3d3bdaab0dae55cbc00"
+source = "git+https://github.com/madeye/lwip?rev=78566b68b453f079cca42860f037de47248ec96e#78566b68b453f079cca42860f037de47248ec96e"
 dependencies = [
  "bindgen 0.69.5",
  "bytes",
