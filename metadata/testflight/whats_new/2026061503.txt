@@ -1,0 +1,1 @@
+Fixes a bug where the VPN could stop passing traffic (no internet) after the device woke from sleep in the background, requiring the app to be reopened to recover. The tunnel now keeps working across background sleep/wake cycles.

@@ -47,7 +47,7 @@ targets:
       properties:
         CFBundleDisplayName: meow
         CFBundleShortVersionString: "1.3.2"
-        CFBundleVersion: "2026061502"
+        CFBundleVersion: "2026061503"
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
@@ -193,7 +193,7 @@ targets:
       properties:
         CFBundleDisplayName: meow Tunnel
         CFBundleShortVersionString: "1.3.2"
-        CFBundleVersion: "2026061502"
+        CFBundleVersion: "2026061503"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: PacketTunnelProvider
