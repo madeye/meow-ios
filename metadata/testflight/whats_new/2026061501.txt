@@ -1,0 +1,19 @@
+Build 2026061501 (1.3.2)
+
+WHAT'S NEW
+• Fixed a freeze where the VPN would silently stop passing traffic
+  "from time to time" — the packet count stopped increasing and the
+  connection had to be toggled off/on to recover. The root cause was a
+  deadlock on the UDP NAT path that wedged the engine whenever a UDP
+  session's upstream had died and the app then sent more data (common
+  with QUIC / HTTP-3 apps).
+• Includes everything from the previous build: the QUIC/HTTP-3 fake-IP
+  fix (Xiaohongshu / RedNote and other HTTP-3 apps) and the IPv4-only
+  tunnel.
+
+FOR TESTERS
+• Use the app normally through network changes and idle periods,
+  especially QUIC-heavy apps (Xiaohongshu / RedNote). Traffic should
+  never silently stall. If you ever have to toggle the VPN to restore
+  traffic, please report it with roughly when it happened.
+• Issues: https://github.com/madeye/meow-ios/issues
