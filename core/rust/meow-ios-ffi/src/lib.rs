@@ -52,13 +52,27 @@ static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 pub(crate) fn get_runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
-        // Two worker threads to allow CPU-bound bursts (TLS handshake + DoH +
-        // serde) to overlap while keeping RSS in check under jetsam's 50 MB cap.
-        // Stack capped at 512 KB (default is 2 MB) — sufficient for async leaf
-        // tasks that don't recurse deeply.
+        // Four worker threads. Raised from two: the lwIP netstack is
+        // serialized by a single spinning `LWIP_MUTEX`, and with only two
+        // workers a contender that spins on it (via `std::thread::yield_now`,
+        // which yields the OS thread but not the tokio scheduler) can starve
+        // the lock holder under a startup connection burst, wedging the whole
+        // runtime. More workers widen that window so a stuck pair can't halt
+        // all forward progress.
+        //
+        // Stack size is 1 MiB (tokio's default is 2 MiB). This is a *virtual*
+        // limit, not a resident allocation: Darwin demand-pages thread stacks,
+        // so RSS tracks the deepest poll actually executed, not the cap — a
+        // bigger cap costs no memory unless the code genuinely recurses into
+        // it. The previous 512 KiB cap therefore saved no RSS while risking a
+        // stack-overflow crash on the deepest real frames: a BoringSSL/rustls
+        // handshake (100–200 KiB on its own) nested inside a multi-layer
+        // transport chain (e.g. VLESS-over-WS-over-TLS-over-ECH) plus the
+        // relay's `copy_bidirectional` combinator frames. 1 MiB gives
+        // comfortable headroom over that worst case while staying conservative.
         tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .thread_stack_size(512 * 1024)
+            .worker_threads(4)
+            .thread_stack_size(1024 * 1024)
             .enable_all()
             .build()
             .expect("failed to create tokio runtime")
