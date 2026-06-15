@@ -28,6 +28,17 @@ public enum AppGroup {
         containerURL.appending(path: "state.json")
     }
 
+    /// Active file of the always-on debug ring the engine (`file_log.rs`) and
+    /// the NE host (`MWEngineLog`) write while the tunnel runs. The app can't
+    /// read the extension's `OSLogStore`, so this shared file is how the in-app
+    /// log export includes the tunnel's own output. A `.1`-suffixed sibling
+    /// holds the previous rotation. The engine derives this same path from
+    /// `meow_core_set_home_dir(containerURL)` + `logs/meow-tunnel.log`.
+    public static var tunnelLogURL: URL {
+        containerURL.appending(path: "logs", directoryHint: .isDirectory)
+            .appending(path: "meow-tunnel.log")
+    }
+
     public static var trafficURL: URL {
         containerURL.appending(path: "traffic.json")
     }
@@ -73,6 +84,9 @@ public enum AppGroup {
         // The REST-API credentials are a per-install secret regenerated on
         // demand — never sync them to iCloud.
         setBackupExclusion(apiCredentialsURL, excluded: true)
+        // Transient diagnostic ring, rewritten every run — never back it up.
+        setBackupExclusion(tunnelLogURL, excluded: true)
+        setBackupExclusion(tunnelLogURL.appendingPathExtension("1"), excluded: true)
     }
 
     private static func setBackupExclusion(_ url: URL, excluded: Bool) {

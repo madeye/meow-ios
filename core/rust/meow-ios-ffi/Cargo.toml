@@ -32,7 +32,13 @@ dashmap = "6"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# `fmt` powers the App Group file-log layer (file_log.rs); `env-filter` is the
+# pre-existing broadcast/oslog filter surface.
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+# Off-hot-path, bounded, lossy file writer for the always-on debug ring. The
+# worker thread keeps the wedge-prone tokio workers off disk I/O so a livelock
+# never blocks on logging (see project_lwip_timer_livelock).
+tracing-appender = "0.2"
 log = "0.4"
 oslog = { version = "0.2", default-features = false, features = ["logger"] }
 

@@ -5,6 +5,7 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWDiagnosticsRunner.h"
+#import "MWEngineLog.h"
 #import "meow_core.h"
 #import <os/log.h>
 #import <mach/mach.h>
@@ -49,6 +50,7 @@ static os_log_t gLog;
 - (void)startTunnelWithOptions:(NSDictionary<NSString *, NSObject *> *)options
              completionHandler:(void (^)(NSError *))completionHandler {
     os_log_info(gLog, "startTunnel");
+    MWEngineLog(MWLogInfo, @"NE: startTunnel");
 
     NSString *server  = self.protocolConfiguration.serverAddress ?: @"192.0.2.1";
     NSString *profileID = (NSString *)options[@"profileID"];
@@ -68,6 +70,8 @@ static os_log_t gLog;
             NSError *startErr = nil;
             if (![engine startWithError:&startErr]) {
                 os_log_error(gLog, "engine start failed: %{public}@",
+                             startErr.localizedDescription);
+                MWEngineLogf(MWLogError, @"NE: engine start failed: %@",
                              startErr.localizedDescription);
                 [self writeState:@"error" profileID:nil
                     errorMessage:startErr.localizedDescription];
@@ -96,6 +100,7 @@ static os_log_t gLog;
 - (void)stopTunnelWithReason:(NEProviderStopReason)reason
            completionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "stopTunnel reason=%ld", (long)reason);
+    MWEngineLogf(MWLogInfo, @"NE: stopTunnel reason=%ld", (long)reason);
     [self stopPathMonitor];
     [_engine stop];
     _engine = nil;
@@ -107,6 +112,7 @@ static os_log_t gLog;
 
 - (void)sleepWithCompletionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "sleep: suspending tun to shed memory before device sleep");
+    MWEngineLog(MWLogInfo, @"NE: sleep — suspending tun before device sleep");
     if (!_tunControlQueue) {
         completionHandler();
         return;
@@ -120,6 +126,7 @@ static os_log_t gLog;
 
 - (void)wake {
     os_log_info(gLog, "wake: resuming tun");
+    MWEngineLog(MWLogInfo, @"NE: wake — resuming tun");
     if (!_tunControlQueue) return;
     dispatch_async(_tunControlQueue, ^{
         [self->_engine resumeTun];
@@ -365,9 +372,12 @@ static os_log_t gLog;
     BOOL meaningful = NO;
     if (satisfied && !_lastSatisfied) {
         os_log_info(gLog, "path: connectivity regained");
+        MWEngineLog(MWLogInfo, @"NE: path — connectivity regained");
         meaningful = YES;
     } else if (satisfied && iface != _lastInterfaceType) {
         os_log_info(gLog, "path: interface changed %d -> %d", _lastInterfaceType, iface);
+        MWEngineLogf(MWLogInfo, @"NE: path — interface changed %d -> %d",
+                     _lastInterfaceType, iface);
         meaningful = YES;
     } else if (satisfied && (hasIPv4 != _lastHasIPv4 || hasIPv6 != _lastHasIPv6)) {
         // Same interface, same satisfied state, but the address-family set
@@ -378,6 +388,8 @@ static os_log_t gLog;
         // reaps them, while the tunnel still reports "connected".
         os_log_info(gLog, "path: address family changed v4 %d -> %d, v6 %d -> %d",
                     _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
+        MWEngineLogf(MWLogInfo, @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d",
+                     _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
         meaningful = YES;
     }
 
@@ -433,6 +445,7 @@ static os_log_t gLog;
     // a wake-time resume racing a path-change restart on _pathQueue can
     // otherwise interleave MWTunnelEngine's non-atomic _tunStarted checks.
     os_log_info(gLog, "path: restarting tun2socks on network change");
+    MWEngineLog(MWLogInfo, @"NE: path — restarting tun2socks on network change");
     dispatch_async(_tunControlQueue, ^{
         [self->_engine suspendTun];
         [self->_engine resumeTun];

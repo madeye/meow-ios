@@ -24,6 +24,7 @@
 
 mod diagnostics;
 mod engine;
+mod file_log;
 mod logging;
 pub mod rss;
 mod subscription;
@@ -122,6 +123,30 @@ pub extern "C" fn meow_core_init() {
     logging::init_os_logger();
     logging::install_panic_hook();
     logging::bridge_log("meow_core_init: os_log initialized");
+}
+
+/// Emit a log line from the NetworkExtension host (ObjC) into the same tracing
+/// pipeline the engine uses, so NE lifecycle events — start/stop, sleep/wake,
+/// `reasserting`, errors — land in the App Group file log (and os_log, and the
+/// REST `/logs` stream) interleaved with engine output on one timeline.
+///
+/// `level`: 0 = error, 1 = warn, 2 = info, 3 = debug, 4 = trace; anything else
+/// is treated as info. No-op on a NULL or non-UTF-8 `msg`.
+///
+/// # Safety
+/// `msg` must point to a NUL-terminated UTF-8 string or be NULL.
+#[no_mangle]
+pub unsafe extern "C" fn meow_core_log(level: c_int, msg: *const c_char) {
+    let Some(text) = cstr_to_str(msg) else {
+        return;
+    };
+    match level {
+        0 => tracing::error!(target: "ne", "{}", text),
+        1 => tracing::warn!(target: "ne", "{}", text),
+        3 => tracing::debug!(target: "ne", "{}", text),
+        4 => tracing::trace!(target: "ne", "{}", text),
+        _ => tracing::info!(target: "ne", "{}", text),
+    }
 }
 
 /// Set the app-group container path where config.yaml and cache files live.

@@ -264,9 +264,15 @@ fn install_tracing_subscriber() {
         // tracing cycle that blows the stack on the first event. We want
         // exactly one direction: tracing → log. The `log` global stays
         // owned by `oslog::OsLogger` (installed in `meow_core_init`).
+        // Always-on DEBUG ring teed to <app-group>/logs/meow-tunnel.log so the
+        // in-app log export can include the tunnel's own output (the engine and
+        // NE host run in a different process than the app, whose OSLogStore can
+        // only read its own PID). `Option<Layer>` is itself a `Layer`, so this
+        // is a no-op when no home dir is set yet or the file won't open.
         let subscriber = tracing_subscriber::registry()
             .with(LogForwardLayer)
-            .with(log_layer);
+            .with(log_layer)
+            .with(crate::file_log::layer());
         let _ = tracing::subscriber::set_global_default(subscriber);
     });
 }

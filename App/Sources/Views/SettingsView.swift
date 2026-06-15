@@ -189,10 +189,56 @@ struct SettingsView: View {
     private func exportLogs() async {
         exportingLogs = true
         defer { exportingLogs = false }
-        let text = await Task.detached { collectOSLogs() }.value
+        let text = await Task.detached { collectCombinedLogs() }.value
         logExportDocument = LogExportDocument(text: text)
         showingLogExporter = true
     }
+}
+
+/// Combine the app's own unified-log entries with the packet-tunnel + engine
+/// file log. The two live in different processes: the app can only read its own
+/// PID via `OSLogStore`, so the tunnel's output is captured to a shared App
+/// Group file by the engine (`file_log.rs`) and the NE host (`MWEngineLog`).
+private func collectCombinedLogs() -> String {
+    """
+    ===== App process — OSLog, last hour =====
+    \(collectOSLogs())
+
+    ===== Packet Tunnel + engine — \(AppGroup.tunnelLogURL.lastPathComponent) =====
+    \(collectTunnelFileLog())
+    """
+}
+
+/// Read the App Group tunnel log ring (rotated file first, then the active
+/// file) and return its tail, capped so the export stays manageable. Reads on a
+/// background queue; failures degrade to an explanatory line rather than
+/// throwing.
+private func collectTunnelFileLog() -> String {
+    // Cap the exported tail. The on-disk ring is larger (file_log.rs), but the
+    // most recent window is what matters for a freeze post-mortem.
+    let maxBytes = 512 * 1024
+    var data = Data()
+    if let rotated = try? Data(contentsOf: AppGroup.tunnelLogURL.appendingPathExtension("1")) {
+        data.append(rotated)
+    }
+    if let active = try? Data(contentsOf: AppGroup.tunnelLogURL) {
+        data.append(active)
+    }
+    if data.isEmpty {
+        return """
+        No packet-tunnel log file at \(AppGroup.tunnelLogURL.path).
+        Connect the tunnel at least once — the engine writes this file while running.
+        """
+    }
+    if data.count > maxBytes {
+        data = data.suffix(maxBytes)
+    }
+    // Lossy decode is deliberate: the byte-cap suffix can slice mid-UTF8, and
+    // the failable `String(bytes:encoding:)` would return nil — dropping the
+    // entire tail — whereas this preserves it, substituting U+FFFD for the one
+    // truncated codepoint at the boundary.
+    // swiftlint:disable:next optional_data_string_conversion
+    return String(decoding: data, as: UTF8.self)
 }
 
 private func collectOSLogs() -> String {

@@ -25,6 +25,20 @@ typedef void (*MeowWritePacket)(void *ctx, const uint8_t *data, uintptr_t len);
 void meow_core_init(void);
 
 /**
+ * Emit a log line from the NetworkExtension host (ObjC) into the same tracing
+ * pipeline the engine uses, so NE lifecycle events — start/stop, sleep/wake,
+ * `reasserting`, errors — land in the App Group file log (and os_log, and the
+ * REST `/logs` stream) interleaved with engine output on one timeline.
+ *
+ * `level`: 0 = error, 1 = warn, 2 = info, 3 = debug, 4 = trace; anything else
+ * is treated as info. No-op on a NULL or non-UTF-8 `msg`.
+ *
+ * # Safety
+ * `msg` must point to a NUL-terminated UTF-8 string or be NULL.
+ */
+void meow_core_log(int level, const char *msg);
+
+/**
  * Set the app-group container path where config.yaml and cache files live.
  * `dir` may be NULL or empty.
  *

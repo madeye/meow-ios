@@ -105,6 +105,7 @@
 		C1187CD2F55A4E1F99C1FB54 /* GeoAssetStager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */; };
 		C12A1DC80F02BF9348895EAF /* MWPreferences.m in Sources */ = {isa = PBXBuildFile; fileRef = 468AB5369E33BCD92920CF52 /* MWPreferences.m */; };
 		C3D8E6DA3FF3FD5ADB35CB44 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 0F003FBFB707CEEDEE53316F /* Yams */; };
+		C58EE1AF7B24B7192EB4E258 /* MWEngineLog.m in Sources */ = {isa = PBXBuildFile; fileRef = FA317DD319BE5DA6206036F1 /* MWEngineLog.m */; };
 		C7B7EACD6297D7AA66065602 /* RulesYAMLEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2BB9ECB4E5C46D70B0CE6B2 /* RulesYAMLEditorTests.swift */; };
 		CADE5E260230B0FEB1F6786C /* MWTunnelSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = E8B56935362D1576450CB4A3 /* MWTunnelSettings.m */; };
 		CF37C3706513F515FED5B6FC /* SettingsScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD1BBDA36A305FAAF4B003E /* SettingsScreenTests.swift */; };
@@ -261,6 +262,7 @@
 		B807F37D85605FF0AD1427F5 /* MeowCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MeowCore.xcframework; path = MeowCore/Frameworks/MeowCore.xcframework; sourceTree = "<group>"; };
 		BC43530025FE948C50C6C78E /* ConnectionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsTests.swift; sourceTree = "<group>"; };
 		BC8D42838BD27620D7F278DE /* RulesEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesEditorView.swift; sourceTree = "<group>"; };
+		BCEC443073450BDC4FC7E1D3 /* MWEngineLog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWEngineLog.h; sourceTree = "<group>"; };
 		C2BB9ECB4E5C46D70B0CE6B2 /* RulesYAMLEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesYAMLEditorTests.swift; sourceTree = "<group>"; };
 		C2BE1F013E2C0B2B1E591FEA /* MWDiagnosticsRunner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWDiagnosticsRunner.h; sourceTree = "<group>"; };
 		C840E453765151986763DE2B /* ChinaDirectKeywordsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinaDirectKeywordsTests.swift; sourceTree = "<group>"; };
@@ -287,6 +289,7 @@
 		F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashConfigLinter.swift; sourceTree = "<group>"; };
 		F58373225092C298E65BB090 /* geosite.mrs */ = {isa = PBXFileReference; path = geosite.mrs; sourceTree = "<group>"; };
 		F73DB7377F110302EA3E8B4B /* clash_emoji_groups_realworld.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_emoji_groups_realworld.yaml; sourceTree = "<group>"; };
+		FA317DD319BE5DA6206036F1 /* MWEngineLog.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWEngineLog.m; sourceTree = "<group>"; };
 		FA64C2503B8306CC64B9D23D /* MeowCoreBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowCoreBridgeTests.swift; sourceTree = "<group>"; };
 		FB11E2BC5612E27CCE83B0DC /* TunnelLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelLifecycleTests.swift; sourceTree = "<group>"; };
 		FC654683AAE620AA9C1DCEBF /* TunBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunBridgeTests.swift; sourceTree = "<group>"; };
@@ -711,6 +714,8 @@
 				24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */,
 				C2BE1F013E2C0B2B1E591FEA /* MWDiagnosticsRunner.h */,
 				1CCF322677C8A124E9D9107D /* MWDiagnosticsRunner.m */,
+				BCEC443073450BDC4FC7E1D3 /* MWEngineLog.h */,
+				FA317DD319BE5DA6206036F1 /* MWEngineLog.m */,
 				48057A73B8C1C158EB155986 /* MWIPCListener.h */,
 				329B260F122D91D5DDB24C44 /* MWIPCListener.m */,
 				8D0911E3BAFED1B94903FE31 /* MWPacketWriter.h */,
@@ -1041,6 +1046,7 @@
 				684752187B329EEE17E6EA1C /* MWAppGroup.m in Sources */,
 				9059DE28A7DEE52FCF194DC3 /* MWDarwinBridge.m in Sources */,
 				889A7F885031B01EE2D4ABCE /* MWDiagnosticsRunner.m in Sources */,
+				C58EE1AF7B24B7192EB4E258 /* MWEngineLog.m in Sources */,
 				4F29B935B393F48182AC7CE4 /* MWIPCListener.m in Sources */,
 				B85AC5CED1BCB971FB7C16DB /* MWPacketWriter.m in Sources */,
 				C12A1DC80F02BF9348895EAF /* MWPreferences.m in Sources */,

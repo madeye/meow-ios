@@ -4,6 +4,7 @@
 #import "MWPacketWriter.h"
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
+#import "MWEngineLog.h"
 #import "meow_core.h"
 #import <stdatomic.h>
 #import <os/log.h>
@@ -179,6 +180,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     _tunStarted = NO;
 
     os_log_info(gLog, "engine: tun suspended (engine still running)");
+    MWEngineLog(MWLogInfo, @"NE: tun suspended (engine still running)");
 }
 
 - (void)resumeTun {
@@ -189,6 +191,8 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     if (rc != 0) {
         os_log_error(gLog, "engine: tun resume failed: %{public}@",
                      [self lastRustError] ?: @"unknown");
+        MWEngineLogf(MWLogError, @"NE: tun resume failed: %@",
+                     [self lastRustError] ?: @"unknown");
         return;
     }
     _tunStarted = YES;
@@ -196,6 +200,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     [self startIngressLoop];
     [self startTrafficPump];
     os_log_info(gLog, "engine: tun resumed");
+    MWEngineLog(MWLogInfo, @"NE: tun resumed");
 }
 
 // MARK: - Engine state
