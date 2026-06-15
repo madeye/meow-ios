@@ -130,4 +130,4 @@ panic = "abort"
 # Upstream all of this to https://github.com/ssrlive/lwip and drop the
 # patch once a fixed release ships.
 [patch.crates-io]
-lwip = { git = "https://github.com/madeye/lwip", rev = "dab00c540cf0606fee14ddd99cfa6ec79d33681d" }
+lwip = { git = "https://github.com/madeye/lwip", rev = "1dd61a5bfd9763f7d578a3d3bdaab0dae55cbc00" }
