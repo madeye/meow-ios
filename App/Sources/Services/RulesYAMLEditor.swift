@@ -4,9 +4,9 @@ import Yams
 /// Read + write the `rules:` block of a Clash YAML config without touching
 /// any other top-level keys, comments aside (Yams round-trips through a
 /// model so trailing-comment fidelity is lost — that's a documented
-/// limitation, not unique to this editor; `EffectiveConfigWriter` already
-/// performs the same Yams round-trip on the same source YAML and the
-/// shipping behaviour treats that as acceptable).
+/// limitation, not unique to this editor; the config patcher already performs
+/// the same YAML round-trip on the same source YAML and the shipping behaviour
+/// treats that as acceptable).
 ///
 /// Each rule in the YAML is a single string, either:
 ///
@@ -41,8 +41,8 @@ enum RulesYAMLEditor {
     /// the rewritten YAML. Other top-level keys are preserved.
     ///
     /// Stable key ordering (`sortKeys: true`) matches what
-    /// `EffectiveConfigWriter.patch` already does so the on-disk effective
-    /// config diffs cleanly across edits.
+    /// the config patcher already does so the on-disk effective config diffs
+    /// cleanly across edits.
     static func apply(_ rules: [EditableRule], to sourceYAML: String) throws -> String {
         let loaded = try Yams.load(yaml: sourceYAML)
         var root: [String: Any] = (loaded as? [String: Any]) ?? [:]

@@ -2,7 +2,7 @@ import Foundation
 
 /// Payload used between the app and the PacketTunnel extension's
 /// `handleAppMessage` for proxy-control mutations that today round-trip
-/// through `PUT http://127.0.0.1:9090/proxies/{group}`. Routing the call
+/// through `PUT /proxies/{group}` on the loopback REST API. Routing the call
 /// through `sendProviderMessage` lets the extension invoke the
 /// `meow_proxy_select` FFI directly against meow-rs's `SelectorGroup`
 /// in-process, which:
@@ -10,10 +10,10 @@ import Foundation
 ///   1. eliminates the loopback HTTP hop and the URL percent-encoding /
 ///      Unicode-normalization step that breaks emoji-named groups (e.g.
 ///      `🚀 节点选择`),
-///   2. removes the need to expose meow's `external-controller` on
-///      `127.0.0.1:9090` solely for the picker, and
-///   3. drops the apiSecret as the only thing standing between any
-///      process on-device and a privileged mutation.
+///   2. removes the need to use meow's `external-controller` solely for the
+///      picker, and
+///   3. avoids treating the REST bearer token as the only thing standing
+///      between any process on-device and a privileged mutation.
 ///
 /// Tag dispatch matches the `DiagnosticsIPC` convention — the extension
 /// has a single `handleAppMessage` entry point, so the first byte routes

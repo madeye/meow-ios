@@ -42,7 +42,7 @@ struct ConnectionsTests {
         //   ConnectionsResponse { downloadTotal, uploadTotal, connections: [Connection]? }
         //   Connection { id, metadata: Metadata, upload, download, start, chains, rule, rulePayload }
         //
-        // Stub `http://127.0.0.1:9090/connections` with one entry, assert:
+        // Stub `http://127.0.0.1:<port>/connections` with one entry, assert:
         //   - `resp.connections?.count == 1`
         //   - first connection's `metadata.host` and `metadata.destinationPort` round-trip
         //   - `chains` decodes as ordered array (reversed in the view)

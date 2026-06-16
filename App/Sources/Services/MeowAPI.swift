@@ -4,8 +4,8 @@ import NetworkExtension
 import os
 
 /// REST client for the meow external-controller that runs inside the
-/// packet-tunnel extension on `127.0.0.1:9090`. The URLSession requests are
-/// issued from the main app process; iOS routes loopback traffic correctly
+/// packet-tunnel extension on a random loopback port. The URLSession requests
+/// are issued from the main app process; iOS routes loopback traffic correctly
 /// even when the tunnel is active.
 @Observable
 final class MeowAPI: @unchecked Sendable {
@@ -36,7 +36,7 @@ final class MeowAPI: @unchecked Sendable {
     }
 
     init(
-        port: Int = 9090,
+        port: Int = 0,
         secret: String = "",
         session: URLSession = .shared,
     ) {
@@ -48,7 +48,7 @@ final class MeowAPI: @unchecked Sendable {
     /// Point the client at the port/secret the engine actually bound. On a
     /// fresh install the credential file doesn't exist when this client is
     /// first constructed (no tunnel has started), so the initial instance
-    /// holds the 9090/empty fallback; once the extension mints credentials on
+    /// is intentionally unconfigured; once the extension mints credentials on
     /// connect, the app calls this to retarget before issuing requests.
     /// No-op when `port`/`secret` are unchanged.
     func updateCredentials(port: Int, secret: String) {

@@ -48,6 +48,9 @@ use std::time::Duration;
 static ENGINE_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static TUN2SOCKS_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
+const TOKIO_RUNTIME_WORKERS: usize = 2;
+const TOKIO_RUNTIME_STACK_SIZE: usize = 1024 * 1024;
+
 fn build_runtime(
     name: &'static str,
     worker_threads: usize,
@@ -73,7 +76,11 @@ pub(crate) fn get_engine_runtime() -> &'static tokio::runtime::Runtime {
         // so RSS tracks the deepest poll actually executed, not the cap. The
         // deeper real frames are on this runtime: BoringSSL/rustls handshakes
         // inside layered transports plus relay combinator frames.
-        build_runtime("meow-engine", 2, 1024 * 1024)
+        build_runtime(
+            "meow-engine",
+            TOKIO_RUNTIME_WORKERS,
+            TOKIO_RUNTIME_STACK_SIZE,
+        )
     })
 }
 
@@ -82,13 +89,11 @@ pub(crate) fn get_tun2socks_runtime() -> &'static tokio::runtime::Runtime {
         // Tun2socks owns packet ingress/egress, lwIP stack driving, and
         // accept-loop bookkeeping. It deliberately does not run meow proxy
         // dials or REST/API tasks.
-        //
-        // Four worker threads: the lwIP netstack is serialized by a spinning
-        // `LWIP_MUTEX`, and with only two workers a contender that spins on it
-        // can starve the lock holder under a startup connection burst. More
-        // workers widen that window so a stuck pair can't halt all tun2socks
-        // progress.
-        build_runtime("meow-tun2socks", 4, 1024 * 1024)
+        build_runtime(
+            "meow-tun2socks",
+            TOKIO_RUNTIME_WORKERS,
+            TOKIO_RUNTIME_STACK_SIZE,
+        )
     })
 }
 
@@ -556,14 +561,22 @@ fn api_credentials() -> (u16, String) {
         }
     }
 
-    let port = random_port();
-    let secret = random_hex_32();
+    let port = available_loopback_port().unwrap_or_else(random_port);
+    let secret = random_hex_64();
 
     if let Some(ref p) = path {
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         let body = serde_json::json!({ "port": port, "secret": secret }).to_string();
-        // Best-effort persist; if it fails we still return the freshly-minted
-        // pair so this engine start is authenticated.
-        let _ = std::fs::write(p, body);
+        let tmp = p.with_extension("json.tmp");
+        // Best-effort atomic persist; if it fails we still return the freshly
+        // minted pair so this engine start is authenticated.
+        if std::fs::write(&tmp, &body).is_ok() {
+            let _ = std::fs::rename(&tmp, p);
+        } else {
+            let _ = std::fs::write(p, body);
+        }
     }
 
     (port, secret)
@@ -579,20 +592,29 @@ fn os_random(buf: &mut [u8]) {
     f.read_exact(buf).expect("/dev/urandom read must succeed");
 }
 
-/// 16 random bytes of OS entropy, hex-encoded — a 128-bit bearer secret.
-fn random_hex_32() -> String {
-    let mut buf = [0u8; 16];
+/// 32 random bytes of OS entropy, hex-encoded — a 256-bit bearer secret.
+fn random_hex_64() -> String {
+    let mut buf = [0u8; 32];
     os_random(&mut buf);
-    let mut s = String::with_capacity(32);
+    let mut s = String::with_capacity(64);
     for b in buf {
         s.push_str(&format!("{b:02x}"));
     }
     s
 }
 
+/// Ask the OS for an available loopback port. The socket is dropped before
+/// meow-api binds, so this is not a hard reservation, but it avoids minting a
+/// credential for a port already in use at patch time.
+fn available_loopback_port() -> Option<u16> {
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).ok()?;
+    listener.local_addr().ok().map(|addr| addr.port())
+}
+
 /// A random port in the IANA dynamic/ephemeral range (49152–65535), drawn from
-/// OS entropy. Persisted, so it's stable across launches but not the
-/// well-known 9090.
+/// OS entropy. Fallback only; normally `available_loopback_port` lets the OS
+/// choose a currently free loopback port. Persisted, so it's stable across
+/// launches but not the well-known 9090.
 fn random_port() -> u16 {
     let mut buf = [0u8; 2];
     os_random(&mut buf);
@@ -1078,5 +1100,40 @@ rules:
         assert!(patched.contains("bind-address: 0.0.0.0"));
         assert!(patched.contains("listen: 0.0.0.0:1054"));
         assert!(!patched.contains("subscriptions:"));
+    }
+
+    #[test]
+    fn patch_config_hardens_rest_api_with_random_port_and_secret() {
+        let patched = patch_config(
+            r#"
+external-controller: 127.0.0.1:9090
+secret: user-provided
+proxies: []
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+        let root = doc.as_mapping().expect("mapping root");
+        let controller = root
+            .get(serde_yaml::Value::String("external-controller".into()))
+            .and_then(serde_yaml::Value::as_str)
+            .expect("external-controller");
+        let port = controller
+            .strip_prefix("127.0.0.1:")
+            .expect("loopback controller")
+            .parse::<u16>()
+            .expect("controller port");
+        assert_ne!(port, 9090);
+        assert!(port > 0);
+
+        let secret = root
+            .get(serde_yaml::Value::String("secret".into()))
+            .and_then(serde_yaml::Value::as_str)
+            .expect("secret");
+        assert_ne!(secret, "user-provided");
+        assert_eq!(secret.len(), 64);
+        assert!(secret.bytes().all(|b| b.is_ascii_hexdigit()));
     }
 }

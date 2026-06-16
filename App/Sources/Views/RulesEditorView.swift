@@ -5,9 +5,8 @@ import SwiftUI
 /// Structured rules editor. Presented as a sheet from `RulesView`.
 ///
 /// Reads the `rules:` block out of the active `Profile.yamlContent` (the
-/// source of truth — what the engine actually loads via
-/// `EffectiveConfigWriter`), exposes Add / Delete / Reorder / per-row
-/// editing, validates the rewritten YAML through the FFI's
+/// source of truth before the extension patches it for engine startup),
+/// exposes Add / Delete / Reorder / per-row editing, validates the rewritten YAML through the FFI's
 /// `MeowConfigValidator`, persists back to the Profile, and writes the
 /// active config so the engine picks it up on next start.
 ///

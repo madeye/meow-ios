@@ -199,7 +199,7 @@ static os_log_t gLog;
     //
     //   { "select": { "group": "🚀 …", "name": "🇭🇰 01" } }
     //
-    // Replaces `PUT http://127.0.0.1:9090/proxies/{group}` with a direct
+    // Replaces `PUT /proxies/{group}` on the loopback REST API with a direct
     // call into the in-process selector — no loopback hop, no URL
     // percent-encoding step that breaks emoji / CJK / space-bearing
     // group names.

@@ -8,7 +8,7 @@ import Foundation
 /// ```
 /// let config = URLSessionConfiguration.ephemeral
 /// config.protocolClasses = [URLProtocolStub.self]
-/// URLProtocolStub.responses[URL(string: "http://127.0.0.1:9090/version")!] =
+/// URLProtocolStub.responses[URL(string: "http://127.0.0.1:<port>/version")!] =
 ///     .init(statusCode: 200, body: Data(#"{"version":"test"}"#.utf8))
 /// let session = URLSession(configuration: config)
 /// ```

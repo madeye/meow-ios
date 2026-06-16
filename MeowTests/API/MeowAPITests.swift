@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// Covers the `URLSession`-based client pointed at `http://127.0.0.1:9090`.
+/// Covers the `URLSession`-based client pointed at the engine's loopback REST API.
 /// Tests use `URLProtocolStub` (see `MeowTests/Support/URLProtocolStub.swift`)
 /// to inject canned responses.
 @Suite("MeowAPI REST client", .tags(.api))

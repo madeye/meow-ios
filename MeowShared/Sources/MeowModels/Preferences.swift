@@ -11,7 +11,6 @@ public enum PreferenceKey {
     public static let blockHTTP3 = "com.meow.blockHTTP3"
     public static let pendingIntent = "com.meow.pendingIntent"
     public static let selectedProfileID = "com.meow.selectedProfileID"
-    public static let apiSecret = "com.meow.apiSecret"
 }
 
 public enum PreferenceDefaults {

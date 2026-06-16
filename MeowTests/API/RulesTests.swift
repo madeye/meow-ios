@@ -30,7 +30,7 @@ struct RulesTests {
         //   RulesResponse { rules: [Rule] }
         //   Rule { type, payload, proxy, id: "\(type)\(payload)\(proxy)" }
         //
-        // Stub `http://127.0.0.1:9090/rules` with a three-entry mix of
+        // Stub `http://127.0.0.1:<port>/rules` with a three-entry mix of
         // DOMAIN-SUFFIX / GEOIP / MATCH rules; assert each decodes and
         // `rule.id` is unique across the list (RulesView relies on
         // Identifiable for ForEach).

@@ -116,8 +116,7 @@ extension Tag {
 /// Scratch directory + minimal valid Clash YAML for boot tests. Uses
 /// non-default ports to avoid colliding with a real meow instance on
 /// the same host; `mixed-port` and `external-controller` are both
-/// picked well outside the 7890/9090 defaults the extension uses in
-/// production.
+/// picked well outside the extension-patched production ranges.
 private struct EngineFixture {
     let homeDir: String
     let configPath: String

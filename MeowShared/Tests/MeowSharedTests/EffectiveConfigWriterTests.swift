@@ -5,6 +5,19 @@ import Yams
 
 @Suite("EffectiveConfigWriter")
 struct EffectiveConfigWriterTests {
+    private static let apiCredentials = EffectiveConfigWriter.APICredentials(
+        port: 54321,
+        secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    )
+
+    private func patch(_ sourceYAML: String, prefs: Preferences = Preferences()) throws -> String {
+        try EffectiveConfigWriter.patch(
+            sourceYAML: sourceYAML,
+            prefs: prefs,
+            apiCredentials: Self.apiCredentials,
+        )
+    }
+
     @Test
     func `replaces dns and strips subscriptions top-level block`() throws {
         let source = """
@@ -22,7 +35,7 @@ struct EffectiveConfigWriterTests {
             cipher: aes-256-gcm
             password: p
         """
-        let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: Preferences())
+        let out = try patch(source)
         #expect(!out.contains("subscriptions:"))
         #expect(out.contains("proxies:"))
         let parsed = try Yams.load(yaml: out) as? [String: Any]
@@ -32,7 +45,7 @@ struct EffectiveConfigWriterTests {
     }
 
     @Test
-    func `strips secret so REST API runs open on loopback`() throws {
+    func `overrides secret so REST API requires bearer token`() throws {
         let source = """
         secret: "deadbeef-token"
         proxies:
@@ -43,9 +56,9 @@ struct EffectiveConfigWriterTests {
             cipher: aes-256-gcm
             password: p
         """
-        let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: Preferences())
+        let out = try patch(source)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
-        #expect(parsed?["secret"] == nil)
+        #expect(parsed?["secret"] as? String == Self.apiCredentials.secret)
         #expect(out.contains("proxies:"))
     }
 
@@ -54,7 +67,7 @@ struct EffectiveConfigWriterTests {
         let source = "proxies: []\n"
         var prefs = Preferences()
         prefs.mixedPort = 17890
-        let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: prefs)
+        let out = try patch(source, prefs: prefs)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["mixed-port"] as? Int == 17890)
     }
@@ -63,7 +76,7 @@ struct EffectiveConfigWriterTests {
     func `pins allow-lan and bind-address from preferences`() throws {
         var prefs = Preferences()
         prefs.allowLan = true
-        let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: prefs)
+        let out = try patch("proxies: []\n", prefs: prefs)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         let dns = parsed?["dns"] as? [String: Any]
         #expect(parsed?["allow-lan"] as? Bool == true)
@@ -75,21 +88,21 @@ struct EffectiveConfigWriterTests {
     func `defaults mixed-port to 7890 when preference is zero`() throws {
         var prefs = Preferences()
         prefs.mixedPort = 0
-        let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: prefs)
+        let out = try patch("proxies: []\n", prefs: prefs)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["mixed-port"] as? Int == 7890)
     }
 
     @Test
-    func `pins external-controller to loopback:9090`() throws {
-        let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: Preferences())
+    func `pins external-controller to credential loopback port`() throws {
+        let out = try patch("proxies: []\n")
         let parsed = try Yams.load(yaml: out) as? [String: Any]
-        #expect(parsed?["external-controller"] as? String == "127.0.0.1:9090")
+        #expect(parsed?["external-controller"] as? String == "127.0.0.1:\(Self.apiCredentials.port)")
     }
 
     @Test
     func `injects geox-url when missing`() throws {
-        let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: Preferences())
+        let out = try patch("proxies: []\n")
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         let geo = parsed?["geox-url"] as? [String: String]
         #expect(geo?["geoip"]?.contains("jsdelivr.net") == true)
@@ -106,7 +119,7 @@ struct EffectiveConfigWriterTests {
           geosite: https://example.com/custom.dat
           mmdb: https://example.com/custom.mmdb
         """
-        let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: Preferences())
+        let out = try patch(source)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         let geo = parsed?["geox-url"] as? [String: String]
         #expect(geo?["geoip"] == "https://example.com/custom.metadb")
@@ -115,10 +128,11 @@ struct EffectiveConfigWriterTests {
 
     @Test
     func `empty source yields minimal effective config`() throws {
-        let out = try EffectiveConfigWriter.patch(sourceYAML: "", prefs: Preferences())
+        let out = try patch("")
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["mixed-port"] as? Int == 7890)
-        #expect(parsed?["external-controller"] as? String == "127.0.0.1:9090")
+        #expect(parsed?["external-controller"] as? String == "127.0.0.1:\(Self.apiCredentials.port)")
+        #expect(parsed?["secret"] as? String == Self.apiCredentials.secret)
     }
 
     @Test
@@ -128,10 +142,10 @@ struct EffectiveConfigWriterTests {
         external-controller: 10.0.0.1:9999
         proxies: []
         """
-        let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: Preferences())
+        let out = try patch(source)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["mixed-port"] as? Int == 7890)
-        #expect(parsed?["external-controller"] as? String == "127.0.0.1:9090")
+        #expect(parsed?["external-controller"] as? String == "127.0.0.1:\(Self.apiCredentials.port)")
     }
 
     @Test
@@ -144,6 +158,7 @@ struct EffectiveConfigWriterTests {
             sourceYAML: "proxies: []\n",
             to: tmp,
             prefs: Preferences(),
+            apiCredentials: Self.apiCredentials,
         )
         let written = try String(contentsOf: tmp, encoding: .utf8)
         let parsed = try Yams.load(yaml: written) as? [String: Any]

@@ -6,13 +6,11 @@ import Yams
 ///
 ///   1. Remove user-managed `dns:` and `subscriptions:` blocks — the extension
 ///      owns DNS (fake-ip + local listener) and the app owns subscription fetching.
-///   2. Strip `secret:` so the REST API runs open on loopback — the app talks
-///      to the engine via `MeowAPI(secret: "")` and would 401 if the user's
-///      profile happened to ship a token.
+///   2. Override `secret:` with the random bearer token minted for this install.
 ///   3. Pin `mixed-port` (defaults to 7890), `allow-lan`, `bind-address`, and
 ///      a DNS listener so tun2socks and LAN clients can use meow's listeners.
-///   4. Pin `external-controller: 127.0.0.1:9090` so the app can talk to the
-///      engine's REST API over loopback.
+///   4. Pin `external-controller` to the random loopback port minted for this
+///      install so the app can talk to the engine's REST API over loopback.
 ///   5. Inject a `geox-url:` block (jsDelivr-hosted) when the user didn't
 ///      provide one, so the engine has somewhere to fetch geoip/geosite from.
 ///
@@ -21,7 +19,16 @@ import Yams
 public enum EffectiveConfigWriter {
     public static let defaultMixedPort = 7890
     public static let defaultDNSPort = 1053
-    public static let defaultExternalController = "127.0.0.1:9090"
+
+    public struct APICredentials: Sendable, Equatable {
+        public let port: Int
+        public let secret: String
+
+        public init(port: Int, secret: String) {
+            self.port = port
+            self.secret = secret
+        }
+    }
 
     /// Matches the Android client's jsDelivr mirrors of the MetaCubeX databases.
     /// `asn` is included so subscriptions with `IP-ASN,<num>,<group>` rules work
@@ -38,8 +45,13 @@ public enum EffectiveConfigWriter {
         sourceYAML: String,
         to destination: URL,
         prefs: Preferences,
+        apiCredentials: APICredentials,
     ) throws {
-        let effective = try patch(sourceYAML: sourceYAML, prefs: prefs)
+        let effective = try patch(
+            sourceYAML: sourceYAML,
+            prefs: prefs,
+            apiCredentials: apiCredentials,
+        )
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true,
@@ -48,13 +60,16 @@ public enum EffectiveConfigWriter {
     }
 
     /// Pure patcher — exposed for unit tests. Returns the effective YAML text.
-    public static func patch(sourceYAML: String, prefs: Preferences) throws -> String {
+    public static func patch(
+        sourceYAML: String,
+        prefs: Preferences,
+        apiCredentials: APICredentials,
+    ) throws -> String {
         let loaded = try Yams.load(yaml: sourceYAML)
         var root: [String: Any] = (loaded as? [String: Any]) ?? [:]
 
         root.removeValue(forKey: "dns")
         root.removeValue(forKey: "subscriptions")
-        root.removeValue(forKey: "secret")
 
         let mixedPort = prefs.mixedPort > 0 ? prefs.mixedPort : defaultMixedPort
         let bindAddress = prefs.allowLan ? "0.0.0.0" : "127.0.0.1"
@@ -71,7 +86,8 @@ public enum EffectiveConfigWriter {
                 "223.5.5.5",
             ],
         ]
-        root["external-controller"] = defaultExternalController
+        root["external-controller"] = "127.0.0.1:\(apiCredentials.port)"
+        root["secret"] = apiCredentials.secret
 
         if root["geox-url"] == nil {
             root["geox-url"] = defaultGeoXURL
