@@ -26,6 +26,15 @@ struct SettingsView: View {
                 Toggle("settings.toggle.onDemand", isOn: binding(\.onDemand))
                     .accessibilityIdentifier("settings.toggle.onDemand")
                     .accessibilityHint(Text("a11y.settings.onDemand.hint"))
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("settings.toggle.blockHTTP3", isOn: binding(\.blockHTTP3))
+                        .accessibilityIdentifier("settings.toggle.blockHTTP3")
+                        .accessibilityHint(Text("a11y.settings.blockHTTP3.hint"))
+                    Text("settings.toggle.blockHTTP3.footer")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
                 Picker("settings.picker.logLevel", selection: binding(\.logLevel)) {
                     Text("settings.logLevel.debug").tag("debug")
                     Text("settings.logLevel.info").tag("info")
@@ -100,6 +109,7 @@ struct SettingsView: View {
             }
         #endif
             .onChange(of: preferences.allowLan) { _, _ in persist() }
+            .onChange(of: preferences.blockHTTP3) { _, _ in persist() }
             .onChange(of: preferences.logLevel) { _, _ in persist() }
             .onChange(of: preferences.onDemand) { _, _ in
                 persist()

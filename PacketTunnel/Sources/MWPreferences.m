@@ -3,6 +3,7 @@
 NSString *const MWPrefKeyMixedPort     = @"com.meow.mixedPort";
 NSString *const MWPrefKeyLogLevel      = @"com.meow.logLevel";
 NSString *const MWPrefKeyAllowLan      = @"com.meow.allowLan";
+NSString *const MWPrefKeyBlockHTTP3    = @"com.meow.blockHTTP3";
 NSString *const MWPrefKeyPendingIntent = @"com.meow.pendingIntent";
 
 @implementation MWPreferences
@@ -13,6 +14,7 @@ NSString *const MWPrefKeyPendingIntent = @"com.meow.pendingIntent";
         _mixedPort  = 7890;
         _logLevel   = @"info";
         _allowLan   = NO;
+        _blockHTTP3 = NO;
     }
     return self;
 }
@@ -25,6 +27,8 @@ NSString *const MWPrefKeyPendingIntent = @"com.meow.pendingIntent";
     p.logLevel = level ?: @"info";
     if ([defaults objectForKey:MWPrefKeyAllowLan])
         p.allowLan = [defaults boolForKey:MWPrefKeyAllowLan];
+    if ([defaults objectForKey:MWPrefKeyBlockHTTP3])
+        p.blockHTTP3 = [defaults boolForKey:MWPrefKeyBlockHTTP3];
     return p;
 }
 

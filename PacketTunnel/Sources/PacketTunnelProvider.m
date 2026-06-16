@@ -26,16 +26,14 @@ static os_log_t gLog;
     MWIPCListener      *_ipcListener;
     nw_path_monitor_t   _pathMonitor;
     dispatch_queue_t    _pathQueue;
-    dispatch_source_t   _pathDebounceTimer;
     BOOL                _havePath;
     BOOL                _lastSatisfied;
     nw_interface_type_t _lastInterfaceType;
     BOOL                _lastHasIPv4;
     BOOL                _lastHasIPv6;
-    // Serializes every suspendTun/resumeTun. sleep/wake arrive on a system
-    // thread and triggerReconnect on _pathQueue; unserialized they can
-    // interleave the non-atomic _tunStarted checks in MWTunnelEngine and
-    // double-start (or double-stop) tun2socks.
+    // Serializes sleep/wake suspendTun/resumeTun. Those callbacks arrive on
+    // system threads and can otherwise interleave MWTunnelEngine's non-atomic
+    // _tunStarted checks.
     dispatch_queue_t    _tunControlQueue;
 }
 
@@ -327,10 +325,6 @@ static os_log_t gLog;
 }
 
 - (void)stopPathMonitor {
-    if (_pathDebounceTimer) {
-        dispatch_source_cancel(_pathDebounceTimer);
-        _pathDebounceTimer = nil;
-    }
     if (_pathMonitor) {
         nw_path_monitor_cancel(_pathMonitor);
         _pathMonitor = nil;
@@ -369,87 +363,28 @@ static os_log_t gLog;
         return;
     }
 
-    BOOL meaningful = NO;
     if (satisfied && !_lastSatisfied) {
         os_log_info(gLog, "path: connectivity regained");
         MWEngineLog(MWLogInfo, @"NE: path — connectivity regained");
-        meaningful = YES;
     } else if (satisfied && iface != _lastInterfaceType) {
         os_log_info(gLog, "path: interface changed %d -> %d", _lastInterfaceType, iface);
         MWEngineLogf(MWLogInfo, @"NE: path — interface changed %d -> %d",
                      _lastInterfaceType, iface);
-        meaningful = YES;
     } else if (satisfied && (hasIPv4 != _lastHasIPv4 || hasIPv6 != _lastHasIPv6)) {
         // Same interface, same satisfied state, but the address-family set
         // changed — e.g. the Wi-Fi network silently lost (or gained) IPv6
-        // via expired RAs or an upstream change. Without this branch the
-        // flip is invisible: upstream connections the engine established
-        // over the vanished family black-hole until the idle-TTL sweeper
-        // reaps them, while the tunnel still reports "connected".
+        // via expired RAs or an upstream change. Log it for diagnosis, but do
+        // not restart tun2socks on path changes.
         os_log_info(gLog, "path: address family changed v4 %d -> %d, v6 %d -> %d",
                     _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
         MWEngineLogf(MWLogInfo, @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d",
                      _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
-        meaningful = YES;
     }
 
     _lastSatisfied = satisfied;
     _lastInterfaceType = iface;
     _lastHasIPv4 = hasIPv4;
     _lastHasIPv6 = hasIPv6;
-
-    if (meaningful) {
-        [self scheduleReconnect];
-    }
-}
-
-// Caller queue: _pathQueue. Coalesces a burst of path updates into one restart.
-- (void)scheduleReconnect {
-    if (_pathDebounceTimer) return;
-
-    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,
-                                                     0, 0, _pathQueue);
-    dispatch_source_set_timer(timer,
-        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
-        DISPATCH_TIME_FOREVER,
-        100 * NSEC_PER_MSEC);
-
-    __weak __typeof__(self) weak = self;
-    dispatch_source_set_event_handler(timer, ^{
-        __strong __typeof__(weak) self = weak;
-        if (!self) return;
-        if (self->_pathDebounceTimer) {
-            dispatch_source_cancel(self->_pathDebounceTimer);
-            self->_pathDebounceTimer = nil;
-        }
-        [self triggerReconnect];
-    });
-    _pathDebounceTimer = timer;
-    dispatch_resume(timer);
-}
-
-- (void)triggerReconnect {
-    if (!_engine || !_tunControlQueue) return;
-
-    // Full tun2socks restart on network change: the gVisor netstack and
-    // per-flow state (TCP connections, UDP NAT table, dispatch futures)
-    // all bind to the pre-flip network path. Aborting individual TCP
-    // flows was insufficient — the engine's upstream connections stayed
-    // stale and accumulated retry state, eventually crashing the NE
-    // ~14 minutes after a Wi-Fi reachability flip (see meow-tunnel log
-    // 2026-05-27 crash #1). A clean stop+start gives the netstack a
-    // fresh path with zero carryover. The engine (mihomo) stays alive
-    // so proxy groups, routing rules, and the REST API persist.
-    //
-    // Serialized on _tunControlQueue with sleep/wake's suspend/resume —
-    // a wake-time resume racing a path-change restart on _pathQueue can
-    // otherwise interleave MWTunnelEngine's non-atomic _tunStarted checks.
-    os_log_info(gLog, "path: restarting tun2socks on network change");
-    MWEngineLog(MWLogInfo, @"NE: path — restarting tun2socks on network change");
-    dispatch_async(_tunControlQueue, ^{
-        [self->_engine suspendTun];
-        [self->_engine resumeTun];
-    });
 }
 
 @end

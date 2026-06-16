@@ -111,6 +111,13 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
         return NO;
     }
 
+    // Apply the Block HTTP/3 (QUIC) toggle before starting the tun. The Rust
+    // setter persists in tun2socks static state, so a single pre-start call
+    // covers both the initial meow_tun_start below and any later -resumeTun.
+    // When the toggle is off this passes 0, which is the engine's default —
+    // behavior is unchanged.
+    meow_tun_set_block_http3(prefs.blockHTTP3 ? 1 : 0);
+
     MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
     _writer    = writer;
     _writerCtx = (void *)CFBridgingRetain(writer);

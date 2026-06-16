@@ -91,8 +91,8 @@ static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 // Monotonic instance id. `start()` bumps it; the spawned run task captures
 // its own value and only performs end-of-life cleanup (clearing
 // `ingress_slot`, lowering `TUN2SOCKS_RUNNING`) if it is STILL the current
-// generation. Without the guard, a rapid stop()→start() (sleep/wake +
-// path-change churn both restart tun2socks back-to-back) let the OLD task's
+// generation. Without the guard, a rapid stop()→start() (sleep/wake can
+// restart tun2socks back-to-back) let the OLD task's
 // deferred cleanup steal the NEW instance's ingress sender and flag:
 // `stop()` is fire-and-forget, so the old task was still parked in `recv()`
 // when the new one started, and its teardown ran arbitrarily later.
@@ -231,6 +231,38 @@ pub fn set_udp_first_reply_deadline_ms(ms: u64) -> bool {
 /// milliseconds. `0` means the watchdog is disabled.
 pub fn udp_first_reply_deadline_ms() -> u64 {
     UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed)
+}
+
+// "Block HTTP/3 (QUIC)" toggle. Default OFF — current behaviour is preserved
+// unless Swift flips it. When ON the tunnel cuts HTTP/3 off at two layers that
+// reinforce each other:
+//
+//   1. UDP egress to dst:443 is dropped (QUIC's transport), killing any QUIC
+//      handshake that still attempts a connection.
+//   2. SVCB (64) / HTTPS (65) DNS queries are answered NOERROR-empty by the
+//      intercept itself instead of being forwarded to meow-dns, so the client
+//      never learns the HTTP/3 `alpn`/SvcParams and falls back to A / fake-IPv4
+//      over TCP.
+//
+// Both prongs are wired to this single flag. Stored Relaxed — the toggle has no
+// ordering relationship with other state; a stale read for one datagram is
+// harmless.
+static BLOCK_HTTP3: AtomicBool = AtomicBool::new(false);
+
+/// Throttle slot for the QUIC/HTTP3 UDP-drop log (dst:443 dropped while the
+/// block-HTTP3 toggle is on). Throttled via `warn_capped` to once per second so
+/// a QUIC-heavy app doesn't flood the on-device log.
+static BLOCK_HTTP3_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Enable or disable the "block HTTP/3 (QUIC)" behaviour. Default OFF. Returns
+/// true unconditionally.
+pub fn set_block_http3(on: bool) {
+    BLOCK_HTTP3.store(on, Ordering::Relaxed);
+}
+
+/// Read whether the "block HTTP/3 (QUIC)" behaviour is currently enabled.
+pub fn block_http3() -> bool {
+    BLOCK_HTTP3.load(Ordering::Relaxed)
 }
 
 // Per-TCP-flow idle TTL. Closes the wedge the dial deadline can't reach:
@@ -935,6 +967,21 @@ async fn run_tun2socks(
                             return;
                         };
                         bytes
+                    } else if block_http3() && matches!(qtype, Some(64) | Some(65)) {
+                        // "Block HTTP/3 (QUIC)" toggle ON: answer SVCB (64) /
+                        // HTTPS (65) NOERROR-empty by the intercept itself,
+                        // exactly like the AAAA arm above, instead of delegating
+                        // to meow-dns. The record's mere existence advertises h3
+                        // capability (its `alpn`/SvcParams carry the HTTP/3
+                        // hints), so hiding it entirely — not just stripping the
+                        // ipv4hint/ipv6hint as the meow-dns path does — drives the
+                        // client onto the A / fake-IPv4 + TCP path. Pairs with the
+                        // UDP/443 egress drop so any QUIC that still attempts is
+                        // also killed.
+                        let Some(bytes) = dns_empty_response(parsed.payload) else {
+                            return;
+                        };
+                        bytes
                     } else if matches!(qtype, Some(1) | Some(64) | Some(65)) {
                         // A (1) + SVCB (64) / HTTPS (65) → meow's resolver
                         // pipeline. A gets fake-IP synthesis; SVCB/HTTPS take
@@ -1412,6 +1459,20 @@ async fn dispatch_udp(
         logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
         return;
     };
+
+    // "Block HTTP/3 (QUIC)" toggle: drop outbound UDP to port 443 (QUIC's
+    // transport). `dst` is still the fake-IP:port from the tun (pre-rewrite),
+    // but `dst.port()` is the real app-intended port, so port-only matching is
+    // correct and address-independent. Returning here drops the datagram and
+    // lets `permit` fall out of scope, releasing its `udp_sem` slot — no live
+    // session is created, matching every other early-return path below.
+    if block_http3() && dst.port() == 443 {
+        warn_capped(
+            &BLOCK_HTTP3_DROP_LOG_LAST_MS,
+            "tun2socks: block-HTTP3 on, dropping outbound UDP/443 (QUIC)",
+        );
+        return;
+    }
 
     // No FFI-side fake-IP reverse: pass `dst.ip()` through and let meow's
     // `pre_handle_metadata` rewrite to the qname when the destination is

@@ -160,6 +160,8 @@
 "settings.section.general" = "General";
 "settings.toggle.allowLan" = "Allow LAN";
 "settings.toggle.onDemand" = "Connect On Demand";
+"settings.toggle.blockHTTP3" = "Block HTTP/3 (QUIC)";
+"settings.toggle.blockHTTP3.footer" = "Drops UDP traffic to port 443 and SVCB/HTTPS DNS records to force TCP/HTTP2.";
 "settings.picker.logLevel" = "Log Level";
 "settings.logLevel.debug" = "Debug";
 "settings.logLevel.info" = "Info";
@@ -282,6 +284,7 @@
 /* Accessibility — Settings */
 "a11y.settings.allowLan.hint" = "Allows other devices on your local network to connect through the proxy.";
 "a11y.settings.onDemand.hint" = "Automatically starts the tunnel when network activity requires it.";
+"a11y.settings.blockHTTP3.hint" = "Blocks HTTP/3 and QUIC by dropping UDP traffic to port 443 and SVCB/HTTPS DNS records, forcing connections onto TCP and HTTP/2.";
 "a11y.settings.exportLogs.hint" = "Saves the last hour of app logs to a file.";
 "a11y.settings.exportLogs.inProgress" = "Export in progress";
 "a11y.settings.memory.unavailable" = "Unavailable";

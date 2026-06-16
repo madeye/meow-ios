@@ -749,11 +749,9 @@ pub extern "C" fn meow_tun_stop_blocking() {
     tun2socks::stop_blocking();
 }
 
-/// Abort every in-flight TCP flow tracked by tun2socks. Used by the iOS
-/// PacketTunnel side when the underlying network interface changes
-/// (Wi-Fi → cellular, etc.) and we want to drop stale flows so they
-/// re-dial against the new uplink, **without** tearing down the engine
-/// or the TUN itself.
+/// Abort every in-flight TCP flow tracked by tun2socks. This is an
+/// emergency diagnostic/teardown hook for dropping stale flows without
+/// tearing down the engine or the TUN itself.
 ///
 /// Each abort cancels the dispatch_tcp future, which drops the netstack
 /// stream side and (via `ConnectionGuard::drop` inside meow-tunnel)
@@ -899,6 +897,32 @@ pub extern "C" fn meow_tun_set_tcp_idle_ttl_ms(ms: c_int) -> c_int {
 #[no_mangle]
 pub extern "C" fn meow_tun_tcp_idle_ttl_ms() -> c_int {
     tun2socks::tcp_idle_ttl_ms() as c_int
+}
+
+/// Enable or disable "block HTTP/3 (QUIC)". Default OFF (0): current
+/// behaviour is preserved. When enabled (non-zero) the tunnel drops
+/// outbound UDP datagrams to destination port 443 (QUIC's transport) and
+/// answers SVCB (64) / HTTPS (65) DNS queries NOERROR-empty from the
+/// intercept itself (no h3/SvcParams advertisement), forcing clients onto
+/// the A / fake-IPv4 + TCP path.
+///
+/// At the FFI layer the new value applies immediately to subsequent UDP
+/// datagrams and DNS queries (the backing flag is a plain atomic). The
+/// meow-ios app only invokes this at tunnel start, so toggling the user
+/// preference applies on the next tunnel (re)connect — same as allowLan.
+///
+/// Returns 0 unconditionally.
+#[no_mangle]
+pub extern "C" fn meow_tun_set_block_http3(enabled: c_int) -> c_int {
+    tun2socks::set_block_http3(enabled != 0);
+    0
+}
+
+/// Read whether "block HTTP/3 (QUIC)" is currently enabled. Returns 1 if
+/// enabled, 0 otherwise.
+#[no_mangle]
+pub extern "C" fn meow_tun_block_http3() -> c_int {
+    c_int::from(tun2socks::block_http3())
 }
 
 /// Resident memory size of the FFI's containing process, in bytes. Same

@@ -166,6 +166,8 @@
 "settings.section.general" = "通用";
 "settings.toggle.allowLan" = "允许局域网";
 "settings.toggle.onDemand" = "按需自动连接";
+"settings.toggle.blockHTTP3" = "屏蔽 HTTP/3 (QUIC)";
+"settings.toggle.blockHTTP3.footer" = "丢弃发往 443 端口的 UDP 流量及 SVCB/HTTPS DNS 记录，强制使用 TCP/HTTP2。";
 "settings.picker.logLevel" = "日志级别";
 "settings.logLevel.debug" = "调试";
 "settings.logLevel.info" = "信息";
@@ -288,6 +290,7 @@
 /* Accessibility — Settings */
 "a11y.settings.allowLan.hint" = "允许局域网内的其他设备通过代理连接。";
 "a11y.settings.onDemand.hint" = "在需要网络连接时自动启动隧道。";
+"a11y.settings.blockHTTP3.hint" = "通过丢弃发往 443 端口的 UDP 流量及 SVCB/HTTPS DNS 记录来屏蔽 HTTP/3 和 QUIC，强制连接使用 TCP 和 HTTP/2。";
 "a11y.settings.exportLogs.hint" = "将最近一小时的应用日志保存为文件。";
 "a11y.settings.exportLogs.inProgress" = "正在导出";
 "a11y.settings.memory.unavailable" = "不可用";

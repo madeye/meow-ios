@@ -12,6 +12,7 @@ struct PreferencesTests {
         #expect(prefs.mixedPort == PreferenceDefaults.mixedPort)
         #expect(prefs.logLevel == PreferenceDefaults.logLevel)
         #expect(prefs.allowLan == false)
+        #expect(prefs.blockHTTP3 == false)
     }
 
     @Test
@@ -21,9 +22,11 @@ struct PreferencesTests {
         var prefs = Preferences()
         prefs.mixedPort = 9999
         prefs.allowLan = true
+        prefs.blockHTTP3 = true
         prefs.save(to: defaults)
         let loaded = Preferences.load(from: defaults)
         #expect(loaded.mixedPort == 9999)
         #expect(loaded.allowLan == true)
+        #expect(loaded.blockHTTP3 == true)
     }
 }
