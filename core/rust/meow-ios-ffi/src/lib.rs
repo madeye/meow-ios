@@ -3,26 +3,20 @@
 //! `MeowCore.xcframework`.
 //!
 //! Embeds the meow-rs proxy engine and the tun2socks layer in one static
-//! library. Both TCP and UDP flows are dispatched in-process:
+//! library. TCP and non-DNS UDP flows now go through the same local mixed
+//! listener that LAN clients use:
 //!
-//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ⇆ meow_tunnel::{tcp,udp}::handle_*
-//!                                                              ↓
-//!                                          rules / proxies / DNS / REST API
+//!   NEPacketTunnelFlow ⇆ mpsc ⇆ netstack-smoltcp ⇆ SOCKS5 loopback ⇆ meow-listener
+//!                                                                          ↓
+//!                                                      rules / proxies / DNS / REST API
 //!
-//! No SOCKS5 loopback sits between tun2socks and the engine; the staticlib
-//! owns separate tokio runtimes for the packet/netstack driver and for meow
-//! engine work so lwIP backpressure cannot starve the REST/API/proxy workers.
-//! DNS is delegated end-to-end to meow's resolver running in fake-IP mode: the
-//! tun2socks
-//! UDP/53 intercept answers AAAA queries NOERROR-empty itself (forcing
-//! clients onto the proxied IPv4 fake-IP path) and hands A queries straight
-//! to `meow_dns::DnsServer::handle_query`, which synthesises the fake-IP,
-//! owns the reverse mapping, and answers hosts / NXDOMAIN consistently.
-//! The TCP and UDP dispatch paths then pass the literal fake-IP destination
-//! to `meow_tunnel`, whose `pre_handle_metadata` reverses it back to the
-//! original hostname before rule matching. The FFI no longer carries its
-//! own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH cache, or
-//! in-FFI TCP-DNS client.
+//! The staticlib owns separate tokio runtimes for the packet/netstack driver
+//! and for meow engine work so lwIP backpressure cannot starve the
+//! REST/API/proxy workers. DNS is delegated to a local meow-dns UDP listener
+//! running in fake-IP mode: the tun2socks UDP/53 path still answers AAAA and
+//! HTTP/3-blocked HTTPS/SVCB queries NOERROR-empty itself, then sends other DNS
+//! queries to the listener. The FFI no longer carries its own fake-IP pool,
+//! china-DNS split-horizon, CN-IP table, DoH cache, or in-FFI TCP-DNS client.
 
 mod diagnostics;
 mod engine;
@@ -611,8 +605,9 @@ fn random_port() -> u16 {
 // ---------------------------------------------------------------------------
 
 /// Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
-/// pins `mixed-port`; injects a hardened `external-controller` (random
-/// loopback port) + random bearer `secret`; injects `geox-url` when absent.
+/// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
+/// socket; injects a hardened `external-controller` (random loopback port)
+/// + random bearer `secret`; injects `geox-url` when absent.
 /// Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
 /// NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
 /// Returns -1 on error (inspect `meow_core_last_error`).
@@ -624,6 +619,8 @@ fn random_port() -> u16 {
 pub unsafe extern "C" fn meow_patch_config(
     source_yaml: *const c_char,
     mixed_port: c_int,
+    allow_lan: c_int,
+    dns_port: c_int,
     out: *mut c_char,
     out_cap: c_int,
 ) -> c_int {
@@ -658,9 +655,50 @@ pub unsafe extern "C" fn meow_patch_config(
     } else {
         7890
     };
+    let dns_port = if dns_port > 0 { dns_port as i64 } else { 1053 };
+    let bind_addr = if allow_lan != 0 {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
     root.insert(
         serde_yaml::Value::String("mixed-port".into()),
         serde_yaml::Value::Number(port.into()),
+    );
+    root.insert(
+        serde_yaml::Value::String("allow-lan".into()),
+        serde_yaml::Value::Bool(allow_lan != 0),
+    );
+    root.insert(
+        serde_yaml::Value::String("bind-address".into()),
+        serde_yaml::Value::String(bind_addr.into()),
+    );
+
+    let mut dns = serde_yaml::Mapping::new();
+    for (k, v) in [
+        ("enable", serde_yaml::Value::Bool(true)),
+        (
+            "listen",
+            serde_yaml::Value::String(format!("{bind_addr}:{dns_port}")),
+        ),
+        ("enhanced-mode", serde_yaml::Value::String("fake-ip".into())),
+        (
+            "fake-ip-range",
+            serde_yaml::Value::String("28.0.0.0/8".into()),
+        ),
+    ] {
+        dns.insert(serde_yaml::Value::String(k.into()), v);
+    }
+    dns.insert(
+        serde_yaml::Value::String("nameserver".into()),
+        serde_yaml::Value::Sequence(vec![
+            serde_yaml::Value::String("119.29.29.29".into()),
+            serde_yaml::Value::String("223.5.5.5".into()),
+        ]),
+    );
+    root.insert(
+        serde_yaml::Value::String("dns".into()),
+        serde_yaml::Value::Mapping(dns),
     );
 
     // Harden the meow external-controller. It binds on loopback, but iOS
@@ -720,7 +758,7 @@ pub unsafe extern "C" fn meow_patch_config(
 }
 
 // ---------------------------------------------------------------------------
-// tun2socks (NEPacketTunnelFlow bridge) — dispatches in-process into engine
+// tun2socks (NEPacketTunnelFlow bridge) — dispatches through local listeners
 // ---------------------------------------------------------------------------
 
 /// C-compatible egress callback. Called from the tun2socks tokio runtime
@@ -819,9 +857,8 @@ pub extern "C" fn meow_tun_close_all_tcp_flows() -> c_int {
 /// Set the TCP accept-side cap. Bounds the number of concurrent
 /// `dispatch_tcp` tasks live at once, which is the dominant factor in
 /// peak FFI RSS under burst (1000+ concurrent dispatches each carrying
-/// per-flow Metadata, Box<dyn ProxyConn>, meow outbound dial state,
-/// and netstack ring buffers can push the extension past the 50 MiB
-/// jetsam cap). Default 128.
+/// SOCKS5 loopback streams, meow listener handler state, and netstack ring
+/// buffers can push the extension past the 50 MiB jetsam cap). Default 128.
 ///
 /// Takes effect on the next `meow_tun_start`. Calls during a live
 /// tunnel are accepted but do not resize the running semaphore.
@@ -978,4 +1015,68 @@ pub extern "C" fn meow_tun_block_http3() -> c_int {
 #[no_mangle]
 pub extern "C" fn meow_resident_bytes() -> u64 {
     rss::resident_bytes().unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::meow_patch_config;
+    use std::ffi::CString;
+
+    fn patch_config(yaml: &str, mixed_port: i32, allow_lan: i32, dns_port: i32) -> String {
+        let source = CString::new(yaml).expect("fixture yaml has no nul");
+        let needed = unsafe {
+            meow_patch_config(
+                source.as_ptr(),
+                mixed_port,
+                allow_lan,
+                dns_port,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        assert!(needed > 0);
+        let mut out = vec![0i8; needed as usize + 1];
+        let wrote = unsafe {
+            meow_patch_config(
+                source.as_ptr(),
+                mixed_port,
+                allow_lan,
+                dns_port,
+                out.as_mut_ptr(),
+                out.len() as i32,
+            )
+        };
+        assert_eq!(wrote, needed);
+        let bytes = out
+            .into_iter()
+            .take(wrote as usize)
+            .map(|b| b as u8)
+            .collect::<Vec<_>>();
+        String::from_utf8(bytes).expect("patched yaml is utf8")
+    }
+
+    #[test]
+    fn patch_config_pins_lan_mixed_and_dns_listener() {
+        let patched = patch_config(
+            r#"
+mixed-port: 1
+allow-lan: false
+bind-address: 127.0.0.1
+dns:
+  enable: false
+subscriptions:
+  old: {}
+rules:
+  - MATCH,DIRECT
+"#,
+            7899,
+            1,
+            1054,
+        );
+        assert!(patched.contains("mixed-port: 7899"));
+        assert!(patched.contains("allow-lan: true"));
+        assert!(patched.contains("bind-address: 0.0.0.0"));
+        assert!(patched.contains("listen: 0.0.0.0:1054"));
+        assert!(!patched.contains("subscriptions:"));
+    }
 }

@@ -34,6 +34,7 @@ static const NSTimeInterval kReliefCooldownS  = 60.0;
 // thrashing the allocator.
 static const int64_t kTeardownBurstFlows       = 16;
 static const NSTimeInterval kTeardownCooldownS = 5.0;
+static const int kLocalDNSPort                 = 1053;
 
 @implementation MWTunnelEngine {
     NEPacketTunnelFlow *_flow;
@@ -398,7 +399,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
     if (!source) return NO;
 
     const char *src = source.UTF8String;
-    int needed = meow_patch_config(src, (int)prefs.mixedPort, NULL, 0);
+    int needed = meow_patch_config(src, (int)prefs.mixedPort, prefs.allowLan ? 1 : 0, kLocalDNSPort, NULL, 0);
     if (needed < 0) {
         NSString *msg = [self lastRustError] ?: @"config patch failed";
         if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
@@ -414,7 +415,7 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
                                             userInfo:@{NSLocalizedDescriptionKey: @"out of memory"}];
         return NO;
     }
-    meow_patch_config(src, (int)prefs.mixedPort, buf, needed + 1);
+    meow_patch_config(src, (int)prefs.mixedPort, prefs.allowLan ? 1 : 0, kLocalDNSPort, buf, needed + 1);
     NSString *patched = [NSString stringWithUTF8String:buf];
     free(buf);
 

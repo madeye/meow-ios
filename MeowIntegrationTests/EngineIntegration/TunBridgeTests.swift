@@ -161,6 +161,13 @@ private struct EngineFixture {
         let yaml = """
         mixed-port: 57891
         external-controller: 127.0.0.1:59091
+        dns:
+          enable: true
+          listen: 127.0.0.1:57954
+          enhanced-mode: fake-ip
+          fake-ip-range: 28.0.0.0/8
+          nameserver:
+            - 119.29.29.29
         mode: rule
         log-level: warning
         proxies: []

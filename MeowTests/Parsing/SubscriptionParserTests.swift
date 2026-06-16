@@ -5,12 +5,15 @@ import Testing
 @Suite("YAML patcher", .tags(.parsing))
 struct YamlPatcherTests {
     @Test
-    func `strips subscriptions block and sets mixed-port`() throws {
+    func `strips subscriptions block and pins listener settings`() throws {
         let data = try loadFixture("clash_minimal")
         let yaml = try #require(String(data: data, encoding: .utf8))
         let patched = try YamlPatcher.applyMixedPort(yaml, port: 7890)
         #expect(!patched.contains("subscriptions:"))
         #expect(patched.contains("mixed-port: 7890"))
+        #expect(patched.contains("allow-lan: false"))
+        #expect(patched.contains("bind-address: 127.0.0.1"))
+        #expect(patched.contains("listen: 127.0.0.1:1053"))
     }
 }
 

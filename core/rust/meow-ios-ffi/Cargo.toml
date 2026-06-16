@@ -2,7 +2,7 @@
 name = "meow-ios-ffi"
 version = "0.1.0"
 edition = "2021"
-description = "meow-rs engine + tun2socks for meow-ios — C ABI, no Go, no JNI. DNS is delegated in-process to meow's resolver in fake-IP mode."
+description = "meow-rs engine + tun2socks for meow-ios — C ABI, no Go, no JNI. TCP/UDP dispatch through local meow listeners."
 
 [lib]
 # `staticlib` is the iOS xcframework consumer; `rlib` exists so the
@@ -44,9 +44,9 @@ oslog = { version = "0.2", default-features = false, features = ["logger"] }
 
 # `rustls` is declared so `engine::start` can install the ring crypto
 # provider once at process init for any HTTPS the meow engine itself
-# opens (subscription fetch, HTTPS outbound, …). The tun2socks UDP/53
-# intercept defers parse/serialize to `meow_dns::DnsServer::handle_query`,
-# so this is the only direct rustls consumer.
+# opens (subscription fetch, HTTPS outbound, …). The tun2socks UDP/53 path
+# delegates DNS parse/serialize to the local meow-dns listener, so this is
+# the only direct rustls consumer.
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -70,7 +70,7 @@ lwip = "0.3"
 #
 # HEAD: 619499b5 — fake-ip HTTPS/SVCB dual-stack-correct (ADR-0013, meow-rs#217)
 # on top of the UDP NAT-table shard-guard deadlock fix (1454ef24).
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -78,11 +78,12 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "619499b51dcfb7882f64e819d883f22182997148" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
+meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b", default-features = false, features = ["listener-mixed"] }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
 
 [build-dependencies]
 cbindgen = "0.28"

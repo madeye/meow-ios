@@ -1,60 +1,47 @@
 //! tun2socks using netstack-smoltcp: Swift pushes raw IP packets in via
 //! [`ingest`], netstack terminates TCP and UDP sessions in a userspace
-//! smoltcp stack, and each flow dispatches directly into
-//! `meow_tunnel::{tcp,udp}::handle_*` — no SOCKS5 loopback, no cross-process
-//! hop.
+//! smoltcp stack, and each flow dispatches through the local mixed / DNS
+//! listeners owned by the embedded engine.
 //!
 //! Egress packets (netstack output) are handed back to Swift via a C
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
-//! DNS: A (1), HTTPS (65) and SVCB (64) queries are delegated to meow's
-//! resolver (`DnsServer::handle_query`). A gets fake-IP synthesis; HTTPS/SVCB
-//! take meow-dns's generic-forward path, which in fake-IP mode strips the
-//! ipv4hint/ipv6hint SvcParams from the answer (meow-rs #215) so an HTTP/3
-//! client can't read the origin's real IP out of the HTTPS record and connect
-//! QUIC straight there, bypassing the fake-IP mapping the tunnel routes on.
-//! AAAA (28) queries are answered NOERROR-empty by the intercept itself,
+//! DNS: A (1), TXT (16), MX (15), PTR (12), and other non-blocked queries are
+//! sent as raw UDP packets to the local meow-dns listener. A gets fake-IP
+//! synthesis there; generic qtypes get meow-dns's upstream-forward behavior.
+//! AAAA (28) queries are answered NOERROR-empty by the FFI itself,
 //! unconditionally — only the IPv4 fake-IP path is proxied, so stripping AAAA
 //! forces every client onto it instead of leaking (or black-holing)
-//! connections over v6. Anything else (TXT=16, MX=15, PTR=12, …) is forwarded
-//! as a raw UDP packet to the pinned upstream pool and the response is injected
-//! straight back. meow's DnsServer returns NXDOMAIN for those, which kills
-//! modern iOS connection setup (DNS-SD, mDNS-fallback) — the passthrough path
-//! lets them get a real answer instead.
+//! connections over v6. When "block HTTP/3" is enabled, HTTPS/SVCB (65/64)
+//! queries also get NOERROR-empty so clients cannot discover QUIC hints.
 //!
 //! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
-//! every UDP DNS query arrives as an in-TUN IP packet; the ingress loop below
-//! intercepts it pre-stack, branches on qtype, and injects the reply back
-//! into the egress channel with src/dst + ports swapped. No UDP listener
-//! socket exists — there's nothing for one to listen on. The resolver itself
-//! owns fake-IP synthesis, reverse mapping, AAAA / hosts / NXDOMAIN
-//! semantics, and TTL handling for A/AAAA; the FFI owns only the qtype
-//! peek + the upstream forward.
+//! every UDP DNS query arrives as an in-TUN IP packet. netstack turns that into
+//! a UDP payload, the FFI branches on qtype, and non-blocked queries go to the
+//! local DNS listener with the reply injected back through netstack. The
+//! resolver owns fake-IP synthesis, reverse mapping, hosts / NXDOMAIN
+//! semantics, and TTL handling; the FFI owns only the qtype peek plus the
+//! blocked-query short-circuit.
 //!
 //! TCP/UDP destination IPs come back as fake-IPs from meow's resolver pool.
-//! `dispatch_tcp` and `dispatch_udp` pass the literal `dst.ip()` to
-//! `meow_tunnel`, whose `pre_handle_metadata` reverses any fake-IP back to
-//! the original qname before rule matching — so the rule / proxy chain still
-//! sees the hostname rather than the synthetic IP, without the FFI keeping
-//! its own pool.
+//! `dispatch_tcp` and `dispatch_udp` pass the literal destination to the
+//! mixed listener via SOCKS5; meow's normal inbound path reverses fake-IPs back
+//! to the original qname before rule matching.
 
 use crate::logging;
 use futures::{SinkExt, StreamExt};
-use meow_common::{ConnType, Metadata, Network, ProxyConn};
-use meow_dns::DnsServer;
-use meow_tunnel::tunnel::TunnelInner;
-use meow_tunnel::udp::UdpSession;
 use parking_lot::Mutex;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::os::raw::c_void;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::{mpsc, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio_util::task::TaskTracker;
 use tracing::{info, trace, warn};
@@ -62,6 +49,7 @@ use tracing::{info, trace, warn};
 type UdpMsg = (Vec<u8>, SocketAddr, SocketAddr);
 type AnyIpPktFrame = Vec<u8>;
 type NetstackTcpStream = lwip::TcpStream;
+type UdpSessionKey = (SocketAddr, SocketAddr);
 
 /// Matches the cbindgen-emitted typedef in `meow_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
@@ -114,10 +102,10 @@ fn run_handle_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
 // spawns a `dispatch_tcp` task immediately — and under a real burst (e.g.
 // loading a content-rich CN homepage that fans out to 50+ subdomains in
 // the first second), 1000+ concurrent dispatch tasks each hold their own
-// per-flow state (Metadata, Box<dyn ProxyConn>, meow's outbound dial
-// buffers, the netstack stream's tx/rx ring). The 10-min VM stress run
-// peaked at 440 MiB of RSS in the first ~10 s of load — 8.8× the on-device
-// 50 MB jetsam cap — almost entirely from the size of this in-flight set.
+// per-flow state (SOCKS5 loopback stream, meow listener handler state, and
+// the netstack stream's tx/rx ring). The 10-min VM stress run peaked at
+// 440 MiB of RSS in the first ~10 s of load — 8.8× the on-device 50 MB
+// jetsam cap — almost entirely from the size of this in-flight set.
 //
 // Tunable at runtime via [`set_accept_cap`] / `meow_tun_set_accept_cap`.
 // The atomic is sampled at `start()` to size the per-tunnel semaphore;
@@ -135,10 +123,10 @@ fn run_handle_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
 // The cap, not the underlying allocator or per-flow buffer size, was
 // the dominant lever. The accept-side semaphore caps the in-flight
 // dispatch task population, which directly bounds the per-flow state
-// (Metadata + Box<dyn ProxyConn> + outbound dial buffers + the
-// netstack stream's tx/rx ring) the runtime ever holds at once. At
-// cap=32 the working set is ~4 × per-flow, comfortably below iOS NE's
-// 50 MB jetsam cap with substantial headroom for spikes.
+// (SOCKS5 loopback stream + meow listener handler state + the netstack
+// stream's tx/rx ring) the runtime ever holds at once. At cap=32 the working
+// set is ~4 × per-flow, comfortably below iOS NE's 50 MB jetsam cap with
+// substantial headroom for spikes.
 //
 // Throughput tradeoff: ~25% of the cap=128 conn/s rate (56/s vs
 // 147/s in the same stress harness). Acceptable for the foreground
@@ -381,9 +369,8 @@ struct FlowState {
 }
 
 /// Registry entry for one in-flight TCP flow. Aborting `abort` drops the
-/// `dispatch_tcp` future, which closes both halves of the relay — the
-/// netstack stream side and the in-process meow dispatch (whichever
-/// outbound the rule engine selected: proxy, direct, or reject).
+/// `dispatch_tcp` future, which closes both halves of the relay — the netstack
+/// stream side and the SOCKS5 loopback connection into meow-listener.
 struct FlowRecord {
     state: Arc<FlowState>,
     abort: tokio::task::AbortHandle,
@@ -525,9 +512,10 @@ fn ingress_slot() -> &'static Mutex<Option<mpsc::Sender<Vec<u8>>>> {
 /// only by `debug_counts`.
 #[allow(clippy::type_complexity)]
 fn reply_readers_slot(
-) -> &'static Mutex<Option<std::sync::Weak<Mutex<HashSet<(SocketAddr, SocketAddr)>>>>> {
-    static S: OnceLock<Mutex<Option<std::sync::Weak<Mutex<HashSet<(SocketAddr, SocketAddr)>>>>>> =
-        OnceLock::new();
+) -> &'static Mutex<Option<std::sync::Weak<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>>> {
+    static S: OnceLock<
+        Mutex<Option<std::sync::Weak<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>>>,
+    > = OnceLock::new();
     S.get_or_init(|| Mutex::new(None))
 }
 
@@ -706,14 +694,11 @@ async fn run_tun2socks(
     let (udp_write, mut udp_read) = udp_socket.split();
 
     let (udp_reply_tx, mut udp_reply_rx) = mpsc::channel::<UdpMsg>(256);
-    // NAT key mirrors meow-tunnel's `NatTable = DashMap<(SocketAddr, SocketAddr), Arc<UdpSession>>`
-    // post-ADR-0008 Direction-A refactor. We must key reader spawns on the
-    // same tuple meow-tunnel uses, or dedupe breaks and we leak readers.
-    let reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>> =
-        Arc::new(Mutex::new(HashSet::new()));
+    let udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
     // Publish a weak handle so `debug_counts()` (harness RSS monitor) can
     // sample this set's size without owning it.
-    *reply_readers_slot().lock() = Some(Arc::downgrade(&reply_readers));
+    *reply_readers_slot().lock() = Some(Arc::downgrade(&udp_sessions));
 
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
@@ -883,25 +868,38 @@ async fn run_tun2socks(
     let tcp_idle_sweeper_handle = tokio::spawn(run_tcp_idle_sweeper());
 
     let udp_reply_tx_accept = udp_reply_tx.clone();
-    let reply_readers_accept = reply_readers.clone();
+    let udp_sessions_accept = udp_sessions.clone();
     let udp_sem_accept = udp_sem.clone();
+    let dns_sem_accept = dns_sem.clone();
     let engine_handle_for_udp = crate::get_engine_runtime().handle().clone();
     let udp_accept_handle = tokio::spawn(async move {
         while let Some((payload, src, dst)) = udp_read.next().await {
-            let permit = match udp_sem_accept.clone().try_acquire_owned() {
+            let sem = if dst.port() == 53 {
+                dns_sem_accept.clone()
+            } else {
+                udp_sem_accept.clone()
+            };
+            let permit = match sem.try_acquire_owned() {
                 Ok(p) => p,
                 Err(_) => {
-                    warn_capped(
-                        &UDP_CAP_LOG_LAST_MS,
-                        "tun2socks: UDP live-session cap reached, dropping datagram",
-                    );
+                    if dst.port() == 53 {
+                        warn_capped(
+                            &DNS_CAP_LOG_LAST_MS,
+                            "tun2socks: DNS burst cap reached, dropping query",
+                        );
+                    } else {
+                        warn_capped(
+                            &UDP_CAP_LOG_LAST_MS,
+                            "tun2socks: UDP live-session cap reached, dropping datagram",
+                        );
+                    }
                     continue;
                 }
             };
             let reply_tx = udp_reply_tx_accept.clone();
-            let readers = reply_readers_accept.clone();
+            let sessions = udp_sessions_accept.clone();
             engine_handle_for_udp.spawn(async move {
-                dispatch_udp(payload, src, dst, reply_tx, readers, permit).await;
+                dispatch_udp(payload, src, dst, reply_tx, sessions, permit).await;
             });
         }
     });
@@ -909,155 +907,6 @@ async fn run_tun2socks(
     while let Some(ip_data) = ingress_rx.recv().await {
         if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
             break;
-        }
-
-        // Fake-IP mode: NEDNSSettings advertises a TUN-subnet IP
-        // (172.19.0.2) as the system DNS server, so every UDP DNS query
-        // arrives here as an in-TUN IP packet. Branch on qtype:
-        //
-        //   * AAAA (28)          → NOERROR-empty, unconditionally. Only the
-        //     IPv4 fake-IP path is intercepted and proxied; stripping AAAA
-        //     forces every client onto it.
-        //   * A (1) / SVCB (64)  → meow's `DnsServer::handle_query`. A gets
-        //     / HTTPS (65)         fake-IP synthesis; SVCB/HTTPS take the
-        //                          generic-forward path which strips the
-        //                          ipv4hint/ipv6hint SvcParams in fake-IP mode
-        //                          (meow-rs #215), keeping HTTP/3 origins on
-        //                          the fake-IP A record instead of letting the
-        //                          client connect direct to the real IP.
-        //   * anything else      → raw UDP forward to the pinned upstream
-        //     pool (TXT, MX, PTR, …). meow's DnsServer
-        //     synthesises NXDOMAIN for non-A/AAAA, which kills iOS's
-        //     HTTPS-record probe + ECH + Safari's modern connect path; the
-        //     passthrough route lets those queries reach a real resolver.
-        //
-        // Never let the DNS packet touch the smoltcp stack — the
-        // destination IP isn't a real host on the inside, and we'd just
-        // create an orphan session.
-        if parse_udp_packet(&ip_data).is_some_and(|p| p.dst_port == 53) {
-            let permit = match dns_sem.clone().try_acquire_owned() {
-                Ok(p) => p,
-                Err(_) => {
-                    warn_capped(
-                        &DNS_CAP_LOG_LAST_MS,
-                        "tun2socks: DNS burst cap reached, dropping query",
-                    );
-                    continue;
-                }
-            };
-            let request = ip_data;
-            let egress = egress_tx.clone();
-            crate::get_engine_runtime().spawn(async move {
-                let _permit = permit;
-                let work = async {
-                    let Some(parsed) = parse_udp_packet(&request) else {
-                        return;
-                    };
-                    let qtype = parse_dns_qtype(parsed.payload);
-
-                    let response_payload = if qtype == Some(28) {
-                        // AAAA is always answered NOERROR-empty without
-                        // consulting the resolver, forcing every client onto
-                        // A / fake-IPv4 — the only family the intercept
-                        // actually proxies (the ::/0 claim is a deliberate
-                        // sinkhole, not a working v6 path). The resolver's
-                        // v4-only fake-IP pool already suppresses most AAAA,
-                        // but its `hosts:` table is consulted before that
-                        // suppression and can hand out real v6 addresses
-                        // that would then bypass interception or fail to
-                        // dial. Empty-answer (not a silent drop) so clients
-                        // fall back to A immediately instead of waiting out
-                        // resolver timeouts.
-                        let Some(bytes) = dns_empty_response(parsed.payload) else {
-                            return;
-                        };
-                        bytes
-                    } else if block_http3() && matches!(qtype, Some(64) | Some(65)) {
-                        // "Block HTTP/3 (QUIC)" toggle ON: answer SVCB (64) /
-                        // HTTPS (65) NOERROR-empty by the intercept itself,
-                        // exactly like the AAAA arm above, instead of delegating
-                        // to meow-dns. The record's mere existence advertises h3
-                        // capability (its `alpn`/SvcParams carry the HTTP/3
-                        // hints), so hiding it entirely — not just stripping the
-                        // ipv4hint/ipv6hint as the meow-dns path does — drives the
-                        // client onto the A / fake-IPv4 + TCP path. Pairs with the
-                        // UDP/443 egress drop so any QUIC that still attempts is
-                        // also killed.
-                        let Some(bytes) = dns_empty_response(parsed.payload) else {
-                            return;
-                        };
-                        bytes
-                    } else if matches!(qtype, Some(1) | Some(64) | Some(65)) {
-                        // A (1) + SVCB (64) / HTTPS (65) → meow's resolver
-                        // pipeline. A gets fake-IP synthesis; SVCB/HTTPS take
-                        // meow-dns's generic-forward path, which (meow-rs #215,
-                        // fake-IP mode) strips the ipv4hint/ipv6hint SvcParams
-                        // from the answer. Without that strip an HTTP/3 client
-                        // reads the origin's real IP out of the HTTPS record and
-                        // connects QUIC straight there — bypassing the fake-IP
-                        // mapping, so domain routing / sniffing / proxy-select
-                        // silently break for exactly the dual-stack HTTP/3
-                        // origins (Xiaohongshu et al.). With the hints gone the
-                        // client falls back to the A / fake-IPv4 record and the
-                        // flow rides the proxy. On upstream failure handle_query
-                        // returns SERVFAIL, which also drives the client to the
-                        // A path — strictly better than the old plaintext-UDP/53
-                        // passthrough, which left the real-IP hints intact AND
-                        // stalled ~2 s on censored type-65 lookups.
-                        let Some(tunnel) = crate::engine::tunnel() else {
-                            trace!("tun2socks: UDP/53 query dropped — engine not yet running");
-                            return;
-                        };
-                        let resolver = tunnel.resolver().clone();
-                        match DnsServer::handle_query(parsed.payload, &resolver).await {
-                            Ok(bytes) => bytes,
-                            Err(e) => {
-                                trace!("tun2socks: DnsServer::handle_query error: {}", e);
-                                return;
-                            }
-                        }
-                    } else {
-                        // Remaining non-address qtypes (TXT, MX, PTR, …):
-                        // forward verbatim to the upstream pool, first response
-                        // wins. Falls through to a dropped reply if every
-                        // upstream times out — the client retries on its own.
-                        match forward_dns_to_upstream(
-                            parsed.payload,
-                            DNS_PASSTHROUGH_UPSTREAMS,
-                            DNS_PASSTHROUGH_TIMEOUT,
-                        )
-                        .await
-                        {
-                            Some(bytes) => bytes,
-                            None => {
-                                trace!("tun2socks: DNS passthrough timed out (qtype={:?})", qtype);
-                                return;
-                            }
-                        }
-                    };
-                    let Some(reply_pkt) = build_udp_reply(&request, &response_payload) else {
-                        return;
-                    };
-                    // Match the rest of this file's "log, don't swallow" policy:
-                    // a send error here means egress_rx was dropped (tunnel
-                    // teardown), so the reply is lost. Surface it at trace so a
-                    // shutdown-time DNS stall has an on-device signal instead of
-                    // a silent discard.
-                    if let Err(e) = egress.send(reply_pkt).await {
-                        trace!(
-                            "tun2socks: DNS reply egress send failed (egress closed?): {}",
-                            e
-                        );
-                    }
-                };
-                if tokio::time::timeout(DNS_TASK_TIMEOUT, work).await.is_err() {
-                    trace!(
-                        "tun2socks: DNS task exceeded {:?}, aborting",
-                        DNS_TASK_TIMEOUT
-                    );
-                }
-            });
-            continue;
         }
 
         match stack_ingress_tx.try_send(ip_data) {
@@ -1138,102 +987,54 @@ async fn dispatch_tcp(
     state: Arc<FlowState>,
 ) {
     let _active = ActiveTcpGuard::new();
-    let Some(tunnel) = crate::engine::tunnel() else {
-        logging::bridge_log("tun2socks: engine not running, dropping TCP flow");
+    let Some(mixed_addr) = crate::engine::mixed_dial_addr() else {
+        logging::bridge_log("tun2socks: mixed listener not running, dropping TCP flow");
         return;
     };
 
-    // No FFI-side fake-IP reverse: hand `dst.ip()` straight to meow with
-    // an empty host. `meow_tunnel::tcp::handle_tcp` calls
-    // `pre_handle_metadata` first, which consults the resolver's fake-IP
-    // reverse table — if `dst.ip()` is inside the resolver's pool the
-    // metadata is rewritten in place to `(host: <qname>, dst_ip: None)`
-    // before rule matching, and if it isn't (literal-IP dial, fallback
-    // answer, etc.) the rule engine matches on the literal IP. Either way
-    // the FFI does not need its own pool.
-    let metadata = Metadata {
-        network: Network::Tcp,
-        conn_type: ConnType::Inner,
-        src_ip: Some(src.ip()),
-        src_port: src.port(),
-        dst_ip: Some(dst.ip()),
-        dst_port: dst.port(),
-        host: String::new().into(),
-        ..Default::default()
-    };
-
-    // Snapshot the FlowState's accept-time stamp before the relay future
-    // even runs. `IdleTracking::touch` rewrites `last_active_ms` on the
-    // first successful poll, which only happens after
-    // `meow_tunnel::tcp::handle_tcp` → `pre_handle_metadata` →
-    // `pre_resolve` → `proxy.dial_tcp` returns and `copy_bidirectional_buf`
-    // starts reading. So "`last_active_ms` is still equal to the snapshot"
-    // is a precise proxy for "the dial hasn't completed yet."
     let accepted_at_ms = state.last_active_ms.load(Ordering::Relaxed);
     let dial_deadline = DIAL_DEADLINE_MS.load(Ordering::Relaxed);
     let watchdog_state = state.clone();
 
     let local_eof = Arc::new(Notify::new());
-    let conn: Box<dyn ProxyConn> = Box::new(IdleTracking {
-        inner: NetstackConn(stream),
+    let mut local = IdleTracking {
+        inner: stream,
         state,
         local_eof: local_eof.clone(),
         eof_fired: AtomicBool::new(false),
-    });
+    };
 
-    // Race the normal relay against a local-FIN watcher. The relay
-    // (`meow_tunnel::tcp::handle_tcp` → `copy_bidirectional_buf`)
-    // already RFC-correctly half-closes: on local EOF it calls
-    // `poll_shutdown` on the proxy outbound (sending FIN upstream) and
-    // then waits for the upstream to FIN back to terminate.  That wait
-    // hangs forever for long-poll / SSE / dead-peer flows and leaves
-    // the proxy session, rustls state, NAT entry, and our task stack
-    // alive until cap-pressure eviction picks it as the longest-idle flow.
-    //
-    // Instead: once the local read returns EOF, give the relay a brief
-    // grace window to flush its outbound `poll_shutdown` cleanly, then
-    // drop the future.  Dropping calls each transport layer's `Drop`,
-    // which is what closes rustls (sends close_notify alert), tears
-    // down the WebSocket framing, and drops the upstream TCP — clean
-    // close semantics on every layer, just not waiting for the peer.
-    //
-    // `Statistics.connections` stays in sync because meow-tunnel's
-    // `ConnectionGuard` is RAII and runs on the dropped future.
-    let fut = meow_tunnel::tcp::handle_tcp(tunnel.inner(), conn, metadata);
-    tokio::pin!(fut);
+    let mut proxy = match TcpStream::connect(mixed_addr).await {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("tun2socks: connect mixed listener {mixed_addr} failed for {src} -> {dst}: {e}");
+            return;
+        }
+    };
+    if let Err(e) = socks5_connect(&mut proxy, dst).await {
+        warn!("tun2socks: SOCKS5 CONNECT {src} -> {dst} failed: {e}");
+        return;
+    }
 
-    // Dial-deadline watchdog (see DIAL_DEADLINE_MS docs above and
-    // `run_dial_watchdog` for the actual polling logic).
-    // `watchdog_state` is moved into the watchdog; keep a handle to the same
-    // FlowState so the local-FIN arm can watch download progress via
-    // `last_active_ms` (bumped by `IdleTracking::poll_write` on each
-    // downstream byte).
+    local
+        .state
+        .last_active_ms
+        .store(now_ms().max(accepted_at_ms + 1), Ordering::Relaxed);
+
     let eof_state = watchdog_state.clone();
     let dial_watchdog = run_dial_watchdog(watchdog_state, accepted_at_ms, dial_deadline);
     tokio::pin!(dial_watchdog);
+    let relay = tokio::io::copy_bidirectional(&mut local, &mut proxy);
+    tokio::pin!(relay);
 
     tokio::select! {
         biased;
-        _ = &mut fut => {}
+        _ = &mut relay => {}
         _ = local_eof.notified() => {
-            // The app sent FIN. `handle_tcp` already half-closes correctly
-            // (poll_shutdown upstream) and keeps the DOWNLOAD direction alive,
-            // but then waits forever for the peer's FIN — which wedges
-            // long-poll / SSE / dead-peer flows. Don't truncate a still-
-            // flowing download with a fixed window (the old 250 ms drop):
-            // extend the grace as long as downstream bytes keep arriving, and
-            // give up only once the download side has been quiet for
-            // HALF_CLOSE_IDLE_GRACE. A wedged/dead peer is dropped ~2 s after
-            // FIN; a slow large response drains in full.
             loop {
                 let before = eof_state.last_active_ms.load(Ordering::Relaxed);
-                match tokio::time::timeout(HALF_CLOSE_IDLE_GRACE, &mut fut).await {
-                    // Relay finished (peer FIN'd / closed) — clean done.
+                match tokio::time::timeout(HALF_CLOSE_IDLE_GRACE, &mut relay).await {
                     Ok(_) => break,
-                    // No completion within the window. If a downstream byte
-                    // landed (last_active_ms advanced) the response is still
-                    // draining, so loop and extend; otherwise it's quiet —
-                    // drop the future (RAII close on every layer).
                     Err(_) => {
                         if eof_state.last_active_ms.load(Ordering::Relaxed) == before {
                             break;
@@ -1244,7 +1045,7 @@ async fn dispatch_tcp(
         }
         _ = &mut dial_watchdog => {
             warn!(
-                "tun2socks: dial deadline exceeded for {} -> {} after {} ms; dropping flow",
+                "tun2socks: mixed-listener dial deadline exceeded for {} -> {} after {} ms; dropping flow",
                 src, dst, dial_deadline,
             );
         }
@@ -1299,45 +1100,83 @@ async fn run_dial_watchdog(state: Arc<FlowState>, accepted_at_ms: u64, dial_dead
 }
 
 // ---------------------------------------------------------------------------
-// ProxyConn newtype wrapper — orphan rules force a local impl for the netstack
-// TCP stream. The wrapper only forwards AsyncRead / AsyncWrite; everything
-// else takes the trait's defaults.
+// SOCKS5 loopback helpers.
 // ---------------------------------------------------------------------------
 
-struct NetstackConn(NetstackTcpStream);
+const SOCKS5_VERSION: u8 = 0x05;
+const SOCKS5_NO_AUTH: u8 = 0x00;
+const SOCKS5_CMD_CONNECT: u8 = 0x01;
+const SOCKS5_CMD_UDP_ASSOCIATE: u8 = 0x03;
+const SOCKS5_ATYP_IPV4: u8 = 0x01;
+const SOCKS5_ATYP_DOMAIN: u8 = 0x03;
+const SOCKS5_ATYP_IPV6: u8 = 0x04;
 
-impl AsyncRead for NetstackConn {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
+async fn socks5_negotiate(stream: &mut TcpStream) -> io::Result<()> {
+    stream
+        .write_all(&[SOCKS5_VERSION, 1, SOCKS5_NO_AUTH])
+        .await?;
+    let mut resp = [0u8; 2];
+    stream.read_exact(&mut resp).await?;
+    if resp != [SOCKS5_VERSION, SOCKS5_NO_AUTH] {
+        return Err(io::Error::other(format!(
+            "SOCKS5 no-auth rejected: {resp:?}"
+        )));
     }
+    Ok(())
 }
 
-impl AsyncWrite for NetstackConn {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
+fn encode_socks5_addr(out: &mut Vec<u8>, addr: SocketAddr) {
+    match addr.ip() {
+        IpAddr::V4(ip) => {
+            out.push(SOCKS5_ATYP_IPV4);
+            out.extend_from_slice(&ip.octets());
+        }
+        IpAddr::V6(ip) => {
+            out.push(SOCKS5_ATYP_IPV6);
+            out.extend_from_slice(&ip.octets());
+        }
     }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_shutdown(cx)
-    }
+    out.extend_from_slice(&addr.port().to_be_bytes());
 }
 
-impl ProxyConn for NetstackConn {
-    fn remote_destination(&self) -> String {
-        String::new()
+async fn read_socks5_reply_addr(stream: &mut TcpStream) -> io::Result<SocketAddr> {
+    let mut head = [0u8; 4];
+    stream.read_exact(&mut head).await?;
+    if head[0] != SOCKS5_VERSION || head[1] != 0 {
+        return Err(io::Error::other(format!("SOCKS5 reply failure: {head:?}")));
     }
+    let ip = match head[3] {
+        SOCKS5_ATYP_IPV4 => {
+            let mut octets = [0u8; 4];
+            stream.read_exact(&mut octets).await?;
+            IpAddr::from(octets)
+        }
+        SOCKS5_ATYP_IPV6 => {
+            let mut octets = [0u8; 16];
+            stream.read_exact(&mut octets).await?;
+            IpAddr::from(octets)
+        }
+        SOCKS5_ATYP_DOMAIN => {
+            let mut len = [0u8; 1];
+            stream.read_exact(&mut len).await?;
+            let mut name_buf = vec![0u8; len[0] as usize];
+            stream.read_exact(&mut name_buf).await?;
+            IpAddr::from([0, 0, 0, 0])
+        }
+        atyp => return Err(io::Error::other(format!("SOCKS5 reply atyp {atyp}"))),
+    };
+    let mut port = [0u8; 2];
+    stream.read_exact(&mut port).await?;
+    Ok(SocketAddr::new(ip, u16::from_be_bytes(port)))
+}
+
+async fn socks5_connect(stream: &mut TcpStream, dst: SocketAddr) -> io::Result<()> {
+    socks5_negotiate(stream).await?;
+    let mut req = vec![SOCKS5_VERSION, SOCKS5_CMD_CONNECT, 0];
+    encode_socks5_addr(&mut req, dst);
+    stream.write_all(&req).await?;
+    let _ = read_socks5_reply_addr(stream).await?;
+    Ok(())
 }
 
 /// Wraps an `AsyncRead + AsyncWrite` to bump `FlowState::last_active_ms` on
@@ -1346,11 +1185,9 @@ impl ProxyConn for NetstackConn {
 /// `poll_write` (bytes from the upstream peer) on the same wrapper.
 /// Pending / would-block polls are intentionally not counted as activity.
 ///
-/// Generic over the inner stream so the idle-tracking semantics apply to
-/// the meow path (`IdleTracking<NetstackConn>`, served as a
-/// `Box<dyn ProxyConn>` to `meow_tunnel::tcp::handle_tcp`). Every TCP
-/// flow goes through `meow_tunnel::tcp::handle_tcp`; there is no
-/// alternate FFI-side bypass relay any more.
+/// Generic over the inner stream so the idle-tracking semantics stay local to
+/// the netstack side while the other half of the relay is the SOCKS5 loopback
+/// connection into meow-listener.
 struct IdleTracking<T> {
     inner: T,
     state: Arc<FlowState>,
@@ -1432,24 +1269,8 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for IdleTracking<T> {
     }
 }
 
-// `ProxyConn` only matters on the meow path (the trait is consumed by
-// `meow_tunnel::tcp::handle_tcp`); scope the impl to the netstack flavor
-// so other future `IdleTracking<_>` instantiations don't have to invent a
-// `remote_destination()` they wouldn't use.
-impl ProxyConn for IdleTracking<NetstackConn> {
-    fn remote_destination(&self) -> String {
-        self.inner.remote_destination()
-    }
-}
-
 // ---------------------------------------------------------------------------
-// In-process UDP dispatch into meow_tunnel
-//
-// `meow_tunnel::udp::handle_udp` installs the outbound session into the NAT
-// table on the first packet of a flow but does not drive the reply side — the
-// caller owns the reader loop. We key replies on the same NAT key
-// meow-tunnel uses internally (`"{src}:{remote_address}"`) so reader
-// spawns stay deduped without a second source of truth.
+// UDP dispatch through DNS listener / SOCKS5 UDP ASSOCIATE.
 // ---------------------------------------------------------------------------
 
 async fn dispatch_udp(
@@ -1457,20 +1278,15 @@ async fn dispatch_udp(
     src: SocketAddr,
     dst: SocketAddr,
     reply_tx: mpsc::Sender<UdpMsg>,
-    reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
+    udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>,
     permit: OwnedSemaphorePermit,
 ) {
-    let Some(tunnel) = crate::engine::tunnel() else {
-        logging::bridge_log("tun2socks: engine not running, dropping UDP datagram");
+    if dst.port() == 53 {
+        let _permit = permit;
+        dispatch_dns_udp(payload, src, dst, reply_tx).await;
         return;
-    };
+    }
 
-    // "Block HTTP/3 (QUIC)" toggle: drop outbound UDP to port 443 (QUIC's
-    // transport). `dst` is still the fake-IP:port from the tun (pre-rewrite),
-    // but `dst.port()` is the real app-intended port, so port-only matching is
-    // correct and address-independent. Returning here drops the datagram and
-    // lets `permit` fall out of scope, releasing its `udp_sem` slot — no live
-    // session is created, matching every other early-return path below.
     if block_http3() && dst.port() == 443 {
         warn_capped(
             &BLOCK_HTTP3_DROP_LOG_LAST_MS,
@@ -1479,78 +1295,42 @@ async fn dispatch_udp(
         return;
     }
 
-    // No FFI-side fake-IP reverse: pass `dst.ip()` through and let meow's
-    // `pre_handle_metadata` rewrite to the qname when the destination is
-    // inside the resolver's fake-IP pool, exactly like the TCP path.
-    let mut metadata = Metadata {
-        network: Network::Udp,
-        conn_type: ConnType::Inner,
-        src_ip: Some(src.ip()),
-        src_port: src.port(),
-        dst_ip: Some(dst.ip()),
-        dst_port: dst.port(),
-        host: String::new().into(),
-        ..Default::default()
-    };
-
-    // Mirror `handle_udp`'s prologue so the NAT key we compute here matches
-    // exactly what handle_udp will insert into `nat_table`:
-    //
-    //   1. `pre_handle_metadata` — if `dst.ip()` is a fake-IP, this rewrites
-    //      metadata to `(host: <qname>, dst_ip: None)`.
-    //   2. `pre_resolve` — re-resolves the host (if any) through the engine
-    //      resolver and re-populates `dst_ip` with the real upstream IP.
-    //
-    // Hold the `udp_sem` permit across the whole flow lifetime, not just the
-    // dispatch window. `udp_sem` is a true *live-session* cap: it bounds the
-    // number of simultaneously-live UDP flows (NAT entry + reply_readers entry
-    // + reader task, each holding an `Arc<UdpSession>` + a 4 KiB buffer). The
-    // idle-TTL sweeper only reaps flows that go quiet > 60 s; it does NOT bound
-    // the count of *active* flows (QUIC, WebRTC, games, DNS fan-out, or a
-    // source-port-fanning app), so without a count cap a workload that keeps N
-    // flows each ≥1 datagram/idle-window alive grows monotonically toward the
-    // ~50 MB jetsam cap. The permit is therefore MOVED into the reply-reader
-    // task below and released only when that task exits and clears its NAT +
-    // reply_readers state — so the permit population tracks the live-session
-    // population exactly. On every early-return path here (resolve failure,
-    // handle_udp bail, dedup hit) `permit` drops at end of scope, which is
-    // correct: those paths create no live session.
-    //
-    // Both pre_* calls are idempotent — handle_udp invokes them again
-    // internally and they short-circuit on the already-populated metadata.
-    // The round-trip is unavoidable on this side because we need the
-    // resolved SocketAddr to key the reply-reader registry.
-    tunnel.inner().pre_handle_metadata(&mut metadata);
-    tunnel.inner().pre_resolve(&mut metadata).await;
-    let Some(resolved_ip) = metadata.dst_ip else {
-        // Resolution failed — handle_udp will also bail, nothing to dispatch.
-        return;
-    };
-    let key = (src, SocketAddr::new(resolved_ip, metadata.dst_port));
-
-    meow_tunnel::udp::handle_udp(tunnel.inner(), &payload, src, metadata).await;
-
-    if !reply_readers.lock().insert(key) {
+    let key = (src, dst);
+    let existing = { udp_sessions.lock().get(&key).cloned() };
+    if let Some(session) = existing {
+        if let Err(e) = send_socks5_udp(&session, dst, &payload).await {
+            warn!("tun2socks: SOCKS5 UDP send failed for {src} -> {dst}: {e}");
+            udp_sessions.lock().remove(&key);
+        }
+        drop(permit);
         return;
     }
 
-    let inner = tunnel.inner().clone();
-    let Some(session) = inner.nat_table.get(&key).map(|r| r.value().clone()) else {
-        // handle_udp bailed before NAT insert (no matching rule / dial error).
-        reply_readers.lock().remove(&key);
+    let Some(mixed_addr) = crate::engine::mixed_dial_addr() else {
+        logging::bridge_log("tun2socks: mixed listener not running, dropping UDP datagram");
         return;
     };
+    let session = match open_socks5_udp_session(mixed_addr).await {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("tun2socks: SOCKS5 UDP ASSOCIATE failed for {src} -> {dst}: {e}");
+            return;
+        }
+    };
 
-    spawn_udp_reply_reader(
+    udp_sessions.lock().insert(key, session.clone());
+    spawn_socks5_udp_reply_reader(
         key,
-        session,
+        session.clone(),
         src,
         dst,
         reply_tx,
-        reply_readers,
-        inner,
+        udp_sessions,
         permit,
     );
+    if let Err(e) = send_socks5_udp(&session, dst, &payload).await {
+        warn!("tun2socks: initial SOCKS5 UDP send failed for {src} -> {dst}: {e}");
+    }
 }
 
 /// Poll cadence for the post-first-reply UDP reply reader. Short so the reader
@@ -1588,44 +1368,118 @@ fn forward_udp_reply(reply_tx: &mpsc::Sender<UdpMsg>, msg: UdpMsg) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_udp_reply_reader(
-    key: (SocketAddr, SocketAddr),
-    session: Arc<UdpSession>,
+struct Socks5UdpSession {
+    udp: Arc<UdpSocket>,
+    relay_addr: SocketAddr,
+    control_abort: tokio::task::AbortHandle,
+    last_activity_ms: AtomicU64,
+}
+
+impl Drop for Socks5UdpSession {
+    fn drop(&mut self) {
+        self.control_abort.abort();
+    }
+}
+
+async fn open_socks5_udp_session(mixed_addr: SocketAddr) -> io::Result<Arc<Socks5UdpSession>> {
+    let mut control = TcpStream::connect(mixed_addr).await?;
+    socks5_negotiate(&mut control).await?;
+    control
+        .write_all(&[
+            SOCKS5_VERSION,
+            SOCKS5_CMD_UDP_ASSOCIATE,
+            0,
+            SOCKS5_ATYP_IPV4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ])
+        .await?;
+    let relay_addr = read_socks5_reply_addr(&mut control).await?;
+    let local_ip = match relay_addr.ip() {
+        IpAddr::V4(_) => IpAddr::from([127, 0, 0, 1]),
+        IpAddr::V6(_) => IpAddr::from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+    };
+    let udp = Arc::new(UdpSocket::bind(SocketAddr::new(local_ip, 0)).await?);
+    let control_task = tokio::spawn(async move {
+        let mut buf = [0u8; 16];
+        loop {
+            match control.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    });
+    let control_abort = control_task.abort_handle();
+    Ok(Arc::new(Socks5UdpSession {
+        udp,
+        relay_addr,
+        control_abort,
+        last_activity_ms: AtomicU64::new(now_ms()),
+    }))
+}
+
+fn encode_socks5_udp_header(out: &mut Vec<u8>, addr: SocketAddr) {
+    out.extend_from_slice(&[0, 0, 0]);
+    encode_socks5_addr(out, addr);
+}
+
+fn socks5_udp_payload_offset(buf: &[u8]) -> Option<usize> {
+    if buf.len() < 4 || buf[2] != 0 {
+        return None;
+    }
+    let mut pos = 4usize;
+    match buf[3] {
+        SOCKS5_ATYP_IPV4 => pos = pos.checked_add(4)?,
+        SOCKS5_ATYP_IPV6 => pos = pos.checked_add(16)?,
+        SOCKS5_ATYP_DOMAIN => {
+            let len = *buf.get(pos)? as usize;
+            pos = pos.checked_add(1 + len)?;
+        }
+        _ => return None,
+    }
+    pos.checked_add(2).filter(|off| *off <= buf.len())
+}
+
+async fn send_socks5_udp(
+    session: &Socks5UdpSession,
+    dst: SocketAddr,
+    payload: &[u8],
+) -> io::Result<()> {
+    let mut packet = Vec::with_capacity(10 + payload.len());
+    encode_socks5_udp_header(&mut packet, dst);
+    packet.extend_from_slice(payload);
+    session
+        .udp
+        .send_to(&packet, session.relay_addr)
+        .await
+        .map(|_| ())?;
+    session.last_activity_ms.store(now_ms(), Ordering::Relaxed);
+    Ok(())
+}
+
+fn spawn_socks5_udp_reply_reader(
+    key: UdpSessionKey,
+    session: Arc<Socks5UdpSession>,
     app_src: SocketAddr,
     app_dst: SocketAddr,
     reply_tx: mpsc::Sender<UdpMsg>,
-    reply_readers: Arc<Mutex<HashSet<(SocketAddr, SocketAddr)>>>,
-    tunnel_inner: Arc<TunnelInner>,
+    udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>,
     permit: OwnedSemaphorePermit,
 ) {
     crate::get_engine_runtime().spawn(async move {
-        // Hold the `udp_sem` permit for the entire reader lifetime so the
-        // semaphore caps live sessions, not just the dispatch window. Released
-        // (along with this flow's NAT + reply_readers entries) only when the
-        // loop below breaks and the task returns.
         let _permit = permit;
-        // Per-session reply buffer. Sized for the iOS TUN MTU (1500) plus
-        // headroom for the rare oversized UDP datagram that survives path
-        // fragmentation. Was 64 KiB — at N concurrent UDP sessions (DNS,
-        // QUIC, NAT-traversal probes) that sums to N * 64 KiB pinned for
-        // each session's idle lifetime, blowing past the 50 MB jetsam cap
-        // long before meow's NAT timeout reaps the session. 4 KiB covers
-        // every UDP datagram that can actually round-trip through a
-        // 1500-MTU tun without fragmentation; oversized datagrams are
-        // truncated at the read, which matches the on-wire reality.
         let mut buf = vec![0u8; 4 * 1024];
-        // First-reply deadline: see UDP_FIRST_REPLY_DEADLINE_MS docs.
-        // Only the *first* read is bounded — once a reply has come back
-        // we know the route is alive and we don't want to evict an
-        // active session on quiet idle periods (long-poll, NAT keepalive).
         let first_reply_deadline_ms = UDP_FIRST_REPLY_DEADLINE_MS.load(Ordering::Relaxed);
         let mut had_first_reply = false;
         'reader: loop {
             let read = if !had_first_reply && first_reply_deadline_ms > 0 {
                 match tokio::time::timeout(
                     std::time::Duration::from_millis(first_reply_deadline_ms),
-                    session.conn.read_packet(&mut buf),
+                    session.udp.recv_from(&mut buf),
                 )
                 .await
                 {
@@ -1664,13 +1518,15 @@ fn spawn_udp_reply_reader(
                 loop {
                     match tokio::time::timeout(
                         UDP_REPLY_POLL_INTERVAL,
-                        session.conn.read_packet(&mut buf),
+                        session.udp.recv_from(&mut buf),
                     )
                     .await
                     {
                         Ok(res) => break res,
                         Err(_) => {
-                            if session.idle_for() >= UDP_REPLY_IDLE_TTL {
+                            let idle_ms = now_ms()
+                                .saturating_sub(session.last_activity_ms.load(Ordering::Relaxed));
+                            if idle_ms >= UDP_REPLY_IDLE_TTL.as_millis() as u64 {
                                 info!(
                                     "UDP reply reader idle (both directions) > {}s for {:?}; evicting session",
                                     UDP_REPLY_IDLE_TTL.as_secs(),
@@ -1687,16 +1543,11 @@ fn spawn_udp_reply_reader(
             match read {
                 Ok((n, _from)) => {
                     had_first_reply = true;
-                    // Inbound traffic is activity too: refresh the shared NAT
-                    // idle clock so neither the sweeper nor the backstop above
-                    // evicts a receive-active / send-quiet session while data
-                    // is still arriving.
-                    session.touch();
-                    // Reply injection: the IP frame handed back to the app
-                    // must look like it came FROM the external peer (app_dst)
-                    // TO the app (app_src). netstack's Sink builds the header
-                    // from (src, dst) in that argument order.
-                    let msg: UdpMsg = (buf[..n].to_vec(), app_dst, app_src);
+                    session.last_activity_ms.store(now_ms(), Ordering::Relaxed);
+                    let Some(off) = socks5_udp_payload_offset(&buf[..n]) else {
+                        continue;
+                    };
+                    let msg: UdpMsg = (buf[off..n].to_vec(), app_dst, app_src);
                     forward_udp_reply(&reply_tx, msg);
                 }
                 Err(e) => {
@@ -1705,29 +1556,69 @@ fn spawn_udp_reply_reader(
                 }
             }
         }
-        tunnel_inner.nat_table.remove(&key);
-        reply_readers.lock().remove(&key);
+        udp_sessions.lock().remove(&key);
     });
 }
 
 // ---------------------------------------------------------------------------
-// DNS passthrough — for qtypes meow's resolver doesn't synthesise (anything
-// other than A / AAAA) we forward the raw query to one of the pinned
-// upstream resolvers and inject the reply back. Mirrors the upstream pool in
-// `engine::pinned_dns_block` (CN-side, no anycast) so that split-horizon
-// answers are consistent across the A/AAAA and HTTPS/SVCB/TXT paths.
+// DNS dispatch — block selected qtypes locally, otherwise forward the raw
+// query to the local meow-dns listener and inject the reply back through
+// netstack.
 // ---------------------------------------------------------------------------
 
-/// Pinned UDP/53 upstream pool used for non-A/AAAA passthrough. Kept in
-/// sync with `engine::pinned_dns_block`'s nameserver list; if you add or
-/// remove a CN nameserver there, mirror it here.
-const DNS_PASSTHROUGH_UPSTREAMS: &[&str] = &["119.29.29.29:53", "223.5.5.5:53"];
+async fn dispatch_dns_udp(
+    payload: Vec<u8>,
+    src: SocketAddr,
+    dst: SocketAddr,
+    reply_tx: mpsc::Sender<UdpMsg>,
+) {
+    let qtype = parse_dns_qtype(&payload);
+    let response_payload =
+        if qtype == Some(28) || (block_http3() && matches!(qtype, Some(64) | Some(65))) {
+            match dns_empty_response(&payload) {
+                Some(bytes) => bytes,
+                None => return,
+            }
+        } else if let Some(dns_addr) = crate::engine::dns_dial_addr() {
+            match query_dns_listener(&payload, dns_addr).await {
+                Some(bytes) => bytes,
+                None => {
+                    trace!("tun2socks: DNS listener timed out (qtype={:?})", qtype);
+                    return;
+                }
+            }
+        } else {
+            trace!(
+                "tun2socks: DNS listener not running, dropping qtype={:?}",
+                qtype
+            );
+            return;
+        };
+    forward_udp_reply(&reply_tx, (response_payload, dst, src));
+}
 
-/// Per-attempt deadline before we give up on the whole upstream pool. iOS
-/// clients retry on their own when no reply comes back — we'd rather drop
-/// the response than hold a `tokio::spawn` task open indefinitely against
-/// a dead upstream.
-const DNS_PASSTHROUGH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+async fn query_dns_listener(query: &[u8], dns_addr: SocketAddr) -> Option<Vec<u8>> {
+    if query.len() < 2 {
+        return None;
+    }
+    let query_id = u16::from_be_bytes([query[0], query[1]]);
+    let bind_addr = match dns_addr {
+        SocketAddr::V4(_) => SocketAddr::from(([127, 0, 0, 1], 0)),
+        SocketAddr::V6(_) => {
+            SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], 0))
+        }
+    };
+    let socket = UdpSocket::bind(bind_addr).await.ok()?;
+    socket.send_to(query, dns_addr).await.ok()?;
+    let mut buf = [0u8; 4096];
+    let recv = tokio::time::timeout(DNS_TASK_TIMEOUT, socket.recv_from(&mut buf)).await;
+    let (n, _from) = recv.ok()?.ok()?;
+    if n >= 2 && u16::from_be_bytes([buf[0], buf[1]]) == query_id {
+        Some(buf[..n].to_vec())
+    } else {
+        None
+    }
+}
 
 /// Read the qtype from the first question of a DNS query payload. Returns
 /// `None` for malformed packets (truncation, missing terminator). Handles
@@ -1814,6 +1705,7 @@ pub(crate) fn dns_empty_response(query: &[u8]) -> Option<Vec<u8>> {
 /// bypass the tunnel by default so the dial reaches the real upstream
 /// over the device's underlying network interface rather than looping
 /// back into the tun's UDP/53 intercept.
+#[cfg(test)]
 pub(crate) async fn forward_dns_to_upstream(
     query: &[u8],
     upstreams: &[&str],
@@ -1872,6 +1764,7 @@ pub(crate) async fn forward_dns_to_upstream(
 /// addresses + ports, drop in `reply_payload`, leave the UDP checksum at 0
 /// (legal for IPv4, per RFC 768) and recompute the IPv4 header checksum.
 /// Returns `None` if the input isn't a parseable IPv4/UDP packet.
+#[cfg(test)]
 fn build_udp_reply(orig_ip_data: &[u8], reply_payload: &[u8]) -> Option<Vec<u8>> {
     if orig_ip_data.len() < 28 || (orig_ip_data[0] >> 4) != 4 || orig_ip_data[9] != 17 {
         return None;
@@ -1914,6 +1807,7 @@ fn build_udp_reply(orig_ip_data: &[u8], reply_payload: &[u8]) -> Option<Vec<u8>>
 
 /// One's-complement sum over a 20-byte IPv4 header. Caller has already
 /// zeroed the checksum field at bytes 10..12.
+#[cfg(test)]
 fn ipv4_header_checksum(header: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     for chunk in header.chunks_exact(2) {
@@ -1930,6 +1824,7 @@ fn ipv4_header_checksum(header: &[u8]) -> u16 {
 /// avoid the positional-tuple footgun that hid the `from_ne_bytes` bug in
 /// FI-1: the UDP/53 intercept only consumed `dst_port`, so an endian flip in
 /// the IP fields wasn't visible at the call site.
+#[cfg(test)]
 struct ParsedUdp<'a> {
     #[allow(dead_code)] // reserved for future callers (NAT-style src logging)
     src_ip: u32,
@@ -1941,6 +1836,7 @@ struct ParsedUdp<'a> {
     payload: &'a [u8],
 }
 
+#[cfg(test)]
 fn parse_udp_packet(ip_data: &[u8]) -> Option<ParsedUdp<'_>> {
     if ip_data.len() < 28 {
         return None;

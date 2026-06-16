@@ -5,12 +5,12 @@ import Yams
 /// actually loads. Mirrors the Android `MeowInstance.start` pipeline:
 ///
 ///   1. Remove user-managed `dns:` and `subscriptions:` blocks — the extension
-///      owns DNS (DoH + fake-ip) and the app owns subscription fetching.
+///      owns DNS (fake-ip + local listener) and the app owns subscription fetching.
 ///   2. Strip `secret:` so the REST API runs open on loopback — the app talks
 ///      to the engine via `MeowAPI(secret: "")` and would 401 if the user's
 ///      profile happened to ship a token.
-///   3. Pin `mixed-port` (defaults to 7890) so the tun2socks dispatcher and the
-///      REST API know the listener port without consulting the YAML.
+///   3. Pin `mixed-port` (defaults to 7890), `allow-lan`, `bind-address`, and
+///      a DNS listener so tun2socks and LAN clients can use meow's listeners.
 ///   4. Pin `external-controller: 127.0.0.1:9090` so the app can talk to the
 ///      engine's REST API over loopback.
 ///   5. Inject a `geox-url:` block (jsDelivr-hosted) when the user didn't
@@ -20,6 +20,7 @@ import Yams
 /// goes to `AppGroup.effectiveConfigURL`.
 public enum EffectiveConfigWriter {
     public static let defaultMixedPort = 7890
+    public static let defaultDNSPort = 1053
     public static let defaultExternalController = "127.0.0.1:9090"
 
     /// Matches the Android client's jsDelivr mirrors of the MetaCubeX databases.
@@ -56,7 +57,20 @@ public enum EffectiveConfigWriter {
         root.removeValue(forKey: "secret")
 
         let mixedPort = prefs.mixedPort > 0 ? prefs.mixedPort : defaultMixedPort
+        let bindAddress = prefs.allowLan ? "0.0.0.0" : "127.0.0.1"
         root["mixed-port"] = mixedPort
+        root["allow-lan"] = prefs.allowLan
+        root["bind-address"] = bindAddress
+        root["dns"] = [
+            "enable": true,
+            "listen": "\(bindAddress):\(defaultDNSPort)",
+            "enhanced-mode": "fake-ip",
+            "fake-ip-range": "28.0.0.0/8",
+            "nameserver": [
+                "119.29.29.29",
+                "223.5.5.5",
+            ],
+        ]
         root["external-controller"] = defaultExternalController
 
         if root["geox-url"] == nil {

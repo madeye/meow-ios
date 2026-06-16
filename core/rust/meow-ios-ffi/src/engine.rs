@@ -1,16 +1,11 @@
-//! Embedded meow-rs engine. Owns the REST API task and holds the
-//! `Tunnel` used directly (in-process) by `tun2socks` — there is no local
-//! SOCKS listener; TCP flows hop Rust-to-Rust through a shared
-//! `Arc<TunnelInner>` rather than through a loopback socket.
+//! Embedded meow-rs engine. Owns the REST API task plus the local mixed and
+//! DNS listeners that `tun2socks` dials through loopback.
 //!
-//! DNS is delegated end-to-end to meow's resolver. The pinned `dns:` block
-//! injected below puts the resolver in fake-IP mode with the FFI's chosen
-//! CIDR (`28.0.0.0/8`) and no listening socket (`listen: ""`). The tun2socks
-//! UDP/53 intercept hands every in-TUN DNS datagram straight to
-//! `meow_dns::DnsServer::handle_query`, which both synthesises the fake-IP
-//! answer and owns the reverse mapping that `meow_tunnel::pre_handle_metadata`
-//! consults on the TCP/UDP dispatch path. The engine spawns no separate DNS
-//! task and binds no DNS socket.
+//! DNS is delegated end-to-end to meow's resolver. The pinned `dns:` block from
+//! `meow_patch_config` puts the resolver in fake-IP mode with the FFI's chosen
+//! CIDR (`28.0.0.0/8`) and a local DNS listen socket. The tun2socks UDP/53
+//! path sends non-blocked DNS queries to that listener, so synthesis and
+//! fake-IP reverse mapping stay owned by meow-dns.
 //!
 //! Lifecycle: `start(config_path)` spawns the REST API on the meow-engine
 //! tokio runtime and keeps its `JoinHandle` in `EngineState`. `stop()` aborts
@@ -23,9 +18,12 @@ use dashmap::DashMap;
 use meow_api::log_stream::{LogBroadcastLayer, LogMessage};
 use meow_api::ApiServer;
 use meow_config::{load_config, load_config_from_str, Config};
+use meow_dns::DnsServer;
+use meow_listener::{MixedListener, SnifferRuntime};
 use meow_tunnel::{Statistics, Tunnel};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, Once, OnceLock};
 use tokio::sync::broadcast;
@@ -36,10 +34,24 @@ use tracing_subscriber::prelude::*;
 
 use crate::logging::LogForwardLayer;
 
+fn loopback_addr(port: u16) -> SocketAddr {
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)
+}
+
+fn bind_socket_addr(listen: &str, port: u16) -> Result<SocketAddr> {
+    let ip: IpAddr = listen
+        .parse()
+        .map_err(|e| anyhow::anyhow!("invalid bind address '{listen}': {e}"))?;
+    Ok(SocketAddr::new(ip, port))
+}
+
 struct EngineState {
     stats: Arc<Statistics>,
     tunnel: Tunnel,
+    mixed_dial_addr: Option<SocketAddr>,
+    dns_dial_addr: Option<SocketAddr>,
     api_task: Option<JoinHandle<()>>,
+    listener_tasks: Vec<JoinHandle<()>>,
 }
 
 fn slot() -> &'static Mutex<Option<EngineState>> {
@@ -51,18 +63,10 @@ fn install_tls_provider() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
-/// Strip the shorthand listener ports and explicit `listeners:` array from a
-/// raw config YAML. iOS dispatches TCP flows in-process via the netstack →
-/// `meow_tunnel` Rust-to-Rust hop (no SOCKS loopback) and answers DNS
-/// inline by handing every in-TUN UDP/53 datagram to
-/// `meow_dns::DnsServer::handle_query` (no bound resolver port); there is
-/// no loopback listener and no bound port. Upstream's `build_named_listeners`
-/// (meow-config/src/lib.rs) hard-errors on duplicate ports (ADR-0002
-/// Class A) — e.g. "port 7890 already used by listener 'mixed'" — so a
-/// user YAML combining `mixed-port: 7890` with a listeners entry on the
-/// same port would fail parse-time validation even though iOS never
-/// actually binds either. This strip enforces the no-listener constraint
-/// architecturally at the FFI boundary, regardless of YAML content.
+/// Normalize the effective YAML before `load_config`: iOS owns exactly one
+/// mixed listener (`mixed-port`) and exactly one DNS listener (`dns.listen`).
+/// Drop other listener shorthands / explicit listener arrays so subscriptions
+/// cannot create duplicate ports or unexpected inbound sockets.
 ///
 /// Operates on a generic `serde_yaml::Value` rather than projecting through
 /// `RawConfig`: the latter has no `#[serde(flatten)]` catch-all and no
@@ -70,13 +74,12 @@ fn install_tls_provider() {
 /// silently drop any top-level key it doesn't model (`tun:`, `profile:`,
 /// `experimental:`, `global-client-fingerprint`, `unified-delay`, etc.)
 /// and pollute the output with `key: null` for every unset Option.
-fn strip_listener_fields(yaml: &str) -> Result<String> {
+fn prepare_ios_config(yaml: &str) -> Result<String> {
     let mut doc: serde_yaml::Value = serde_yaml::from_str(yaml).context("parsing config YAML")?;
     if let serde_yaml::Value::Mapping(m) = &mut doc {
         for key in [
             "port",
             "socks-port",
-            "mixed-port",
             "tproxy-port",
             "listeners",
             // Drop the entire `sniffer:` block. meow's
@@ -89,63 +92,11 @@ fn strip_listener_fields(yaml: &str) -> Result<String> {
             // resolution time. Strip at the FFI boundary so user
             // subscriptions can't re-enable it.
             "sniffer",
-            // Drop any user-supplied `dns:` block. iOS pins its own resolver
-            // configuration via `pinned_dns_block` below so the resolver is
-            // always in fake-IP mode with the FFI's chosen CIDR and known-good
-            // CN upstreams, regardless of subscription content.
-            "dns",
         ] {
             m.remove(serde_yaml::Value::String(key.to_string()));
         }
-        // Inject the pinned DNS config last so it always wins over any
-        // residue we just removed.
-        if let serde_yaml::Value::Mapping(dns) = pinned_dns_block() {
-            m.insert(
-                serde_yaml::Value::String("dns".into()),
-                serde_yaml::Value::Mapping(dns),
-            );
-        }
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
-}
-
-/// Pinned DNS block injected into every engine config. Configures meow's
-/// resolver in fake-IP mode with the FFI's chosen CIDR; the tun2socks
-/// UDP/53 intercept answers AAAA itself (NOERROR-empty, unconditionally)
-/// and hands in-TUN A queries straight to
-/// `meow_dns::DnsServer::handle_query`, so this block is the single source
-/// of truth for synthesis, reverse mapping, hosts / NXDOMAIN, and
-/// upstream nameserver selection.
-///
-/// The nameserver set is restricted to CN-side resolvers because meow's
-/// `query_pool` races every entry in parallel ("first response wins"), and
-/// mixing a global anycast resolver into the same pool lets it win the race
-/// from outside CN — returning the global / SG / HK PoP for split-horizon
-/// hosts like xiaohongshu.com, which then misses the GEOIP-driven CN bypass
-/// inside meow's rule engine.
-///
-///   * 119.29.29.29 (DNSPod / Tencent) — fast inside CN, also reachable
-///     externally; primary for split-horizon hosts that need the CN view.
-///   * 223.5.5.5    (Alibaba PublicDNS) — secondary CN-side nameserver.
-///
-/// If a global fallback is ever needed for sites the CN resolvers refuse to
-/// answer, the right place to wire it is meow-rs's `fallback:` block
-/// (which only runs when the primary pool yields nothing or the answer
-/// trips `fallback-filter`), not the primary `nameserver:` pool.
-///
-/// `listen: ""` keeps meow from binding its own UDP/53 socket — the FFI
-/// owns the in-TUN intercept and calls `DnsServer::handle_query` directly.
-fn pinned_dns_block() -> serde_yaml::Value {
-    let yaml = r#"
-enable: true
-listen: ""
-enhanced-mode: fake-ip
-fake-ip-range: 28.0.0.0/8
-nameserver:
-  - 119.29.29.29
-  - 223.5.5.5
-"#;
-    serde_yaml::from_str(yaml).expect("pinned DNS YAML is a compile-time constant")
 }
 
 /// RAII handle that removes a file on drop. Used so the sibling
@@ -170,7 +121,7 @@ impl Drop for TempFileGuard {
 fn load_stripped_config(config_path: &str) -> Result<Config> {
     let original = std::fs::read_to_string(config_path)
         .with_context(|| format!("reading config from {config_path}"))?;
-    let stripped = strip_listener_fields(&original)?;
+    let stripped = prepare_ios_config(&original)?;
     let stripped_path = PathBuf::from(format!("{config_path}.ios-stripped.yaml"));
     std::fs::write(&stripped_path, stripped)
         .with_context(|| format!("writing stripped config to {}", stripped_path.display()))?;
@@ -218,7 +169,7 @@ fn load_stripped_config_from_str(yaml: &str) -> Result<Config> {
 /// that path `load_providers` runs against a non-nested context
 /// (file-backed `load_config` uses a different load path).
 fn strip_for_validation(yaml: &str) -> Result<String> {
-    let listener_stripped = strip_listener_fields(yaml)?;
+    let listener_stripped = prepare_ios_config(yaml)?;
     let mut doc: serde_yaml::Value =
         serde_yaml::from_str(&listener_stripped).context("parsing stripped YAML for validation")?;
     if let serde_yaml::Value::Mapping(m) = &mut doc {
@@ -285,10 +236,6 @@ pub fn start(config_path: &str) -> Result<()> {
     install_tls_provider();
     install_tracing_subscriber();
 
-    // Strip listener shorthand + `listeners:` from the raw YAML before
-    // load_config parses it — upstream's `build_named_listeners` rejects
-    // duplicate ports (ADR-0002 Class A) even though iOS never binds any
-    // of them. See `load_stripped_config` doc for the constraint rationale.
     let cfg = load_stripped_config(config_path)?;
     let raw_config = Arc::new(RwLock::new(cfg.raw.clone()));
 
@@ -338,6 +285,44 @@ pub fn start(config_path: &str) -> Result<()> {
     // re-introduce a fetch — but in a memory-bounded form (streamed to
     // disk, no full-body buffer) suitable for the NE budget.
 
+    let mut listener_tasks = Vec::new();
+    let mixed_dial_addr = cfg.listeners.mixed_port.map(loopback_addr);
+    let dns_dial_addr = cfg.dns.listen_addr.map(|addr| loopback_addr(addr.port()));
+
+    if let Some(listen_addr) = cfg.dns.listen_addr {
+        let dns_server = DnsServer::new(resolver.clone(), listen_addr);
+        listener_tasks.push(crate::get_engine_runtime().spawn(async move {
+            if let Err(e) = dns_server.run().await {
+                error!("DNS server error: {}", e);
+            }
+        }));
+    }
+
+    let sniffer_runtime = Arc::new(SnifferRuntime::new(cfg.sniffer.clone()));
+    let auth = cfg.auth.clone();
+    for nl in &cfg.listeners.named {
+        let addr = bind_socket_addr(&nl.listen, nl.port)
+            .with_context(|| format!("listener '{}'", nl.name))?;
+        match nl.listener_type {
+            meow_config::ListenerType::Mixed
+            | meow_config::ListenerType::Http
+            | meow_config::ListenerType::Socks5 => {
+                let listener = MixedListener::new(tunnel.clone(), addr, nl.name.clone())
+                    .with_sniffer(sniffer_runtime.clone())
+                    .with_auth(auth.clone())
+                    .with_max_connections(nl.max_connections);
+                listener_tasks.push(crate::get_engine_runtime().spawn(async move {
+                    if let Err(e) = listener.run().await {
+                        error!("Mixed listener error: {}", e);
+                    }
+                }));
+            }
+            meow_config::ListenerType::TProxy => {
+                // iOS deliberately does not start transparent-proxy listeners.
+            }
+        }
+    }
+
     // `ApiServer::new` grew from 5 to 9 parameters to serve the new
     // `/providers/*`, `/rules`, `/listeners`, and `/logs` routes. Build the
     // required shapes from the loaded Config.
@@ -352,9 +337,8 @@ pub fn start(config_path: &str) -> Result<()> {
     let log_tx = log_broadcast_tx().clone();
 
     // No FFI-side fake-IP pool, no FFI-side CN-IP table, no resolver hand-off:
-    // meow's own fake-IP pool (configured by `pinned_dns_block`) owns
-    // synthesis + reverse mapping, and the tun2socks UDP/53 intercept fetches
-    // the resolver lazily through `engine::tunnel()?.resolver()`.
+    // meow's own fake-IP pool owns synthesis + reverse mapping behind the DNS
+    // listener that tun2socks dials.
 
     let api_task = cfg.api.external_controller.map(|addr| {
         let api_server = ApiServer::new(
@@ -375,12 +359,18 @@ pub fn start(config_path: &str) -> Result<()> {
         })
     });
 
-    info!("meow-rs engine running (in-process dispatch)");
+    info!(
+        "meow-rs engine running (mixed={:?}, dns={:?})",
+        mixed_dial_addr, dns_dial_addr
+    );
 
     *slot().lock() = Some(EngineState {
         stats,
         tunnel,
+        mixed_dial_addr,
+        dns_dial_addr,
         api_task,
+        listener_tasks,
     });
     Ok(())
 }
@@ -401,8 +391,10 @@ pub fn stop() {
         h.abort();
         let _ = runtime.block_on(h);
     }
-    // DNS owns no background task — `DnsServer::handle_query` runs inline on
-    // the tun2socks UDP/53 intercept path, so there's nothing to abort here.
+    for h in state.listener_tasks {
+        h.abort();
+        let _ = runtime.block_on(h);
+    }
     info!("meow-rs engine stopped");
 }
 
@@ -422,6 +414,14 @@ pub fn tunnel() -> Option<Tunnel> {
     slot().lock().as_ref().map(|s| s.tunnel.clone())
 }
 
+pub fn mixed_dial_addr() -> Option<SocketAddr> {
+    slot().lock().as_ref().and_then(|s| s.mixed_dial_addr)
+}
+
+pub fn dns_dial_addr() -> Option<SocketAddr> {
+    slot().lock().as_ref().and_then(|s| s.dns_dial_addr)
+}
+
 pub fn validate(yaml: &str) -> Result<()> {
     install_tls_provider();
     // Match start()'s strip behaviour so the editor doesn't surface
@@ -432,10 +432,11 @@ pub fn validate(yaml: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_listener_fields;
+    use super::{load_stripped_config_from_str, prepare_ios_config};
+    use std::net::SocketAddr;
 
     #[test]
-    fn strip_removes_listener_keys_only() {
+    fn prepare_removes_extra_listener_keys_only() {
         let yaml = r#"
 port: 7890
 socks-port: 7891
@@ -453,45 +454,22 @@ sniffer:
 mode: rule
 log-level: info
 "#;
-        let out = strip_listener_fields(yaml).expect("strip ok");
+        let out = prepare_ios_config(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let m = doc.as_mapping().unwrap();
-        for k in [
-            "port",
-            "socks-port",
-            "mixed-port",
-            "tproxy-port",
-            "listeners",
-            "sniffer",
-        ] {
+        for k in ["port", "socks-port", "tproxy-port", "listeners", "sniffer"] {
             assert!(
                 !m.contains_key(serde_yaml::Value::String(k.into())),
                 "{k} should have been stripped",
             );
         }
+        assert_eq!(m.get("mixed-port").and_then(|v| v.as_i64()), Some(7892));
         assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
         assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
-
-        // Pinned DNS block must always be present after strip, with the
-        // CN-side nameservers in order. The set is intentionally
-        // CN-only — see `pinned_dns_block`'s doc comment on why a global
-        // resolver (1.1.1.1 etc.) is *not* part of this pool.
-        let dns = m
-            .get(serde_yaml::Value::String("dns".into()))
-            .and_then(|v| v.as_mapping())
-            .expect("pinned dns block injected");
-        let ns: Vec<&str> = dns
-            .get(serde_yaml::Value::String("nameserver".into()))
-            .and_then(|v| v.as_sequence())
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap())
-            .collect();
-        assert_eq!(ns, vec!["119.29.29.29", "223.5.5.5"]);
     }
 
     #[test]
-    fn user_dns_is_replaced_by_pinned() {
+    fn user_dns_survives_runtime_prepare() {
         let yaml = r#"
 dns:
   enable: true
@@ -500,7 +478,7 @@ dns:
     - 9.9.9.9
 mode: rule
 "#;
-        let out = strip_listener_fields(yaml).expect("strip ok");
+        let out = prepare_ios_config(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let dns = doc
             .as_mapping()
@@ -517,8 +495,40 @@ mode: rule
             .collect();
         assert_eq!(
             ns,
-            vec!["119.29.29.29", "223.5.5.5"],
-            "user nameservers must not survive the strip+inject"
+            vec!["8.8.8.8", "9.9.9.9"],
+            "prepare_ios_config must not rewrite dns; meow_patch_config owns pinning"
+        );
+    }
+
+    #[test]
+    fn stripped_config_loads_mixed_and_dns_listeners() {
+        let yaml = r#"
+mixed-port: 23456
+allow-lan: true
+bind-address: 0.0.0.0
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 28.0.0.0/8
+  nameserver:
+    - 119.29.29.29
+rules:
+  - MATCH,DIRECT
+"#;
+        let cfg = load_stripped_config_from_str(yaml).expect("config loads");
+        assert_eq!(cfg.listeners.mixed_port, Some(23456));
+        let mixed = cfg
+            .listeners
+            .named
+            .iter()
+            .find(|listener| listener.name == "mixed")
+            .expect("mixed listener is auto-created from mixed-port");
+        assert_eq!(mixed.listen, "0.0.0.0");
+        assert_eq!(mixed.port, 23456);
+        assert_eq!(
+            cfg.dns.listen_addr,
+            Some("0.0.0.0:1053".parse::<SocketAddr>().unwrap())
         );
     }
 
@@ -543,10 +553,10 @@ proxies:
   - name: p1
     type: direct
 "#;
-        let out = strip_listener_fields(yaml).expect("strip ok");
+        let out = prepare_ios_config(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let m = doc.as_mapping().unwrap();
-        assert!(!m.contains_key(serde_yaml::Value::String("mixed-port".into())));
+        assert!(m.contains_key(serde_yaml::Value::String("mixed-port".into())));
         for k in [
             "tun",
             "profile",
@@ -576,8 +586,8 @@ proxies:
     #[test]
     fn strip_is_idempotent_on_clean_config() {
         let yaml = "mode: rule\nlog-level: info\n";
-        let once = strip_listener_fields(yaml).expect("strip ok");
-        let twice = strip_listener_fields(&once).expect("strip ok");
+        let once = prepare_ios_config(yaml).expect("strip ok");
+        let twice = prepare_ios_config(&once).expect("strip ok");
         assert_eq!(once, twice);
     }
 
@@ -675,7 +685,7 @@ mod config_parse_tests {
     fn fixture_parses_with_all_proxies_and_groups() {
         // Strip listener keys via the production helper (value-based) so the
         // regression test also exercises the strip path.
-        let stripped = super::strip_listener_fields(FIXTURE).expect("strip ok");
+        let stripped = super::prepare_ios_config(FIXTURE).expect("strip ok");
         let rt = tokio::runtime::Runtime::new().expect("tokio rt");
         let cfg = rt
             .block_on(meow_config::load_config_from_str(&stripped))

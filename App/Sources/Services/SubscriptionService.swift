@@ -179,16 +179,18 @@ enum SubscriptionParser {
 }
 
 enum YamlPatcher {
+    private static let defaultDNSPort: Int32 = 1053
+
     static func applyMixedPort(_ yaml: String, port: Int) throws -> String {
         try yaml.withCString { src -> String in
-            let needed = meow_patch_config(src, Int32(port), nil, 0)
+            let needed = meow_patch_config(src, Int32(port), 0, defaultDNSPort, nil, 0)
             if needed < 0 {
                 throw SubscriptionError.conversionFailed(lastCoreError())
             }
             let cap = Int(needed) + 1
             var buffer = [CChar](repeating: 0, count: cap)
             let wrote = buffer.withUnsafeMutableBufferPointer { buf -> Int32 in
-                meow_patch_config(src, Int32(port), buf.baseAddress, Int32(cap))
+                meow_patch_config(src, Int32(port), 0, defaultDNSPort, buf.baseAddress, Int32(cap))
             }
             if wrote < 0 {
                 throw SubscriptionError.conversionFailed(lastCoreError())

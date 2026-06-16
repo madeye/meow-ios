@@ -6,7 +6,7 @@ import Yams
 @Suite("EffectiveConfigWriter")
 struct EffectiveConfigWriterTests {
     @Test
-    func `strips dns and subscriptions top-level blocks`() throws {
+    func `replaces dns and strips subscriptions top-level block`() throws {
         let source = """
         dns:
           enable: true
@@ -23,9 +23,12 @@ struct EffectiveConfigWriterTests {
             password: p
         """
         let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: Preferences())
-        #expect(!out.contains("nameserver"))
         #expect(!out.contains("subscriptions:"))
         #expect(out.contains("proxies:"))
+        let parsed = try Yams.load(yaml: out) as? [String: Any]
+        let dns = parsed?["dns"] as? [String: Any]
+        #expect(dns?["listen"] as? String == "127.0.0.1:1053")
+        #expect((dns?["nameserver"] as? [String]) == ["119.29.29.29", "223.5.5.5"])
     }
 
     @Test
@@ -54,6 +57,18 @@ struct EffectiveConfigWriterTests {
         let out = try EffectiveConfigWriter.patch(sourceYAML: source, prefs: prefs)
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         #expect(parsed?["mixed-port"] as? Int == 17890)
+    }
+
+    @Test
+    func `pins allow-lan and bind-address from preferences`() throws {
+        var prefs = Preferences()
+        prefs.allowLan = true
+        let out = try EffectiveConfigWriter.patch(sourceYAML: "proxies: []\n", prefs: prefs)
+        let parsed = try Yams.load(yaml: out) as? [String: Any]
+        let dns = parsed?["dns"] as? [String: Any]
+        #expect(parsed?["allow-lan"] as? Bool == true)
+        #expect(parsed?["bind-address"] as? String == "0.0.0.0")
+        #expect(dns?["listen"] as? String == "0.0.0.0:1053")
     }
 
     @Test

@@ -170,8 +170,9 @@ int meow_proxy_select(const char *group, const char *name);
 
 /**
  * Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
- * pins `mixed-port`; injects a hardened `external-controller` (random
- * loopback port) + random bearer `secret`; injects `geox-url` when absent.
+ * pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
+ * socket; injects a hardened `external-controller` (random loopback port)
+ * + random bearer `secret`; injects `geox-url` when absent.
  * Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
  * NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
  * Returns -1 on error (inspect `meow_core_last_error`).
@@ -180,7 +181,12 @@ int meow_proxy_select(const char *group, const char *name);
  * `source_yaml` must be NUL-terminated UTF-8. `out` must reference `out_cap`
  * bytes if non-NULL.
  */
-int meow_patch_config(const char *source_yaml, int mixed_port, char *out, int out_cap);
+int meow_patch_config(const char *source_yaml,
+                      int mixed_port,
+                      int allow_lan,
+                      int dns_port,
+                      char *out,
+                      int out_cap);
 
 /**
  * Start tun2socks with a Swift-owned egress callback. The ingest side is
@@ -248,9 +254,8 @@ int meow_tun_close_all_tcp_flows(void);
  * Set the TCP accept-side cap. Bounds the number of concurrent
  * `dispatch_tcp` tasks live at once, which is the dominant factor in
  * peak FFI RSS under burst (1000+ concurrent dispatches each carrying
- * per-flow Metadata, Box<dyn ProxyConn>, meow outbound dial state,
- * and netstack ring buffers can push the extension past the 50 MiB
- * jetsam cap). Default 128.
+ * SOCKS5 loopback streams, meow listener handler state, and netstack ring
+ * buffers can push the extension past the 50 MiB jetsam cap). Default 128.
  *
  * Takes effect on the next `meow_tun_start`. Calls during a live
  * tunnel are accepted but do not resize the running semaphore.
