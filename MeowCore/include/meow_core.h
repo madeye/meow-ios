@@ -13,9 +13,10 @@
 #include <stdlib.h>
 
 /**
- * C-compatible egress callback. Called from the tokio runtime whenever
- * tun2socks produces a packet bound for Swift's `NEPacketTunnelFlow`. Swift
- * guarantees `ctx` remains live between `meow_tun_start` and `meow_tun_stop`.
+ * C-compatible egress callback. Called from the tun2socks tokio runtime
+ * whenever tun2socks produces a packet bound for Swift's `NEPacketTunnelFlow`.
+ * Swift guarantees `ctx` remains live between `meow_tun_start` and
+ * `meow_tun_stop`.
  */
 typedef void (*MeowWritePacket)(void *ctx, const uint8_t *data, uintptr_t len);
 

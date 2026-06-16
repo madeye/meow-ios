@@ -580,7 +580,7 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
     // teardown before touching the lwip globals.
     let prev = run_handle_slot().lock().take();
 
-    let rt = crate::get_runtime();
+    let rt = crate::get_tun2socks_runtime();
     let handle = rt.spawn(async move {
         if let Some(prev) = prev {
             // `stop()` is fire-and-forget: the previous run task may still
@@ -640,7 +640,7 @@ pub fn stop() {
 /// the previous teardown via `run_handle_slot`).
 ///
 /// MUST be called from a NON-runtime thread (the Swift control queue): it
-/// `block_on`s the shared runtime. Bounded by `JOIN_TIMEOUT` so a
+/// `block_on`s the tun2socks runtime. Bounded by `JOIN_TIMEOUT` so a
 /// pathological teardown hang can't freeze iOS's `stopTunnel` grace window;
 /// if the bound trips we log and return anyway (a hung teardown is a separate
 /// failure, and freezing shutdown is worse than a vanishingly-rare late
@@ -651,7 +651,7 @@ pub fn stop_blocking() {
         return;
     };
     const JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-    crate::get_runtime().block_on(async move {
+    crate::get_tun2socks_runtime().block_on(async move {
         match tokio::time::timeout(JOIN_TIMEOUT, handle).await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
@@ -776,6 +776,7 @@ async fn run_tun2socks(
 
     let tcp_accept_sem_for_task = tcp_accept_sem.clone();
     let tcp_flow_tasks_for_accept = tcp_flow_tasks.clone();
+    let engine_handle_for_tcp = crate::get_engine_runtime().handle().clone();
     let tcp_accept_handle = tokio::spawn(async move {
         let cap_warn_last = AtomicU64::new(0);
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
@@ -829,11 +830,14 @@ async fn run_tun2socks(
                 last_active_ms: AtomicU64::new(now_ms()),
             });
             let state_for_task = state.clone();
-            let task = tcp_flow_tasks_for_accept.spawn(async move {
-                let _permit = permit;
-                dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
-                tcp_flows().remove(&flow_id);
-            });
+            let task = tcp_flow_tasks_for_accept.spawn_on(
+                async move {
+                    let _permit = permit;
+                    dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
+                    tcp_flows().remove(&flow_id);
+                },
+                &engine_handle_for_tcp,
+            );
             let abort = task.abort_handle();
             tcp_flows().insert(
                 flow_id,
@@ -881,6 +885,7 @@ async fn run_tun2socks(
     let udp_reply_tx_accept = udp_reply_tx.clone();
     let reply_readers_accept = reply_readers.clone();
     let udp_sem_accept = udp_sem.clone();
+    let engine_handle_for_udp = crate::get_engine_runtime().handle().clone();
     let udp_accept_handle = tokio::spawn(async move {
         while let Some((payload, src, dst)) = udp_read.next().await {
             let permit = match udp_sem_accept.clone().try_acquire_owned() {
@@ -895,7 +900,7 @@ async fn run_tun2socks(
             };
             let reply_tx = udp_reply_tx_accept.clone();
             let readers = reply_readers_accept.clone();
-            tokio::spawn(async move {
+            engine_handle_for_udp.spawn(async move {
                 dispatch_udp(payload, src, dst, reply_tx, readers, permit).await;
             });
         }
@@ -942,7 +947,7 @@ async fn run_tun2socks(
             };
             let request = ip_data;
             let egress = egress_tx.clone();
-            tokio::spawn(async move {
+            crate::get_engine_runtime().spawn(async move {
                 let _permit = permit;
                 let work = async {
                     let Some(parsed) = parse_udp_packet(&request) else {
@@ -1594,7 +1599,7 @@ fn spawn_udp_reply_reader(
     tunnel_inner: Arc<TunnelInner>,
     permit: OwnedSemaphorePermit,
 ) {
-    tokio::spawn(async move {
+    crate::get_engine_runtime().spawn(async move {
         // Hold the `udp_sem` permit for the entire reader lifetime so the
         // semaphore caps live sessions, not just the dispatch window. Released
         // (along with this flow's NAT + reply_readers entries) only when the

@@ -12,9 +12,9 @@
 //! consults on the TCP/UDP dispatch path. The engine spawns no separate DNS
 //! task and binds no DNS socket.
 //!
-//! Lifecycle: `start(config_path)` spawns the REST API on the shared tokio
-//! runtime and keeps its `JoinHandle` in `EngineState`. `stop()` aborts that
-//! task and *blocks* on it before returning — dropping the future drops the
+//! Lifecycle: `start(config_path)` spawns the REST API on the meow-engine
+//! tokio runtime and keeps its `JoinHandle` in `EngineState`. `stop()` aborts
+//! that task and *blocks* on it before returning — dropping the future drops the
 //! `TcpListener` and releases the port synchronously, so a fast
 //! `start → stop → start` cycle doesn't race the previous bind
 //! (`EADDRINUSE`).
@@ -175,8 +175,8 @@ fn load_stripped_config(config_path: &str) -> Result<Config> {
     std::fs::write(&stripped_path, stripped)
         .with_context(|| format!("writing stripped config to {}", stripped_path.display()))?;
     let _guard = TempFileGuard(stripped_path.clone());
-    let cfg =
-        crate::get_runtime().block_on(load_config(stripped_path.to_str().expect("utf-8 path")))?;
+    let cfg = crate::get_engine_runtime()
+        .block_on(load_config(stripped_path.to_str().expect("utf-8 path")))?;
     Ok(cfg)
 }
 
@@ -194,14 +194,14 @@ fn load_stripped_config(config_path: &str) -> Result<Config> {
 ///    so dropping the section is harmless.
 ///
 /// 2. Drive `load_config_from_str` from `spawn_blocking` + `futures::executor`
-///    rather than the FFI's shared `get_runtime()`. The spawn_blocking
+///    rather than directly nesting on the FFI's meow-engine runtime. The spawn_blocking
 ///    hop lifts us off any tokio worker; `futures::executor::block_on`
 ///    is a non-tokio driver and therefore does not install an
 ///    `EnterGuard`. If any upstream callsite ever block_on's its own
 ///    runtime the way `load_providers` does, we won't nest.
 fn load_stripped_config_from_str(yaml: &str) -> Result<Config> {
     let stripped = strip_for_validation(yaml)?;
-    crate::get_runtime().block_on(async move {
+    crate::get_engine_runtime().block_on(async move {
         tokio::task::spawn_blocking(move || {
             futures::executor::block_on(load_config_from_str(&stripped))
                 .context("load_config_from_str (validation)")
@@ -311,12 +311,12 @@ pub fn start(config_path: &str) -> Result<()> {
     //
     // `start()` runs on the main thread, OUTSIDE the tokio runtime, and
     // `spawn_background_tasks` uses a bare `tokio::spawn` (unlike the
-    // `get_runtime().spawn(...)` callsites below, which carry their own
+    // `get_engine_runtime().spawn(...)` callsites below, which carry their own
     // handle). Enter the runtime context for the call so the sweeper task
-    // lands on `get_runtime()` instead of panicking with "no reactor
+    // lands on the meow-engine runtime instead of panicking with "no reactor
     // running". The guard only needs to outlive the spawn.
     {
-        let _enter = crate::get_runtime().enter();
+        let _enter = crate::get_engine_runtime().enter();
         tunnel.spawn_background_tasks();
     }
 
@@ -368,7 +368,7 @@ pub fn start(config_path: &str) -> Result<()> {
             rule_providers,
             listeners,
         );
-        crate::get_runtime().spawn(async move {
+        crate::get_engine_runtime().spawn(async move {
             if let Err(e) = api_server.run().await {
                 error!("API server error: {}", e);
             }
@@ -396,7 +396,7 @@ pub fn stop() {
     // UdpSocket and releases the port. `block_on` waits for that drop to
     // actually happen before `stop()` returns — without it, a rapid
     // start → stop → start cycle observed `EADDRINUSE` on the REST bind.
-    let runtime = crate::get_runtime();
+    let runtime = crate::get_engine_runtime();
     if let Some(h) = state.api_task {
         h.abort();
         let _ = runtime.block_on(h);
