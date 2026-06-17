@@ -630,6 +630,7 @@ fn random_port() -> u16 {
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
 /// socket; injects a hardened `external-controller` (random loopback port)
 /// + random bearer `secret`; injects `geox-url` when absent.
+///
 /// Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
 /// NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
 /// Returns -1 on error (inspect `meow_core_last_error`).
@@ -833,8 +834,8 @@ pub unsafe extern "C" fn meow_tun_ingest(data: *const u8, len: usize) -> c_int {
 }
 
 /// Stop the tun2socks task. Idempotent. Fire-and-forget: the run task drains
-/// on the runtime after this returns. Use for suspend/resume, where the egress
-/// `ctx` is retained for reuse.
+/// on the runtime after this returns. Use only when the egress `ctx` is retained
+/// until a later start or explicit blocking stop.
 #[no_mangle]
 pub extern "C" fn meow_tun_stop() {
     logging::bridge_log("meow_tun_stop");

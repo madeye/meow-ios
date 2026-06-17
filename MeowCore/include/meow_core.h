@@ -215,8 +215,8 @@ int meow_tun_ingest(const uint8_t *data, uintptr_t len);
 
 /**
  * Stop the tun2socks task. Idempotent. Fire-and-forget: the run task drains
- * on the runtime after this returns. Use for suspend/resume, where the egress
- * `ctx` is retained for reuse.
+ * on the runtime after this returns. Use only when the egress `ctx` is retained
+ * until a later start or explicit blocking stop.
  */
 void meow_tun_stop(void);
 

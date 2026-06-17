@@ -43,11 +43,10 @@ static const int kLocalDNSPort                 = 1053;
 
     BOOL _started;
     _Atomic BOOL _ingressRunning;
-    // Bumped on every suspend/stop. A readPackets completion handler captures
-    // the epoch when it arms and drops itself if the epoch advanced in the
-    // meantime — so an in-flight handler from a superseded suspend/resume
-    // generation can neither ingest into the new tun2socks instance nor re-arm
-    // a second concurrent read chain.
+    // Bumped on stop. A readPackets completion handler captures the epoch when
+    // it arms and drops itself if the epoch advanced in the meantime, so an
+    // in-flight handler from a stopped generation cannot ingest stale packets or
+    // re-arm a second concurrent read chain.
     _Atomic uint64_t _ingressEpoch;
     _Atomic int64_t _ingressPackets;
     dispatch_source_t _trafficTimer;
@@ -114,7 +113,7 @@ static const int kLocalDNSPort                 = 1053;
 
     // Apply the Block HTTP/3 (QUIC) toggle before starting the tun. The Rust
     // setter persists in tun2socks static state, so a single pre-start call
-    // covers both the initial meow_tun_start below and any later -resumeTun.
+    // covers the tun2socks instance started below.
     // When the toggle is off this passes 0, which is the engine's default —
     // behavior is unchanged.
     meow_tun_set_block_http3(prefs.blockHTTP3 ? 1 : 0);
@@ -169,46 +168,6 @@ static const int kLocalDNSPort                 = 1053;
         _writerCtx = NULL;
     }
     _writer = nil;
-}
-
-// MARK: - Suspend / resume tun2socks
-
-- (void)suspendTun {
-    if (!_tunStarted) return;
-
-    atomic_store_explicit(&_ingressRunning, NO, memory_order_relaxed);
-    atomic_fetch_add_explicit(&_ingressEpoch, 1, memory_order_relaxed);
-    [self stopTrafficPump];
-
-    // Fire-and-forget here (unlike -stop): the writer ctx is NOT released on
-    // suspend — it is reused by the following -resumeTun, whose meow_tun_start
-    // awaits the previous teardown via run_handle_slot — so there is no ctx to
-    // free underneath the egress task and no UAF window.
-    meow_tun_stop();
-    _tunStarted = NO;
-
-    os_log_info(gLog, "engine: tun suspended (engine still running)");
-    MWEngineLog(MWLogInfo, @"NE: tun suspended (engine still running)");
-}
-
-- (void)resumeTun {
-    if (_tunStarted) return;
-    if (!_started) return;
-
-    int rc = meow_tun_start(_writerCtx, meowPacketWriterCB);
-    if (rc != 0) {
-        os_log_error(gLog, "engine: tun resume failed: %{public}@",
-                     [self lastRustError] ?: @"unknown");
-        MWEngineLogf(MWLogError, @"NE: tun resume failed: %@",
-                     [self lastRustError] ?: @"unknown");
-        return;
-    }
-    _tunStarted = YES;
-
-    [self startIngressLoop];
-    [self startTrafficPump];
-    os_log_info(gLog, "engine: tun resumed");
-    MWEngineLog(MWLogInfo, @"NE: tun resumed");
 }
 
 // MARK: - Engine state

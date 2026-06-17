@@ -1,0 +1,1 @@
+Keeps the VPN tunnel active across device sleep and wake instead of suspending and restarting tun2socks. This should avoid wake-time traffic stalls while preserving the existing engine state.

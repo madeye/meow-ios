@@ -31,10 +31,6 @@ static os_log_t gLog;
     nw_interface_type_t _lastInterfaceType;
     BOOL                _lastHasIPv4;
     BOOL                _lastHasIPv6;
-    // Serializes sleep/wake suspendTun/resumeTun. Those callbacks arrive on
-    // system threads and can otherwise interleave MWTunnelEngine's non-atomic
-    // _tunStarted checks.
-    dispatch_queue_t    _tunControlQueue;
 }
 
 + (void)initialize {
@@ -77,8 +73,6 @@ static os_log_t gLog;
                 return;
             }
             self->_engine = engine;
-            self->_tunControlQueue = dispatch_queue_create(
-                "com.tangzixiang.meow.PacketTunnel.tun-control", DISPATCH_QUEUE_SERIAL);
 
             MWIPCListener *listener = [[MWIPCListener alloc]
                 initWithHandler:^(NSDictionary *intent) {
@@ -109,26 +103,17 @@ static os_log_t gLog;
 }
 
 - (void)sleepWithCompletionHandler:(void (^)(void))completionHandler {
-    os_log_info(gLog, "sleep: suspending tun to shed memory before device sleep");
-    MWEngineLog(MWLogInfo, @"NE: sleep — suspending tun before device sleep");
-    if (!_tunControlQueue) {
-        completionHandler();
-        return;
-    }
-    dispatch_async(_tunControlQueue, ^{
-        [self->_engine suspendTun];
+    os_log_info(gLog, "sleep: keeping tun active before device sleep");
+    MWEngineLog(MWLogInfo, @"NE: sleep — keeping tun active before device sleep");
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         malloc_zone_pressure_relief(NULL, 0);
         completionHandler();
     });
 }
 
 - (void)wake {
-    os_log_info(gLog, "wake: resuming tun");
-    MWEngineLog(MWLogInfo, @"NE: wake — resuming tun");
-    if (!_tunControlQueue) return;
-    dispatch_async(_tunControlQueue, ^{
-        [self->_engine resumeTun];
-    });
+    os_log_info(gLog, "wake: tun remained active");
+    MWEngineLog(MWLogInfo, @"NE: wake — tun remained active");
 }
 
 // MARK: - App messages

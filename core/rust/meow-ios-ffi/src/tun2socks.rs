@@ -79,8 +79,7 @@ static TUN2SOCKS_RUNNING: AtomicBool = AtomicBool::new(false);
 // Monotonic instance id. `start()` bumps it; the spawned run task captures
 // its own value and only performs end-of-life cleanup (clearing
 // `ingress_slot`, lowering `TUN2SOCKS_RUNNING`) if it is STILL the current
-// generation. Without the guard, a rapid stop()→start() (sleep/wake can
-// restart tun2socks back-to-back) let the OLD task's
+// generation. Without the guard, a rapid stop()→start() let the OLD task's
 // deferred cleanup steal the NEW instance's ingress sender and flag:
 // `stop()` is fire-and-forget, so the old task was still parked in `recv()`
 // when the new one started, and its teardown ran arbitrarily later.
@@ -623,9 +622,9 @@ pub fn stop() {
 /// Swift's terminal `stop` `CFBridgingRelease`s the writer immediately after
 /// the FFI returns, so without this join the still-draining egress task can
 /// call the write callback on a freed Objective-C object — a use-after-free.
-/// `suspendTun` deliberately keeps using [`stop`] because it does NOT release
-/// the ctx (it is reused by the following `resumeTun`, whose `start` awaits
-/// the previous teardown via `run_handle_slot`).
+/// Non-terminal callers can use [`stop`] only if they retain the ctx until a
+/// later `start` or `stop_blocking`, whose `start`/join path awaits the
+/// previous teardown via `run_handle_slot`.
 ///
 /// MUST be called from a NON-runtime thread (the Swift control queue): it
 /// `block_on`s the tun2socks runtime. Bounded by `JOIN_TIMEOUT` so a
@@ -2565,8 +2564,7 @@ mod tests {
     /// instance started right after. With the generation guard, a rapid
     /// stop/start cycle must leave the NEW instance fully wired.
     ///
-    /// Builds two real lwip netstacks back-to-back (sequentially, as
-    /// production does on every sleep/wake) — also exercising the fork's
+    /// Builds two real lwip netstacks back-to-back, also exercising the fork's
     /// timeout-task abort + OUTPUT_CB_PTR self-check on teardown.
     #[test]
     fn rapid_stop_start_keeps_new_instance_wired() {
