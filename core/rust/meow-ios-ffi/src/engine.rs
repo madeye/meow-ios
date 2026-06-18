@@ -34,6 +34,16 @@ use tracing_subscriber::prelude::*;
 
 use crate::logging::LogForwardLayer;
 
+/// Connection cap applied to the loopback SOCKS5/mixed listener that lwIP
+/// dials. The meow-config default is `0` (unlimited); on iOS we bound it so a
+/// burst of new flows can't spawn unbounded per-connection handler state on
+/// the engine runtime. Sized to match `tun2socks::TCP_ACCEPT_CAP_DEFAULT`
+/// (256) — the tun2socks side already caps in-flight flows there, so the
+/// listener will rarely hit this, but it backstops the case where a client
+/// other than our own tun2socks dials the loopback port. An explicit
+/// `max-connections` in the config still wins.
+const LOOPBACK_LISTENER_MAX_CONNECTIONS: usize = 256;
+
 fn loopback_addr(port: u16) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)
 }
@@ -321,10 +331,17 @@ pub fn start(config_path: &str) -> Result<()> {
             meow_config::ListenerType::Mixed
             | meow_config::ListenerType::Http
             | meow_config::ListenerType::Socks5 => {
+                // Config default is 0 (unlimited); apply the iOS loopback cap
+                // unless the config set an explicit per-listener/global value.
+                let max_connections = if nl.max_connections == 0 {
+                    LOOPBACK_LISTENER_MAX_CONNECTIONS
+                } else {
+                    nl.max_connections
+                };
                 let listener = MixedListener::new(tunnel.clone(), addr, nl.name.clone())
                     .with_sniffer(sniffer_runtime.clone())
                     .with_auth(auth.clone())
-                    .with_max_connections(nl.max_connections);
+                    .with_max_connections(max_connections);
                 listener_tasks.push(crate::get_engine_runtime().spawn(async move {
                     if let Err(e) = listener.run().await {
                         error!("Mixed listener error: {}", e);
