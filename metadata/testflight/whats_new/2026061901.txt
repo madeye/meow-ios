@@ -1,0 +1,1 @@
+Removes the cap on simultaneous connections so apps that open many connections at once (busy pages, downloads, multiplayer) are no longer throttled. Idle connections are still closed automatically after 10 minutes. Includes the earlier fix for the freeze that could happen when opening the app while connected.
