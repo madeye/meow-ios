@@ -47,8 +47,15 @@ use std::time::Duration;
 
 static ENGINE_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static TUN2SOCKS_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+static API_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 const TOKIO_RUNTIME_WORKERS: usize = 2;
+/// The REST control API serves a bursty, host-app-driven workload (a wave of
+/// `/proxies` + `/configs` requests on every connection-stage transition) and
+/// is otherwise idle. One worker is plenty — its only job is to keep that
+/// burst OFF the engine runtime so a synchronous `/proxies` serialization
+/// cannot starve the data-path relay / DNS tasks.
+const TOKIO_API_RUNTIME_WORKERS: usize = 1;
 const TOKIO_RUNTIME_STACK_SIZE: usize = 1024 * 1024;
 
 fn build_runtime(
@@ -79,6 +86,25 @@ pub(crate) fn get_engine_runtime() -> &'static tokio::runtime::Runtime {
         build_runtime(
             "meow-engine",
             TOKIO_RUNTIME_WORKERS,
+            TOKIO_RUNTIME_STACK_SIZE,
+        )
+    })
+}
+
+pub(crate) fn get_api_runtime() -> &'static tokio::runtime::Runtime {
+    API_RUNTIME.get_or_init(|| {
+        // The REST/external-controller server runs on its OWN runtime, isolated
+        // from both the engine workers (proxy dials, DNS, relay) and the
+        // tun2socks workers (lwIP / packet I/O). Before this split, a burst of
+        // REST calls on app foreground — `get_proxies` is a no-`await`
+        // synchronous CPU sink that builds + serialises the whole proxy table —
+        // could peg both engine workers and stall packet forwarding (the
+        // "open app → engine freeze" report). Keeping the API on a separate
+        // single-worker pool means a REST burst can no longer steal CPU from
+        // the data path.
+        build_runtime(
+            "meow-api",
+            TOKIO_API_RUNTIME_WORKERS,
             TOKIO_RUNTIME_STACK_SIZE,
         )
     })

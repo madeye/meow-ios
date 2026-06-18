@@ -366,7 +366,11 @@ pub fn start(config_path: &str) -> Result<()> {
             rule_providers,
             listeners,
         );
-        crate::get_engine_runtime().spawn(async move {
+        // Spawn on the dedicated API runtime, NOT the engine runtime: a burst
+        // of REST calls (e.g. the host app's per-stage `/proxies` + `/configs`
+        // wave) must not be able to starve the data-path relay / DNS tasks that
+        // share the engine workers. See `get_api_runtime`.
+        crate::get_api_runtime().spawn(async move {
             if let Err(e) = api_server.run().await {
                 error!("API server error: {}", e);
             }
@@ -401,9 +405,12 @@ pub fn stop() {
     // actually happen before `stop()` returns — without it, a rapid
     // start → stop → start cycle observed `EADDRINUSE` on the REST bind.
     let runtime = crate::get_engine_runtime();
+    // The API task lives on its own runtime (see `get_api_runtime`), so its
+    // abort/join must be driven by that runtime — `block_on` only awaits tasks
+    // belonging to the runtime it's called on.
     if let Some(h) = state.api_task {
         h.abort();
-        let _ = runtime.block_on(h);
+        let _ = crate::get_api_runtime().block_on(h);
     }
     for h in state.listener_tasks {
         h.abort();
