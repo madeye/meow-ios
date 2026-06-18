@@ -1,0 +1,1 @@
+Fixes a freeze that could occur right after opening the app while connected: the control API now runs on its own thread pool, so the burst of status requests the app makes when you switch tabs can no longer stall packet forwarding. Connections stay responsive when foregrounding the app.
