@@ -68,9 +68,9 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# HEAD: 619499b5 — fake-ip HTTPS/SVCB dual-stack-correct (ADR-0013, meow-rs#217)
-# on top of the UDP NAT-table shard-guard deadlock fix (1454ef24).
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
+# HEAD: 370dce39 — cross-platform HostResolver + system-DNS cache for upstream
+# dials (meow-rs#228) plus rule-matching allocation-pressure fix.
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -78,12 +78,12 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb3
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
-meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b", default-features = false, features = ["listener-mixed"] }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "7e47ce60b65fb30837670e84d05bdcde8bf4813b" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418" }
+meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418", default-features = false, features = ["listener-mixed"] }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "370dce39c20ca86a8a61ec82194bc90164fb3418" }
 
 [build-dependencies]
 cbindgen = "0.28"

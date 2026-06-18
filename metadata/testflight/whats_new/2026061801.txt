@@ -1,0 +1,1 @@
+Updates the bundled proxy engine to the latest meow-rs. Proxy server hostnames now resolve through the built-in DNS resolver with caching and request coalescing instead of the system resolver, which avoids lookup stampedes and traffic stalls when many connections start at once (for example right after waking from sleep). Also reduces memory pressure during rule matching.

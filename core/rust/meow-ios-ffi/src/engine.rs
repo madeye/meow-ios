@@ -240,6 +240,20 @@ pub fn start(config_path: &str) -> Result<()> {
     let raw_config = Arc::new(RwLock::new(cfg.raw.clone()));
 
     let resolver = cfg.dns.resolver.clone();
+
+    // Route proxy-upstream hostname resolution through meow-dns instead of
+    // libc `getaddrinfo`. On the NE, `getaddrinfo` runs one blocking-pool
+    // thread per lookup and re-resolves on every dial, so a wake-from-sleep
+    // burst of flows to a single upstream stampedes the pool and can wedge the
+    // 2-worker engine runtime (data path + REST API both freeze). The meow-dns
+    // resolver resolves async, coalesces concurrent lookups, and caches —
+    // collapsing the burst to one lookup. `resolve_ip` returns real addresses
+    // (fake-IP synthesis lives only in the DNS-server `lookup_ipv4/6` path), so
+    // the upstream never resolves to a 28.x fake IP. Android installs the same
+    // hook plus a `SocketProtector` via its JNI bridge; iOS needs only the hook
+    // (the NE process's own sockets already bypass its tunnel).
+    meow_common::set_host_resolver(Arc::new(meow_dns::ResolverHostHook::new(resolver.clone())));
+
     let tunnel = Tunnel::new(resolver.clone());
     tunnel.set_mode(cfg.general.mode);
     tunnel.update_rules(cfg.rules);

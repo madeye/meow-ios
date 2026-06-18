@@ -173,6 +173,7 @@ int meow_proxy_select(const char *group, const char *name);
  * pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
  * socket; injects a hardened `external-controller` (random loopback port)
  * + random bearer `secret`; injects `geox-url` when absent.
+ *
  * Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
  * NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
  * Returns -1 on error (inspect `meow_core_last_error`).
