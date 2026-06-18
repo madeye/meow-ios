@@ -903,37 +903,6 @@ pub extern "C" fn meow_tun_close_all_tcp_flows() -> c_int {
     n as c_int
 }
 
-/// Set the TCP accept-side cap. Bounds the number of concurrent
-/// `dispatch_tcp` tasks live at once, which is the dominant factor in
-/// peak FFI RSS under burst (1000+ concurrent dispatches each carrying
-/// SOCKS5 loopback streams, meow listener handler state, and netstack ring
-/// buffers can push the extension past the 50 MiB jetsam cap). Default 128.
-///
-/// Takes effect on the next `meow_tun_start`. Calls during a live
-/// tunnel are accepted but do not resize the running semaphore.
-///
-/// Returns 0 on success, -1 on invalid input (`cap == 0`, which would
-/// deadlock the accept loop).
-#[no_mangle]
-pub extern "C" fn meow_tun_set_accept_cap(cap: c_int) -> c_int {
-    if cap <= 0 {
-        set_error("accept cap must be > 0".into());
-        return -1;
-    }
-    if tun2socks::set_accept_cap(cap as usize) {
-        0
-    } else {
-        -1
-    }
-}
-
-/// Read the currently-configured TCP accept cap. Reflects the value the
-/// next `meow_tun_start` will use; does not query the running semaphore.
-#[no_mangle]
-pub extern "C" fn meow_tun_accept_cap() -> c_int {
-    tun2socks::accept_cap() as c_int
-}
-
 /// Set the per-flow dial deadline, in milliseconds. Bounds the time
 /// `dispatch_tcp` waits for the relay's first byte of progress on the
 /// netstack stream before declaring the dial hung and dropping the

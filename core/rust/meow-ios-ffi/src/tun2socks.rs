@@ -97,60 +97,12 @@ fn run_handle_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
     SLOT.get_or_init(|| Mutex::new(None))
 }
 
-// TCP accept-side burst cap. Without this, every smoltcp-accepted flow
-// spawns a `dispatch_tcp` task immediately — and under a real burst (e.g.
-// loading a content-rich CN homepage that fans out to 50+ subdomains in
-// the first second), 1000+ concurrent dispatch tasks each hold their own
-// per-flow state (SOCKS5 loopback stream, meow listener handler state, and
-// the netstack stream's tx/rx ring). The 10-min VM stress run peaked at
-// 440 MiB of RSS in the first ~10 s of load — 8.8× the on-device 50 MB
-// jetsam cap — almost entirely from the size of this in-flight set.
-//
-// Tunable at runtime via [`set_accept_cap`] / `meow_tun_set_accept_cap`.
-// The atomic is sampled at `start()` to size the per-tunnel semaphore;
-// changes after start take effect on the next `meow_tun_start`. We don't
-// reseat a live semaphore — tokio's Semaphore can `add_permits` but not
-// shrink without forgetting permits mid-flight, which would let live flows
-// outrun the new cap until they drain. Restart-scoped is cleaner.
-//
-// 32 default. Empirical: a 10-min Tart-VM stress at 32-concurrent ×
-// 200 ms-hold connections through github.com:443 — exhaustively
-// instrumented in docs/INVESTIGATION-2026-05-16-stress-rss-netstack-
-// smoltcp.md — produced:
-//   cap=128: 122 MiB working set, +0.150 MiB/s slope, peak 182 MiB
-//   cap= 32:  38 MiB working set, **flat from t=10 s**, no slope
-// The cap, not the underlying allocator or per-flow buffer size, was
-// the dominant lever. The accept-side semaphore caps the in-flight
-// dispatch task population, which directly bounds the per-flow state
-// (SOCKS5 loopback stream + meow listener handler state + the netstack
-// stream's tx/rx ring) the runtime ever holds at once. At cap=32 the working
-// set is ~4 × per-flow, comfortably below iOS NE's 50 MB jetsam cap with
-// substantial headroom for spikes.
-//
-// Throughput tradeoff: ~25% of the cap=128 conn/s rate (56/s vs
-// 147/s in the same stress harness). Acceptable for the foreground
-// page-load shape we actually need to serve; iOS NE's whole reason
-// for existing is to fit in 50 MB, not to win a benchmark.
-const TCP_ACCEPT_CAP_DEFAULT: usize = 256;
-static TCP_ACCEPT_CAP: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(TCP_ACCEPT_CAP_DEFAULT);
-
-/// Set the TCP accept cap. Takes effect on the next `meow_tun_start`.
-/// `cap` must be > 0 — zero would deadlock the accept loop. Returns true
-/// if applied, false on invalid input.
-pub fn set_accept_cap(cap: usize) -> bool {
-    if cap == 0 {
-        return false;
-    }
-    TCP_ACCEPT_CAP.store(cap, Ordering::Relaxed);
-    true
-}
-
-/// Read the currently-configured accept cap. Reflects the value the next
-/// `meow_tun_start` will use, not the size of any live semaphore.
-pub fn accept_cap() -> usize {
-    TCP_ACCEPT_CAP.load(Ordering::Relaxed)
-}
+// TCP accept-side cap removed: every smoltcp-accepted flow spawns its
+// `dispatch_tcp` task immediately, with no in-flight semaphore. The cap was
+// historically the dominant lever on peak NE RSS under a connection burst
+// (see docs/INVESTIGATION-2026-05-16-stress-rss-netstack-smoltcp.md), so
+// without it a burst is bounded only by upstream/relay backpressure and the
+// 30 s idle sweeper — watch RSS against the ~50 MB NE jetsam ceiling.
 
 // Per-flow dial deadline. Bounds the time `dispatch_tcp` waits for the
 // relay's first byte of progress on the netstack stream before declaring
@@ -387,33 +339,6 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
-}
-
-/// Find the flow with the oldest `last_active_ms`, remove it from the
-/// registry, and abort its task. Called from the accept loop when the
-/// accept semaphore is saturated — eviction is cap-triggered, not
-/// time-triggered, and always targets the longest-idle flow first.
-/// Returns the evicted flow's id, or `None` if the registry is empty.
-#[cfg_attr(not(test), allow(dead_code))]
-fn evict_oldest_idle_tcp_flow() -> Option<u64> {
-    let flows = tcp_flows();
-    let mut oldest: Option<(u64, u64)> = None;
-    for entry in flows.iter() {
-        let ts = entry.value().state.last_active_ms.load(Ordering::Relaxed);
-        match oldest {
-            None => oldest = Some((*entry.key(), ts)),
-            Some((_, best_ts)) if ts < best_ts => oldest = Some((*entry.key(), ts)),
-            _ => {}
-        }
-    }
-    let (id, _) = oldest?;
-    let (_, rec) = flows.remove(&id)?;
-    rec.abort.abort();
-    warn!(
-        "tun2socks: TCP cap reached, evicting longest-idle flow {} {} -> {}",
-        id, rec.src, rec.dst
-    );
-    Some(id)
 }
 
 /// One sweep pass: remove + abort every flow whose `last_active_ms` is at
@@ -704,7 +629,6 @@ async fn run_tun2socks(
 
     let udp_sem = Arc::new(Semaphore::new(UDP_BURST_CAP));
     let dns_sem = Arc::new(Semaphore::new(DNS_BURST_CAP));
-    let tcp_accept_sem = Arc::new(Semaphore::new(accept_cap()));
     let tcp_flow_tasks = TaskTracker::new();
 
     let egress_tx_stack = egress_tx.clone();
@@ -758,11 +682,9 @@ async fn run_tun2socks(
         }
     });
 
-    let tcp_accept_sem_for_task = tcp_accept_sem.clone();
     let tcp_flow_tasks_for_accept = tcp_flow_tasks.clone();
     let engine_handle_for_tcp = crate::get_engine_runtime().handle().clone();
     let tcp_accept_handle = tokio::spawn(async move {
-        let cap_warn_last = AtomicU64::new(0);
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
             // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it
             // when a UDP reply was truncated) inside the TUN is
@@ -779,30 +701,6 @@ async fn run_tun2socks(
                 drop(stream);
                 continue;
             }
-            // Cap backpressure: when no permit is immediately available the
-            // registry is at the accept cap. Drop the incoming connection
-            // rather than evicting an existing flow — existing flows are
-            // doing useful work, and under a routing-loop storm (proxy
-            // connections going back through the tunnel) evicting creates
-            // more new connections that immediately hit the cap again,
-            // corrupting lwip's PCB list with rapid back-to-back
-            // tcp_abort calls (segfault / "tcp_poll: invalid pcb").
-            //
-            // The dropped stream sends a RST to the app-side socket,
-            // which retries after the usual TCP backoff. Meanwhile,
-            // existing flows drain naturally and free permits.
-            let permit = match tcp_accept_sem_for_task.clone().try_acquire_owned() {
-                Ok(p) => p,
-                Err(tokio::sync::TryAcquireError::Closed) => break,
-                Err(tokio::sync::TryAcquireError::NoPermits) => {
-                    warn_capped(
-                        &cap_warn_last,
-                        "tun2socks: TCP accept cap full, dropping new connection",
-                    );
-                    tokio::spawn(async move { drop(stream) });
-                    continue;
-                }
-            };
             // Per-accept logging was INFO; under burst (16k accepts in 600 s
             // measured in the VM stress run) the formatter + oslog writer
             // become a measurable cost. Trace level keeps it available for
@@ -816,7 +714,6 @@ async fn run_tun2socks(
             let state_for_task = state.clone();
             let task = tcp_flow_tasks_for_accept.spawn_on(
                 async move {
-                    let _permit = permit;
                     dispatch_tcp(stream, local_addr, remote_addr, state_for_task).await;
                     tcp_flows().remove(&flow_id);
                 },
@@ -2186,59 +2083,6 @@ mod tests {
         tokio::runtime::Handle::current()
             .spawn(std::future::pending::<()>())
             .abort_handle()
-    }
-
-    #[tokio::test]
-    async fn evict_oldest_picks_longest_idle_flow() {
-        let _guard = flows_test_guard();
-        let flows = tcp_flows();
-        flows.clear();
-
-        let now = now_ms();
-        let stale_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
-        let fresh_id = TCP_FLOW_ID_SEQ.fetch_add(1, Ordering::Relaxed);
-
-        flows.insert(
-            stale_id,
-            FlowRecord {
-                state: Arc::new(FlowState {
-                    last_active_ms: AtomicU64::new(now.saturating_sub(60_000)),
-                }),
-                abort: dummy_handle(),
-                src: dummy_addr(1),
-                dst: dummy_addr(2),
-            },
-        );
-        flows.insert(
-            fresh_id,
-            FlowRecord {
-                state: Arc::new(FlowState {
-                    last_active_ms: AtomicU64::new(now),
-                }),
-                abort: dummy_handle(),
-                src: dummy_addr(3),
-                dst: dummy_addr(4),
-            },
-        );
-
-        let evicted = evict_oldest_idle_tcp_flow();
-        assert_eq!(
-            evicted,
-            Some(stale_id),
-            "longest-idle flow should be evicted"
-        );
-        assert!(flows.get(&stale_id).is_none(), "stale flow removed");
-        assert!(flows.get(&fresh_id).is_some(), "fresh flow retained");
-
-        flows.clear();
-    }
-
-    #[tokio::test]
-    async fn evict_oldest_with_no_flows_is_a_no_op() {
-        let _guard = flows_test_guard();
-        let flows = tcp_flows();
-        flows.clear();
-        assert_eq!(evict_oldest_idle_tcp_flow(), None);
     }
 
     #[tokio::test]
