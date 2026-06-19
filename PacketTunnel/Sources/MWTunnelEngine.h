@@ -10,6 +10,9 @@
 /// Blocking: runs engine + tun2socks start FFI calls. Call on a background queue.
 - (BOOL)startWithError:(NSError **)error;
 
+/// Blocking: restarts engine + tun2socks while preserving the packet read loop.
+- (BOOL)restartWithError:(NSError **)error;
+
 /// Stops engine, tun2socks, ingress loop, traffic pump.
 - (void)stop;
 

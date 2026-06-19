@@ -43,10 +43,11 @@ static const int kLocalDNSPort                 = 1053;
 
     BOOL _started;
     _Atomic BOOL _ingressRunning;
-    // Bumped on stop. A readPackets completion handler captures the epoch when
-    // it arms and drops itself if the epoch advanced in the meantime, so an
-    // in-flight handler from a stopped generation cannot ingest stale packets or
-    // re-arm a second concurrent read chain.
+    // Bumped on terminal stop. A readPackets completion handler captures the
+    // epoch when it arms and drops itself if the epoch advanced in the meantime,
+    // so an in-flight handler from a stopped generation cannot ingest stale
+    // packets or re-arm a second concurrent read chain. In-place wake restarts
+    // intentionally keep this read chain alive.
     _Atomic uint64_t _ingressEpoch;
     _Atomic int64_t _ingressPackets;
     dispatch_source_t _trafficTimer;
@@ -76,14 +77,15 @@ static const int kLocalDNSPort                 = 1053;
     return self;
 }
 
-// MARK: - Start
+- (void)releaseWriterContext {
+    if (_writerCtx) {
+        CFBridgingRelease(_writerCtx);
+        _writerCtx = NULL;
+    }
+    _writer = nil;
+}
 
-- (BOOL)startWithError:(NSError **)error {
-    if (_started) return YES;
-    _started = YES;
-
-    os_log_error(gLog, "engine: startWithError entry");
-
+- (BOOL)startRuntimeWithError:(NSError **)error {
     NSString *homeDir = [MWAppGroup containerURL].path;
     MWPreferences *prefs = [MWPreferences loadFromDefaults:[MWAppGroup defaults]];
 
@@ -96,7 +98,6 @@ static const int kLocalDNSPort                 = 1053;
     meow_core_set_home_dir(homeDir.UTF8String);
 
     if (![self writeEffectiveConfigWithPrefs:prefs error:error]) {
-        _started = NO;
         return NO;
     }
 
@@ -107,7 +108,6 @@ static const int kLocalDNSPort                 = 1053;
         if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
                                                 code:1
                                             userInfo:@{NSLocalizedDescriptionKey: msg}];
-        _started = NO;
         return NO;
     }
 
@@ -118,26 +118,72 @@ static const int kLocalDNSPort                 = 1053;
     // behavior is unchanged.
     meow_tun_set_block_http3(prefs.blockHTTP3 ? 1 : 0);
 
-    MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
-    _writer    = writer;
-    _writerCtx = (void *)CFBridgingRetain(writer);
-
     rc = meow_tun_start(_writerCtx, meowPacketWriterCB);
     if (rc != 0) {
         NSString *msg = [self lastRustError] ?: @"tun start failed";
         if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
                                                 code:2
                                             userInfo:@{NSLocalizedDescriptionKey: msg}];
-        CFBridgingRelease(_writerCtx);
-        _writerCtx = NULL;
-        _writer    = nil;
         meow_engine_stop();
-        _started = NO;
         return NO;
     }
     _tunStarted = YES;
+    return YES;
+}
+
+// MARK: - Start
+
+- (BOOL)startWithError:(NSError **)error {
+    if (_started) return YES;
+    _started = YES;
+
+    os_log_error(gLog, "engine: startWithError entry");
+
+    MWPacketWriter *writer = [[MWPacketWriter alloc] initWithFlow:_flow];
+    _writer    = writer;
+    _writerCtx = (void *)CFBridgingRetain(writer);
+
+    if (![self startRuntimeWithError:error]) {
+        [self releaseWriterContext];
+        _started = NO;
+        return NO;
+    }
 
     [self startIngressLoop];
+    [self startTrafficPump];
+    return YES;
+}
+
+// MARK: - Restart
+
+- (BOOL)restartWithError:(NSError **)error {
+    if (!_started) {
+        if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
+                                                code:3
+                                            userInfo:@{NSLocalizedDescriptionKey: @"engine not started"}];
+        return NO;
+    }
+
+    os_log_info(gLog, "engine: restart entry");
+
+    [self stopTrafficPump];
+    if (_tunStarted) {
+        meow_tun_stop_blocking();
+        _tunStarted = NO;
+    }
+    meow_engine_stop();
+
+    if (![self startRuntimeWithError:error]) {
+        atomic_store_explicit(&_ingressRunning, NO, memory_order_relaxed);
+        atomic_fetch_add_explicit(&_ingressEpoch, 1, memory_order_relaxed);
+        [self releaseWriterContext];
+        _started = NO;
+        return NO;
+    }
+
+    // Do not call startIngressLoop here. The original readPackets chain remains
+    // armed across the in-place restart; arming another read on the same
+    // NEPacketTunnelFlow can violate the one-read-at-a-time contract.
     [self startTrafficPump];
     return YES;
 }
@@ -163,11 +209,7 @@ static const int kLocalDNSPort                 = 1053;
     _tunStarted = NO;
     meow_engine_stop();
 
-    if (_writerCtx) {
-        CFBridgingRelease(_writerCtx);
-        _writerCtx = NULL;
-    }
-    _writer = nil;
+    [self releaseWriterContext];
 }
 
 // MARK: - Engine state

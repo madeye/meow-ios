@@ -1,0 +1,1 @@
+Improves tunnel recovery around iOS sleep/wake and network changes. Wake now keeps the active tunnel path intact instead of restarting over already-resumed traffic, while real path changes such as Wi-Fi/cellular switches still trigger a debounced engine restart. This should reduce dropped connections immediately after unlocking or waking the device.
