@@ -32,7 +32,18 @@ enum TunnelSettings {
         ]
     }
 
-    static func make(serverAddress: String) -> NEPacketTunnelNetworkSettings {
+    /// IPv6 LAN exclusions, mirrored from MWTunnelSettings.ipv6LanExcludedRoutes:
+    /// keep link-local, unique-local (ULA, incl. the TUN's own fd6d:6577::/64),
+    /// and multicast off the ::/0 default route, mirroring the IPv4 policy.
+    static var ipv6LanExcludedRoutes: [NEIPv6Route] {
+        [
+            route6(address: "fe80::", prefix: 10), // link-local
+            route6(address: "fc00::", prefix: 7), // unique local (ULA)
+            route6(address: "ff00::", prefix: 8), // multicast
+        ]
+    }
+
+    static func make(serverAddress: String, ipv6Enabled: Bool = false) -> NEPacketTunnelNetworkSettings {
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: serverAddress)
 
         let ipv4 = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
@@ -40,9 +51,17 @@ enum TunnelSettings {
         ipv4.excludedRoutes = ipv4LanExcludedRoutes
         settings.ipv4Settings = ipv4
 
-        // IPv4-only tunnel: ipv6Settings is intentionally left nil so the TUN
-        // claims no IPv6 address and installs no IPv6 routes. Mirrors
-        // MWTunnelSettings.makeWithServerAddress:.
+        // IPv6 is configured only when enabled in app settings (mirrors
+        // MWTunnelSettings.makeWithServerAddress:ipv6Enabled:). When off, the
+        // TUN claims no IPv6 address/routes and the FFI drops AAAA so the tunnel
+        // is IPv4-only. When on, claim a ULA address + ::/0 default route so
+        // real-IPv6 destinations enter the tunnel instead of leaking natively.
+        if ipv6Enabled {
+            let ipv6 = NEIPv6Settings(addresses: ["fd6d:6577::1"], networkPrefixLengths: [64])
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            ipv6.excludedRoutes = ipv6LanExcludedRoutes
+            settings.ipv6Settings = ipv6
+        }
 
         let dns = NEDNSSettings(servers: ["172.19.0.2"])
         // Leaving matchDomains at its default (nil) — see NEDNSSettings.h,
@@ -57,5 +76,9 @@ enum TunnelSettings {
 
     private static func route(address: String, mask: String) -> NEIPv4Route {
         NEIPv4Route(destinationAddress: address, subnetMask: mask)
+    }
+
+    private static func route6(address: String, prefix: Int) -> NEIPv6Route {
+        NEIPv6Route(destinationAddress: address, networkPrefixLength: NSNumber(value: prefix))
     }
 }

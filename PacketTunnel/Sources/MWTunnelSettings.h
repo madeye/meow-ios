@@ -3,5 +3,6 @@
 #import <NetworkExtension/NetworkExtension.h>
 
 @interface MWTunnelSettings : NSObject
-+ (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress;
++ (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress
+                                             ipv6Enabled:(BOOL)ipv6Enabled;
 @end

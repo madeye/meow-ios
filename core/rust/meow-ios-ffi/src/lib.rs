@@ -1030,6 +1030,33 @@ pub extern "C" fn meow_tun_block_http3() -> c_int {
     c_int::from(tun2socks::block_http3())
 }
 
+/// Enable or disable IPv6. Default OFF (0): current behaviour is preserved —
+/// the tunnel is IPv4-only and AAAA (28) DNS queries are answered NOERROR-empty
+/// from the intercept so clients fall back to the IPv4 path. When enabled
+/// (non-zero), AAAA queries are forwarded to the meow-dns listener like A
+/// queries (the resolver returns real upstream IPv6 addresses). The caller MUST
+/// also configure the TUN with an IPv6 address + default route (see
+/// `MWTunnelSettings`) so those v6 connections enter the netstack; otherwise
+/// they black-hole.
+///
+/// At the FFI layer the new value applies immediately to subsequent DNS
+/// queries (the backing flag is a plain atomic). The meow-ios app only invokes
+/// this at tunnel start, so toggling the user preference applies on the next
+/// tunnel (re)connect — same as allowLan / blockHTTP3.
+///
+/// Returns 0 unconditionally.
+#[no_mangle]
+pub extern "C" fn meow_tun_set_ipv6_enabled(enabled: c_int) -> c_int {
+    tun2socks::set_ipv6_enabled(enabled != 0);
+    0
+}
+
+/// Read whether IPv6 is currently enabled. Returns 1 if enabled, 0 otherwise.
+#[no_mangle]
+pub extern "C" fn meow_tun_ipv6_enabled() -> c_int {
+    c_int::from(tun2socks::ipv6_enabled())
+}
+
 /// Resident memory size of the FFI's containing process, in bytes. Same
 /// number macOS jetsam compares against the 50 MiB PacketTunnel cap, so
 /// Swift can poll this to chart the on-device RSS curve during a stress

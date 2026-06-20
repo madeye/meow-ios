@@ -9,6 +9,7 @@ public enum PreferenceKey {
     public static let allowLan = "com.meow.allowLan"
     public static let onDemand = "com.meow.onDemand"
     public static let blockHTTP3 = "com.meow.blockHTTP3"
+    public static let ipv6Enabled = "com.meow.ipv6Enabled"
     public static let pendingIntent = "com.meow.pendingIntent"
     public static let selectedProfileID = "com.meow.selectedProfileID"
 }
@@ -19,6 +20,7 @@ public enum PreferenceDefaults {
     public static let allowLan: Bool = false
     public static let onDemand: Bool = false
     public static let blockHTTP3: Bool = false
+    public static let ipv6Enabled: Bool = false
 }
 
 public struct Preferences: Sendable {
@@ -27,6 +29,7 @@ public struct Preferences: Sendable {
     public var allowLan: Bool
     public var onDemand: Bool
     public var blockHTTP3: Bool
+    public var ipv6Enabled: Bool
 
     public init(
         mixedPort: Int = PreferenceDefaults.mixedPort,
@@ -34,12 +37,14 @@ public struct Preferences: Sendable {
         allowLan: Bool = PreferenceDefaults.allowLan,
         onDemand: Bool = PreferenceDefaults.onDemand,
         blockHTTP3: Bool = PreferenceDefaults.blockHTTP3,
+        ipv6Enabled: Bool = PreferenceDefaults.ipv6Enabled,
     ) {
         self.mixedPort = mixedPort
         self.logLevel = logLevel
         self.allowLan = allowLan
         self.onDemand = onDemand
         self.blockHTTP3 = blockHTTP3
+        self.ipv6Enabled = ipv6Enabled
     }
 
     public static func load(from defaults: UserDefaults) -> Preferences {
@@ -57,6 +62,9 @@ public struct Preferences: Sendable {
         if defaults.object(forKey: PreferenceKey.blockHTTP3) != nil {
             prefs.blockHTTP3 = defaults.bool(forKey: PreferenceKey.blockHTTP3)
         }
+        if defaults.object(forKey: PreferenceKey.ipv6Enabled) != nil {
+            prefs.ipv6Enabled = defaults.bool(forKey: PreferenceKey.ipv6Enabled)
+        }
         return prefs
     }
 
@@ -66,5 +74,6 @@ public struct Preferences: Sendable {
         defaults.set(allowLan, forKey: PreferenceKey.allowLan)
         defaults.set(onDemand, forKey: PreferenceKey.onDemand)
         defaults.set(blockHTTP3, forKey: PreferenceKey.blockHTTP3)
+        defaults.set(ipv6Enabled, forKey: PreferenceKey.ipv6Enabled)
     }
 }

@@ -118,6 +118,13 @@ static const int kLocalDNSPort                 = 1053;
     // behavior is unchanged.
     meow_tun_set_block_http3(prefs.blockHTTP3 ? 1 : 0);
 
+    // Apply the IPv6 toggle before starting the tun (same static-state
+    // mechanism as block_http3). Off (default) keeps the AAAA strip so the
+    // tunnel stays IPv4-only; on forwards AAAA so meow-dns returns real v6
+    // addresses. Must stay consistent with the TUN's IPv6 route configuration
+    // applied in MWTunnelSettings (PacketTunnelProvider reads the same pref).
+    meow_tun_set_ipv6_enabled(prefs.ipv6Enabled ? 1 : 0);
+
     rc = meow_tun_start(_writerCtx, meowPacketWriterCB);
     if (rc != 0) {
         NSString *msg = [self lastRustError] ?: @"tun start failed";

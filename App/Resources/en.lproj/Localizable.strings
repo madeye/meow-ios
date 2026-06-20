@@ -162,6 +162,8 @@
 "settings.toggle.onDemand" = "Connect On Demand";
 "settings.toggle.blockHTTP3" = "Block HTTP/3 (QUIC)";
 "settings.toggle.blockHTTP3.footer" = "Drops UDP traffic to port 443 and SVCB/HTTPS DNS records to force TCP/HTTP2.";
+"settings.toggle.ipv6" = "Enable IPv6";
+"settings.toggle.ipv6.footer" = "Resolves AAAA records and routes IPv6 traffic through the tunnel. When off, the tunnel is IPv4-only and AAAA queries are dropped.";
 "settings.picker.logLevel" = "Log Level";
 "settings.logLevel.debug" = "Debug";
 "settings.logLevel.info" = "Info";
@@ -285,6 +287,7 @@
 "a11y.settings.allowLan.hint" = "Allows other devices on your local network to connect through the proxy.";
 "a11y.settings.onDemand.hint" = "Automatically starts the tunnel when network activity requires it.";
 "a11y.settings.blockHTTP3.hint" = "Blocks HTTP/3 and QUIC by dropping UDP traffic to port 443 and SVCB/HTTPS DNS records, forcing connections onto TCP and HTTP/2.";
+"a11y.settings.ipv6.hint" = "Enables IPv6 by resolving AAAA records and routing IPv6 traffic through the tunnel. When off, the tunnel is IPv4-only and AAAA queries are dropped.";
 "a11y.settings.exportLogs.hint" = "Saves the last hour of app logs to a file.";
 "a11y.settings.exportLogs.inProgress" = "Export in progress";
 "a11y.settings.memory.unavailable" = "Unavailable";

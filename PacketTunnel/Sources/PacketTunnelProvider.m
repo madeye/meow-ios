@@ -1,6 +1,8 @@
 #import "PacketTunnelProvider.h"
 #import "MWTunnelEngine.h"
 #import "MWTunnelSettings.h"
+#import "MWAppGroup.h"
+#import "MWPreferences.h"
 #import "MWIPCListener.h"
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
@@ -83,7 +85,12 @@ static const NSTimeInterval kEngineRestartDebounceS = 3.0;
 
     NSString *server  = self.protocolConfiguration.serverAddress ?: @"192.0.2.1";
     NSString *profileID = (NSString *)options[@"profileID"];
-    NEPacketTunnelNetworkSettings *settings = [MWTunnelSettings makeWithServerAddress:server];
+    // The IPv6 route configuration must match the FFI's AAAA-forwarding toggle
+    // (set from the same pref in MWTunnelEngine). Read it here so the TUN claims
+    // a v6 address + ::/0 route only when the user enabled IPv6.
+    BOOL ipv6Enabled = [[MWAppGroup defaults] boolForKey:MWPrefKeyIPv6Enabled];
+    NEPacketTunnelNetworkSettings *settings =
+        [MWTunnelSettings makeWithServerAddress:server ipv6Enabled:ipv6Enabled];
 
     __weak __typeof__(self) weak = self;
     [self setTunnelNetworkSettings:settings completionHandler:^(NSError *settingsErr) {

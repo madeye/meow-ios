@@ -2,7 +2,8 @@
 
 @implementation MWTunnelSettings
 
-+ (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress {
++ (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress
+                                             ipv6Enabled:(BOOL)ipv6Enabled {
     NEPacketTunnelNetworkSettings *settings =
         [[NEPacketTunnelNetworkSettings alloc] initWithTunnelRemoteAddress:serverAddress];
 
@@ -14,19 +15,32 @@
     ipv4.excludedRoutes = [self ipv4LanExcludedRoutes];
     settings.IPv4Settings = ipv4;
 
-    // IPv6 — intentionally NOT configured. This tunnel is IPv4-only:
-    // settings.IPv6Settings is left nil, so the TUN claims no IPv6 address
-    // and installs no IPv6 routes.
+    // IPv6 — configured only when the user enables IPv6 in app settings. When
+    // off (the default), settings.IPv6Settings is left nil so the TUN claims no
+    // IPv6 address and installs no v6 routes, and the FFI answers AAAA queries
+    // NOERROR-empty (meow_tun_set_ipv6_enabled(0)) so clients fall back to the
+    // IPv4 path. This keeps the tunnel IPv4-only by default.
     //
-    // Leak-around note: with no ::/0 route claimed, apps on a v6-capable
-    // network could in principle reach the internet natively over IPv6,
-    // bypassing the proxy. In practice meow-dns strips AAAA unconditionally
-    // (fake-IP runs a v4-only pool), so clients fall back to A / fake-v4 and
-    // the proxy connects by hostname. The residual surface is hardcoded v6
-    // literals (rare), which simply fail to reach the proxy.
+    // When on, we claim a private (ULA) v6 address and a ::/0 default route so
+    // real-IPv6 destinations (meow-dns now returns AAAA) enter the netstack and
+    // are proxied, instead of leaking natively over a v6-capable network. The
+    // FFI is told to forward AAAA via meow_tun_set_ipv6_enabled(1) in
+    // MWTunnelEngine — the two must stay in sync (both read the same pref).
+    //
+    // Leak-around note: hardcoded v6 literals (no DNS) are now proxied too via
+    // the default route; only the explicitly excluded LAN/link-local ranges
+    // bypass the tunnel, mirroring the IPv4 LAN-exclusion policy.
     //
     // IPv4↔IPv6 path transitions are handled by the path monitor's
     // address-family restart in PacketTunnelProvider.
+    if (ipv6Enabled) {
+        NEIPv6Settings *ipv6 = [[NEIPv6Settings alloc]
+            initWithAddresses:@[@"fd6d:6577::1"]
+            networkPrefixLengths:@[@64]];
+        ipv6.includedRoutes = @[[NEIPv6Route defaultRoute]];
+        ipv6.excludedRoutes = [self ipv6LanExcludedRoutes];
+        settings.IPv6Settings = ipv6;
+    }
 
     // DNS
     NEDNSSettings *dns = [[NEDNSSettings alloc] initWithServers:@[@"172.19.0.2"]];
@@ -64,6 +78,17 @@
         // 127/8 intentionally omitted — iOS rejects loopback and drops the whole excludedRoutes payload
         [[NEIPv4Route alloc] initWithDestinationAddress:@"224.0.0.0"     subnetMask:@"240.0.0.0"],
         [[NEIPv4Route alloc] initWithDestinationAddress:@"255.255.255.255" subnetMask:@"255.255.255.255"],
+    ];
+}
+
++ (NSArray<NEIPv6Route *> *)ipv6LanExcludedRoutes {
+    // Mirror the IPv4 LAN-exclusion policy for v6: keep link-local, unique
+    // local (ULA, incl. the TUN's own fd6d:6577::/64), and multicast off the
+    // ::/0 default route so local/link traffic bypasses the tunnel.
+    return @[
+        [[NEIPv6Route alloc] initWithDestinationAddress:@"fe80::" networkPrefixLength:@10], // link-local
+        [[NEIPv6Route alloc] initWithDestinationAddress:@"fc00::" networkPrefixLength:@7],  // unique local (ULA)
+        [[NEIPv6Route alloc] initWithDestinationAddress:@"ff00::" networkPrefixLength:@8],  // multicast
     ];
 }
 

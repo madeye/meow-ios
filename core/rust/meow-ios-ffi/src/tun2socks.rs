@@ -11,10 +11,13 @@
 //! (normal) mode the listener resolves A queries to the real upstream IP and
 //! records the IP->host mapping in its reverse cache; generic qtypes get
 //! meow-dns's upstream-forward behavior.
-//! AAAA (28) queries are answered NOERROR-empty by the FFI itself,
-//! unconditionally — the tunnel is IPv4-only (the TUN advertises no v6 route),
-//! so stripping AAAA forces every client onto the v4 path instead of leaking
-//! (or black-holing) connections over v6. When "block HTTP/3" is enabled,
+//! AAAA (28) queries are answered NOERROR-empty by the FFI itself when IPv6 is
+//! disabled in app settings (the default) — the tunnel is then IPv4-only (the
+//! TUN advertises no v6 route), so stripping AAAA forces every client onto the
+//! v4 path instead of leaking (or black-holing) connections over v6. When IPv6
+//! is enabled, AAAA queries are forwarded to meow-dns like A queries (real v6
+//! addresses) and the Swift TUN advertises an IPv6 address + default route so
+//! those connections enter the netstack. When "block HTTP/3" is enabled,
 //! HTTPS/SVCB (65/64) queries also get NOERROR-empty so clients cannot
 //! discover QUIC hints.
 //!
@@ -209,6 +212,25 @@ pub fn set_block_http3(on: bool) {
 /// Read whether the "block HTTP/3 (QUIC)" behaviour is currently enabled.
 pub fn block_http3() -> bool {
     BLOCK_HTTP3.load(Ordering::Relaxed)
+}
+
+/// Whether IPv6 is enabled in app settings. Default OFF — the tunnel is
+/// IPv4-only unless the user opts in. When OFF, AAAA (qtype 28) queries are
+/// answered NOERROR-empty locally so clients fall back to the IPv4 path. When
+/// ON, AAAA queries are forwarded to the meow-dns listener like A queries (the
+/// resolver returns real upstream IPv6 addresses), and the Swift TUN is
+/// configured with an IPv6 address + default route so those connections enter
+/// the netstack. Stored Relaxed — a stale read for one datagram is harmless.
+static IPV6_ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Enable or disable IPv6. Default OFF. See [`IPV6_ENABLED`].
+pub fn set_ipv6_enabled(on: bool) {
+    IPV6_ENABLED.store(on, Ordering::Relaxed);
+}
+
+/// Read whether IPv6 is currently enabled.
+pub fn ipv6_enabled() -> bool {
+    IPV6_ENABLED.load(Ordering::Relaxed)
 }
 
 // Per-TCP-flow idle TTL. Closes the wedge the dial deadline can't reach:
@@ -1476,27 +1498,28 @@ async fn dispatch_dns_udp(
     reply_tx: mpsc::Sender<UdpMsg>,
 ) {
     let qtype = parse_dns_qtype(&payload);
-    let response_payload =
-        if qtype == Some(28) || (block_http3() && matches!(qtype, Some(64) | Some(65))) {
-            match dns_empty_response(&payload) {
-                Some(bytes) => bytes,
-                None => return,
+    let response_payload = if (qtype == Some(28) && !ipv6_enabled())
+        || (block_http3() && matches!(qtype, Some(64) | Some(65)))
+    {
+        match dns_empty_response(&payload) {
+            Some(bytes) => bytes,
+            None => return,
+        }
+    } else if let Some(dns_addr) = crate::engine::dns_dial_addr() {
+        match query_dns_listener(&payload, dns_addr).await {
+            Some(bytes) => bytes,
+            None => {
+                trace!("tun2socks: DNS listener timed out (qtype={:?})", qtype);
+                return;
             }
-        } else if let Some(dns_addr) = crate::engine::dns_dial_addr() {
-            match query_dns_listener(&payload, dns_addr).await {
-                Some(bytes) => bytes,
-                None => {
-                    trace!("tun2socks: DNS listener timed out (qtype={:?})", qtype);
-                    return;
-                }
-            }
-        } else {
-            trace!(
-                "tun2socks: DNS listener not running, dropping qtype={:?}",
-                qtype
-            );
-            return;
-        };
+        }
+    } else {
+        trace!(
+            "tun2socks: DNS listener not running, dropping qtype={:?}",
+            qtype
+        );
+        return;
+    };
     forward_udp_reply(&reply_tx, (response_payload, dst, src));
 }
 

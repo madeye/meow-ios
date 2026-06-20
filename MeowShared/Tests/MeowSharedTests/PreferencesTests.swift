@@ -13,6 +13,7 @@ struct PreferencesTests {
         #expect(prefs.logLevel == PreferenceDefaults.logLevel)
         #expect(prefs.allowLan == false)
         #expect(prefs.blockHTTP3 == false)
+        #expect(prefs.ipv6Enabled == false)
     }
 
     @Test
@@ -23,10 +24,12 @@ struct PreferencesTests {
         prefs.mixedPort = 9999
         prefs.allowLan = true
         prefs.blockHTTP3 = true
+        prefs.ipv6Enabled = true
         prefs.save(to: defaults)
         let loaded = Preferences.load(from: defaults)
         #expect(loaded.mixedPort == 9999)
         #expect(loaded.allowLan == true)
         #expect(loaded.blockHTTP3 == true)
+        #expect(loaded.ipv6Enabled == true)
     }
 }

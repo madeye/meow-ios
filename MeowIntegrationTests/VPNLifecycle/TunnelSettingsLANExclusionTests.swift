@@ -93,11 +93,42 @@ final class TunnelSettingsLANExclusionTests: XCTestCase {
         )
     }
 
-    /// The tunnel is IPv4-only: ipv6Settings must be left nil so the TUN
-    /// claims no IPv6 address and installs no IPv6 routes.
-    func testMakeConfiguresNoIPv6() {
+    /// IPv6 disabled (the default): ipv6Settings must be left nil so the TUN
+    /// claims no IPv6 address and installs no IPv6 routes — the tunnel is
+    /// IPv4-only and the FFI drops AAAA.
+    func testMakeConfiguresNoIPv6WhenDisabled() {
         let settings = TunnelSettings.make(serverAddress: "192.0.2.1")
-        XCTAssertNil(settings.ipv6Settings, "tunnel must be IPv4-only; ipv6Settings must stay nil")
+        XCTAssertNil(settings.ipv6Settings, "ipv6Settings must stay nil when IPv6 is disabled")
+    }
+
+    /// IPv6 enabled: the TUN must claim a ULA address and a ::/0 default route
+    /// (so real-IPv6 destinations are proxied instead of leaking natively),
+    /// with link-local / ULA / multicast excluded — mirroring the IPv4 policy.
+    func testMakeConfiguresIPv6WhenEnabled() {
+        let settings = TunnelSettings.make(serverAddress: "192.0.2.1", ipv6Enabled: true)
+        let ipv6 = settings.ipv6Settings
+        XCTAssertNotNil(ipv6, "ipv6Settings must be configured when IPv6 is enabled")
+        XCTAssertEqual(ipv6?.addresses, ["fd6d:6577::1"], "expected the ULA tunnel address")
+
+        let included = ipv6?.includedRoutes ?? []
+        XCTAssertEqual(included.count, 1, "catch-all v6 default route should be present")
+        XCTAssertEqual(included.first?.destinationAddress, "::")
+
+        let expectedExclusions: [(String, NSNumber)] = [
+            ("fe80::", 10),
+            ("fc00::", 7),
+            ("ff00::", 8),
+        ]
+        let excluded = ipv6?.excludedRoutes ?? []
+        XCTAssertEqual(excluded.count, expectedExclusions.count, "v6 excludedRoutes count mismatch")
+        for (index, (address, prefix)) in expectedExclusions.enumerated() {
+            XCTAssertEqual(excluded[index].destinationAddress, address, "index \(index) v6 destinationAddress")
+            XCTAssertEqual(
+                excluded[index].destinationNetworkPrefixLength,
+                prefix,
+                "index \(index) v6 prefix length",
+            )
+        }
     }
 
     func testMakeStillRoutesAllTrafficByDefault() {

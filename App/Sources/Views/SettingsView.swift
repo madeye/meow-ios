@@ -35,6 +35,15 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("settings.toggle.ipv6", isOn: binding(\.ipv6Enabled))
+                        .accessibilityIdentifier("settings.toggle.ipv6")
+                        .accessibilityHint(Text("a11y.settings.ipv6.hint"))
+                    Text("settings.toggle.ipv6.footer")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
                 Picker("settings.picker.logLevel", selection: binding(\.logLevel)) {
                     Text("settings.logLevel.debug").tag("debug")
                     Text("settings.logLevel.info").tag("info")
@@ -110,6 +119,7 @@ struct SettingsView: View {
         #endif
             .onChange(of: preferences.allowLan) { _, _ in persist() }
             .onChange(of: preferences.blockHTTP3) { _, _ in persist() }
+            .onChange(of: preferences.ipv6Enabled) { _, _ in persist() }
             .onChange(of: preferences.logLevel) { _, _ in persist() }
             .onChange(of: preferences.onDemand) { _, _ in
                 persist()
