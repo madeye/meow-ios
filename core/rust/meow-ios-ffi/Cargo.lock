@@ -1701,8 +1701,8 @@ dependencies = [
 
 [[package]]
 name = "meow-api"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "axum",
  "base64",
@@ -1733,8 +1733,8 @@ dependencies = [
 
 [[package]]
 name = "meow-common"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1755,8 +1755,8 @@ dependencies = [
 
 [[package]]
 name = "meow-config"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1788,8 +1788,8 @@ dependencies = [
 
 [[package]]
 name = "meow-dns"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "async-trait",
  "dashmap 6.2.1",
@@ -1852,8 +1852,8 @@ dependencies = [
 
 [[package]]
 name = "meow-listener"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "base64",
  "libc",
@@ -1867,8 +1867,8 @@ dependencies = [
 
 [[package]]
 name = "meow-proxy"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1909,8 +1909,8 @@ dependencies = [
 
 [[package]]
 name = "meow-rules"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "ipnet",
  "iprange",
@@ -1926,8 +1926,8 @@ dependencies = [
 
 [[package]]
 name = "meow-transport"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "aes-gcm",
  "async-trait",
@@ -1955,13 +1955,13 @@ dependencies = [
 
 [[package]]
 name = "meow-trie"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 
 [[package]]
 name = "meow-tunnel"
-version = "0.14.0"
-source = "git+https://github.com/madeye/meow-rs?rev=b2278de499339880ed4635556b709bf44ae0c89a#b2278de499339880ed4635556b709bf44ae0c89a"
+version = "0.15.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f6ba61f8d9f3f295247b51e01a46ad175c347b3b#f6ba61f8d9f3f295247b51e01a46ad175c347b3b"
 dependencies = [
  "arc-swap",
  "async-trait",

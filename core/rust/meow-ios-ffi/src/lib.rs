@@ -13,10 +13,12 @@
 //! The staticlib owns separate tokio runtimes for the packet/netstack driver
 //! and for meow engine work so lwIP backpressure cannot starve the
 //! REST/API/proxy workers. DNS is delegated to a local meow-dns UDP listener
-//! running in fake-IP mode: the tun2socks UDP/53 path still answers AAAA and
-//! HTTP/3-blocked HTTPS/SVCB queries NOERROR-empty itself, then sends other DNS
-//! queries to the listener. The FFI no longer carries its own fake-IP pool,
-//! china-DNS split-horizon, CN-IP table, DoH cache, or in-FFI TCP-DNS client.
+//! running in `redir-host` (normal) mode: the tun2socks UDP/53 path still
+//! answers AAAA and HTTP/3-blocked HTTPS/SVCB queries NOERROR-empty itself,
+//! then sends other DNS queries to the listener, which returns real upstream
+//! IPs and self-populates its IP->host reverse cache. The FFI no longer
+//! carries its own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH
+//! cache, or in-FFI TCP-DNS client.
 
 mod diagnostics;
 mod engine;
@@ -691,8 +693,12 @@ pub unsafe extern "C" fn meow_patch_config(
         return -1;
     };
 
-    // Strip `dns` (iOS pins its own resolver block) and `subscriptions`
-    // (handled app-side). `secret` is intentionally NOT stripped here — we
+    // Strip `dns` (iOS pins its own resolver block — see below: the resolver
+    // is pinned to `redir-host` (normal) mode, NOT fake-ip, so meow-dns
+    // returns real upstream IPs and self-populates its IP->host reverse cache
+    // for domain-rule matching; no fake-ip-range is installed) and
+    // `subscriptions` (handled app-side). `secret` is intentionally NOT
+    // stripped here — we
     // overwrite it below with a per-install random token so the REST API on
     // loopback is authenticated rather than open.
     for key in ["dns", "subscriptions"] {
@@ -730,10 +736,9 @@ pub unsafe extern "C" fn meow_patch_config(
             "listen",
             serde_yaml::Value::String(format!("{bind_addr}:{dns_port}")),
         ),
-        ("enhanced-mode", serde_yaml::Value::String("fake-ip".into())),
         (
-            "fake-ip-range",
-            serde_yaml::Value::String("28.0.0.0/8".into()),
+            "enhanced-mode",
+            serde_yaml::Value::String("redir-host".into()),
         ),
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
