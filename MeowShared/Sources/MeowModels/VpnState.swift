@@ -12,6 +12,13 @@ public enum VpnStage: String, Codable, Sendable, CaseIterable {
     case stopping
     case stopped
     case error
+
+    /// Whether a connection attempt is in flight or established — a live tunnel
+    /// the app should treat as "on". Used to detect a stale App-Group snapshot
+    /// that outlived its provider after an app replacement.
+    public var isActive: Bool {
+        self == .connecting || self == .connected
+    }
 }
 
 public struct VpnState: Codable, Sendable, Equatable {

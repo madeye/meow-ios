@@ -135,7 +135,26 @@ final class VpnManager {
     /// on-demand rule — so we have to actively disable it when the user
     /// intentionally wants the VPN off.
     func disconnect() async {
-        guard let manager else { return }
+        guard let manager else {
+            clearStaleActiveExtensionState()
+            applyConnectionStatus(.disconnected)
+            return
+        }
+        let status = manager.connection.status
+        guard Self.canStopTunnel(status) else {
+            // If the app was replaced while the extension was running, the
+            // persisted App-Group state can still say "connected" even though
+            // iOS has already invalidated/disconnected the NE profile. A stop
+            // request cannot produce a status notification in that state, so
+            // repair the UI immediately and allow the next tap to connect.
+            if manager.isOnDemandEnabled {
+                manager.isOnDemandEnabled = false
+                try? await manager.saveToPreferences()
+            }
+            clearStaleActiveExtensionState()
+            applyConnectionStatus(status)
+            return
+        }
         if manager.isOnDemandEnabled {
             manager.isOnDemandEnabled = false
             try? await manager.saveToPreferences()
@@ -220,11 +239,74 @@ final class VpnManager {
         }
     }
 
-    /// Update state from the background extension's persisted state.
+    /// Update state from the background extension's persisted state. The NE
+    /// connection status stays the lifecycle authority: app replacement can
+    /// strand a stale active `state.json` after the old provider has gone away,
+    /// so an extension snapshot must never resurrect a tunnel iOS already tore
+    /// down (which would leave the Home toggle calling `stop` forever).
     func applyExtensionState(_ state: VpnState) {
+        guard let status = manager?.connection.status else {
+            applyExtensionStateWithoutConnection(state)
+            return
+        }
+        reconcileExtensionState(state, with: status)
+    }
+
+    /// Merge an extension snapshot with the live NE status.
+    private func reconcileExtensionState(_ state: VpnState, with status: NEVPNStatus) {
+        switch status {
+        case .invalid, .disconnected:
+            // No live tunnel. Drop a stale "active" snapshot so the toggle
+            // doesn't keep stopping a profile that no longer exists.
+            if state.stage.isActive {
+                clearStaleActiveExtensionState()
+            }
+            if state.stage == .error {
+                applyExtensionError(state)
+            } else {
+                applyConnectionStatus(status)
+            }
+        case .connected, .connecting, .reasserting, .disconnecting:
+            // Live tunnel — trust the snapshot's richer stage/error.
+            stage = state.stage
+            if let msg = state.errorMessage, !msg.isEmpty {
+                lastError = msg
+            }
+        @unknown default:
+            applyConnectionStatus(status)
+        }
+    }
+
+    /// Fallback used before a `NETunnelProviderManager` is attached.
+    private func applyExtensionStateWithoutConnection(_ state: VpnState) {
         stage = state.stage
         if let msg = state.errorMessage, !msg.isEmpty {
             lastError = msg
+        }
+    }
+
+    private func applyExtensionError(_ state: VpnState) {
+        stage = .error
+        if let msg = state.errorMessage, !msg.isEmpty {
+            lastError = msg
+        }
+    }
+
+    /// Rewrite an "active" App-Group snapshot to `.stopped` once the NE status
+    /// proves there is no live tunnel, so the next read doesn't resurrect it.
+    private func clearStaleActiveExtensionState() {
+        guard let state = SharedStore.readState(), state.stage.isActive else { return }
+        try? SharedStore.writeState(VpnState(stage: .stopped))
+    }
+
+    private nonisolated static func canStopTunnel(_ status: NEVPNStatus) -> Bool {
+        switch status {
+        case .connected, .connecting, .reasserting, .disconnecting:
+            return true
+        case .invalid, .disconnected:
+            return false
+        @unknown default:
+            return false
         }
     }
 
