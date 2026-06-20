@@ -79,7 +79,16 @@ final class VpnManager {
     /// process does not run a pre-flight engine of its own.
     func connect() async {
         lastError = nil
-        if manager == nil { await refresh() }
+        // Always reload the manager from preferences before connecting, not
+        // just when it's nil. When another VPN app becomes active, iOS disables
+        // our saved configuration, and the manager object we cached at launch
+        // goes stale — `startVPNTunnel()` then throws (`configurationStale` /
+        // `configurationDisabled`) and the only way out was to force-quit meow
+        // so the next launch's `refresh()` loaded a fresh object. `refresh()`
+        // reloads (or recreates) and reattaches a current manager, and is
+        // written to NOT steal the VPN slot from other apps, so calling it on
+        // every connect is safe.
+        await refresh()
         guard let manager else { return }
         do {
             let prefs = Preferences.load(from: AppGroup.defaults)
@@ -100,10 +109,24 @@ final class VpnManager {
                 try await manager.saveToPreferences()
                 try await manager.loadFromPreferences()
             }
-            try manager.connection.startVPNTunnel()
+            try await startTunnel(manager)
         } catch {
             lastError = error.localizedDescription
             stage = .error
+        }
+    }
+
+    /// Start the tunnel, reloading once and retrying if iOS reports the local
+    /// configuration is stale. Even after a fresh load, another VPN app
+    /// mutating the shared VPN preferences between our load and our
+    /// `startVPNTunnel()` call can leave the object stale; the documented
+    /// recovery is to reload from preferences and try again.
+    private func startTunnel(_ mgr: NETunnelProviderManager) async throws {
+        do {
+            try mgr.connection.startVPNTunnel()
+        } catch let error as NEVPNError where error.code == .configurationStale {
+            try await mgr.loadFromPreferences()
+            try mgr.connection.startVPNTunnel()
         }
     }
 
