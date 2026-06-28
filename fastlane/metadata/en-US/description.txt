@@ -1,21 +1,29 @@
-Meow is a native iOS Clash-compatible proxy client powered by the meow-rs engine, wrapped in a SwiftUI interface and a NetworkExtension packet tunnel.
+meow is a native iOS port of the Android "meow" client — a full meow-rs proxy engine wrapped in a SwiftUI iOS 26 Liquid Glass UI, with traffic carried by a NetworkExtension packet tunnel provider.
 
-Bring your own subscription — Meow does not provide proxy servers.
+If you have ever managed a Clash or meow-rs configuration, meow will feel familiar. Subscribe to a YAML config, choose a proxy group, flip the toggle, and your traffic flows through the proxy engine — all on-device, with no cloud component.
 
-Features
-• Clash-compatible rule engine with full configuration support
-• Subscription import via URL or clipboard, with one-tap refresh
-• Supported outbound protocols: Shadowsocks, Trojan, and VLESS
-• Per-rule routing, GeoIP/ASN aware decisions, lazy database download
-• Encrypted Client Hello (ECH) via boring-tls
-• System-wide tunnel via Apple's NetworkExtension framework
-• Optimised for low memory: stays within the iOS extension footprint cap
-• Universal app for iPhone and iPad, iOS 17 or later
+WHAT IT DOES
+• Clash-protocol YAML subscriptions with auto-refresh and a built-in YAML editor
+• Rule-based traffic routing (domain, IP, GeoIP, GeoSITE)
+• DNS-over-HTTPS resolution
+• Per-app proxy groups, latency tests, and selector switching
+• On-device packet tunnel — no external server handles your traffic
 
-Privacy
-Meow stores your configuration on-device. It does not collect telemetry, advertising identifiers, or browsing history. Network traffic is forwarded to the proxy servers in your own subscription — Apple and the developer never see it.
+SUPPORTED PROTOCOLS
+Shadowsocks, Trojan, and VLESS outbounds (with TLS, WebSocket, gRPC, H2 and HTTPUpgrade transports). HTTP and SOCKS5 outbounds are also supported for upstream proxies.
 
-Notes
-This app is intended for users who already operate or subscribe to a Clash-compatible proxy service. It is not a VPN provider. UDP and QUIC behavior depends on the upstream server's support.
+PRIVACY
+Your subscription URLs, proxy credentials, configurations, and tunneled traffic stay on your device and are never transmitted by meow. The packet tunnel runs locally inside the Network Extension sandbox.
 
-Source code, documentation, and the public TestFlight beta are available on GitHub: https://github.com/madeye/meow-ios
+The app does not collect analytics, subscription URLs, proxy credentials, configuration contents, DNS queries, or tunneled traffic. See the privacy policy for details.
+
+REQUIREMENTS
+• iOS 26 or later (iPhone and iPad)
+• A proxy subscription you trust — meow does not provide any proxy servers
+
+PUBLIC BETA
+This release is a public beta. Some features are in active development. Please report issues on GitHub or via the in-app feedback link.
+
+OPEN SOURCE
+meow-ios is open source. Source, issue tracker, and release notes:
+https://github.com/madeye/meow-ios

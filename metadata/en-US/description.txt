@@ -15,7 +15,7 @@ Shadowsocks, Trojan, and VLESS outbounds (with TLS, WebSocket, gRPC, H2 and HTTP
 PRIVACY
 Your subscription URLs, proxy credentials, configurations, and tunneled traffic stay on your device and are never transmitted by meow. The packet tunnel runs locally inside the Network Extension sandbox.
 
-The app uses Firebase Analytics for anonymous, aggregate usage metrics (sessions, screen views, app/iOS version) to guide development priorities. Advertising identifiers (IDFA / AdID) are explicitly disabled, so no App Tracking Transparency prompt is shown. See the privacy policy for details.
+The app does not collect analytics, subscription URLs, proxy credentials, configuration contents, DNS queries, or tunneled traffic. See the privacy policy for details.
 
 REQUIREMENTS
 • iOS 26 or later (iPhone and iPad)

@@ -16,8 +16,14 @@ final class AppIPCBridge {
 
     private var stateObserver: DarwinObserver?
     private var trafficObserver: DarwinObserver?
+    private var mockTrafficTask: Task<Void, Never>?
 
     func start() {
+        if Self.usesMockIPC {
+            startMockIPC()
+            return
+        }
+
         reloadState()
         reloadTraffic()
         stateObserver = DarwinBridge.addObserver(for: .state) { [weak self] in
@@ -29,6 +35,8 @@ final class AppIPCBridge {
     }
 
     func stop() {
+        mockTrafficTask?.cancel()
+        mockTrafficTask = nil
         stateObserver.map { DarwinBridge.removeObserver($0) }
         trafficObserver.map { DarwinBridge.removeObserver($0) }
         stateObserver = nil
@@ -40,6 +48,11 @@ final class AppIPCBridge {
     /// shared UserDefaults first and posts the notification second so the
     /// receiver always sees the payload.
     func send(_ command: TunnelCommand, profileID: UUID? = nil) {
+        if Self.usesMockIPC {
+            sendMock(command, profileID: profileID)
+            return
+        }
+
         let intent = TunnelIntent(command: command, profileID: profileID?.uuidString)
         do {
             try SharedStore.queueIntent(intent)
@@ -77,5 +90,98 @@ final class AppIPCBridge {
             .urls(for: .documentDirectory, in: .userDomainMask).first else { return }
         let url = docs.appending(path: "memstats.txt")
         try? line.write(to: url, atomically: false, encoding: .utf8)
+    }
+}
+
+private extension AppIPCBridge {
+    nonisolated static var usesMockIPC: Bool {
+        #if targetEnvironment(simulator)
+            true
+        #else
+            false
+        #endif
+    }
+
+    nonisolated static var shouldResetMockState: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ResetState")
+    }
+
+    func startMockIPC() {
+        let persisted = Self.shouldResetMockState ? nil : SharedStore.readState()
+        currentState = if let persisted, persisted.errorMessage == nil {
+            persisted
+        } else {
+            .init(stage: .stopped)
+        }
+        try? SharedStore.writeState(currentState)
+
+        currentTraffic = Self.shouldRunMockTraffic(for: currentState) ? Self.mockTraffic(tick: 0) : .init()
+        relayMemstats(currentTraffic)
+
+        configureMockTrafficTask()
+    }
+
+    func sendMock(_ command: TunnelCommand, profileID: UUID?) {
+        switch command {
+        case .start, .reload:
+            currentState = .init(
+                stage: .connected,
+                profileID: profileID?.uuidString,
+                profileName: nil,
+                startedAt: Date(),
+            )
+        case .stop:
+            currentState = .init(stage: .stopped)
+        }
+        try? SharedStore.writeState(currentState)
+        currentTraffic = Self.shouldRunMockTraffic(for: currentState) ? Self.mockTraffic(tick: 0) : .init()
+        relayMemstats(currentTraffic)
+        configureMockTrafficTask()
+    }
+
+    func configureMockTrafficTask() {
+        mockTrafficTask?.cancel()
+        guard Self.shouldRunMockTraffic(for: currentState) else {
+            mockTrafficTask = nil
+            return
+        }
+
+        mockTrafficTask = Task { @MainActor [weak self] in
+            var tick: Int64 = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                tick += 1
+                guard let self else { return }
+                currentTraffic = Self.mockTraffic(tick: tick)
+                relayMemstats(currentTraffic)
+            }
+        }
+    }
+
+    nonisolated static func shouldRunMockTraffic(for state: VpnState) -> Bool {
+        state.stage == .connected || screenshotTrafficRequested
+    }
+
+    nonisolated static var screenshotTrafficRequested: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-screenshotTab"), i + 1 < args.count else { return false }
+        return args[i + 1] == "traffic"
+    }
+
+    nonisolated static func mockTraffic(tick: Int64) -> TrafficSnapshot {
+        TrafficSnapshot(
+            uploadBytes: 486_539_264 + (tick * 94208),
+            downloadBytes: 3_842_146_304 + (tick * 524_288),
+            uploadRate: 42496 + ((tick % 5) * 8192),
+            downloadRate: 384_000 + ((tick % 7) * 65536),
+            ingressPackets: 18420 + (tick * 14),
+            egressPackets: 12906 + (tick * 9),
+            timestamp: Date(),
+            footprintMB: 84,
+            heapUsedKB: 19456,
+            heapFreeKB: 8192,
+            tcpConns: 24,
+            pumpTick: tick,
+        )
     }
 }

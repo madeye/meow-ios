@@ -1,6 +1,9 @@
 # ---- Claude Code runtime ----
 .claude/
 
+# ---- Python ----
+__pycache__/
+
 # ---- macOS ----
 .DS_Store
 .AppleDouble

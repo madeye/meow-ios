@@ -33,7 +33,6 @@
 		34358821D3A262F7D08C62D9 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 0CA41BA11AE3954D104A7AB8 /* MeowIPC */; };
 		34B4F8F808C424CBAF8E7EA9 /* MWSharedStore.m in Sources */ = {isa = PBXBuildFile; fileRef = AB83B7A37D165EF0E16A47BA /* MWSharedStore.m */; };
 		3BAE21D06E5B9935E58FDF1B /* MeowAPITypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A693FE7115671D717A87F1DB /* MeowAPITypes.swift */; };
-		3C3A5AA885F5F213EAF992D8 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 2A4941A69C1277E700B9010C /* GoogleService-Info.plist */; };
 		45310440BCC0654BDE996BA2 /* SubscriptionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */; };
 		458E58A53D18E7E14542FAB8 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC4AC97B3877B1A566FBFF6 /* Profile.swift */; };
 		4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08020B398C102C110F6A8567 /* SharedStoreTests.swift */; };
@@ -90,7 +89,6 @@
 		A247AFB42C2CB73BACCD3CB0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A2F021F1A3C84F902320EB /* SettingsView.swift */; };
 		A582A655A6EA5FF633395AD9 /* ChinaDirectKeywords.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3172561A6CE70D61D7666597 /* ChinaDirectKeywords.swift */; };
 		A80A176366D289562219D18D /* DarwinBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B120EAA4365C4F723B0FED /* DarwinBridgeTests.swift */; };
-		A9059BD76F016E8726C754DF /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = BC92AA02BD2762FD77662583 /* FirebaseAnalytics */; };
 		AB4AFCDA6C326D173F7C6D01 /* SubscriptionDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B306CE837FA7A17D7D561877 /* SubscriptionDeepLinkTests.swift */; };
 		ACB0FE6DC7CD1D5E824CCB35 /* EngineBootTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1046B4656B3C3717791D82D4 /* EngineBootTests.swift */; };
 		ADBD29F9A34A3AF34057D104 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1880D3F09797DFE2718AFC /* AppModel.swift */; };
@@ -188,7 +186,6 @@
 		20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoAssetStager.swift; sourceTree = "<group>"; };
 		24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManagerTests.swift; sourceTree = "<group>"; };
 		24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDarwinBridge.m; sourceTree = "<group>"; };
-		2A4941A69C1277E700B9010C /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		2E2B37B72F11B1B2B1118221 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		3172561A6CE70D61D7666597 /* ChinaDirectKeywords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinaDirectKeywords.swift; sourceTree = "<group>"; };
 		329B260F122D91D5DDB24C44 /* MWIPCListener.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWIPCListener.m; sourceTree = "<group>"; };
@@ -309,7 +306,6 @@
 				478984A879E2B44990BF3A87 /* MeowModels in Frameworks */,
 				2E27011B1AF98B38B64FCE3E /* MeowIPC in Frameworks */,
 				C3D8E6DA3FF3FD5ADB35CB44 /* Yams in Frameworks */,
-				A9059BD76F016E8726C754DF /* FirebaseAnalytics in Frameworks */,
 				5AB90DB374188E502DDDD3BD /* MeowCore.xcframework in Frameworks */,
 				BA844D3302038958647DC227 /* SystemConfiguration.framework in Frameworks */,
 			);
@@ -434,7 +430,6 @@
 				0F6E991913B1D605FBA1C392 /* GeoData */,
 				8895187DE158A91BFC1775BE /* Localizable.strings */,
 				00F3DBAD225AF1027B18873A /* Assets.xcassets */,
-				2A4941A69C1277E700B9010C /* GoogleService-Info.plist */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -881,7 +876,6 @@
 				08F8D6F37F44DDC126510FF4 /* MeowModels */,
 				9A3E18C33CE07D8DE1D81356 /* MeowIPC */,
 				0F003FBFB707CEEDEE53316F /* Yams */,
-				BC92AA02BD2762FD77662583 /* FirebaseAnalytics */,
 			);
 			productName = "meow-ios";
 			productReference = F4B2AEF174C775BBB240908B /* meow-ios.app */;
@@ -925,7 +919,6 @@
 			mainGroup = E02B6D5AAF221F5DB70141A0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				844FF674C4F31875FABD5293 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				533150F2CDE5CBC19CA617D9 /* XCRemoteSwiftPackageReference "Yams" */,
 				B61F848058C21C7060F00B02 /* XCLocalSwiftPackageReference "MeowShared" */,
 			);
@@ -951,7 +944,6 @@
 				895396717485D8A14A828E2B /* Assets.xcassets in Resources */,
 				63B152B9AED7714B67D9FA21 /* Country.mmdb in Resources */,
 				5D4A6997EDAAC8F162E93EE5 /* GeoLite2-ASN.mmdb in Resources */,
-				3C3A5AA885F5F213EAF992D8 /* GoogleService-Info.plist in Resources */,
 				16FA48C705C2691763DE4187 /* Localizable.strings in Resources */,
 				78FF8F364FDA872B48B74344 /* geosite.mrs in Resources */,
 			);
@@ -1411,6 +1403,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"-ObjC",
+					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow;
 				SDKROOT = iphoneos;
@@ -1448,6 +1441,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"-ObjC",
+					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow;
 				SDKROOT = iphoneos;
@@ -1639,14 +1633,6 @@
 				minimumVersion = 5.1.3;
 			};
 		};
-		844FF674C4F31875FABD5293 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 12.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1683,11 +1669,6 @@
 		A4C4C3CB93C1D3A437D659F8 /* MeowModels */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MeowModels;
-		};
-		BC92AA02BD2762FD77662583 /* FirebaseAnalytics */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 844FF674C4F31875FABD5293 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAnalytics;
 		};
 		BE92B6925662A398B4A18E9C /* MeowIPC */ = {
 			isa = XCSwiftPackageProductDependency;

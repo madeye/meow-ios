@@ -449,4 +449,4 @@ T2.9 (non-DNS UDP) is off the critical path — it's a known M0 limitation with 
 
 3. **YAML editor:** `CodeEditView` Swift package (syntax highlighting) vs plain `UITextView`. Decide in M4.
 
-4. **Analytics:** Firebase iOS SDK (Android parity) vs TelemetryDeck (privacy-first). Decide before M6.
+4. **Analytics:** no analytics SDK is embedded. Revisit only if a future product requirement justifies the privacy tradeoff.

@@ -25,7 +25,7 @@ but reads `$DEVELOPMENT_TEAM` if you want to override the default team
 
 Builds a Release IPA signed with the **Ad Hoc** App Store Connect
 distribution profile (`release-testing` method) and exports it to
-`build/export-adhoc/meow-ios.ipa` for Firebase App Distribution. Calls
+`build/export-adhoc/meow-ios.ipa` for direct device or external distribution. Calls
 `build-rust.sh` first unless `--skip-rust-build` is passed. Warns when the bundled provisioning profiles are within 30 days
 of expiry. Env vars: `APP_PROFILE`, `PT_PROFILE` (UUIDs under
 `~/Library/MobileDevice/Provisioning Profiles/`), `DEVELOPMENT_TEAM`,
@@ -44,17 +44,6 @@ vars: same as `build-adhoc.sh`, but with the App Store profile UUIDs.
 Pair with `upload-testflight-metadata.py` to push the build's "What to
 Test" notes once App Store Connect finishes processing.
 
-## upload-firebase-distribution.sh
-
-Uploads the IPA produced by `build-adhoc.sh` to Firebase App Distribution,
-reading release notes from
-`metadata/testflight/whats_new/<build>.txt` for parity with TestFlight.
-Prerequisites: `firebase` CLI on `$PATH`, a service-account JSON for the
-project, and an IPA at `build/export-adhoc/meow-ios.ipa`. Env vars:
-`GOOGLE_APPLICATION_CREDENTIALS` (path to the service account JSON);
-optionally `FIREBASE_APP_ID`, `FIREBASE_TESTER_GROUP` to override the
-defaults baked into the script.
-
 ## upload-testflight-metadata.py
 
 Pushes per-locale TestFlight metadata (`betaAppLocalizations`,
@@ -63,15 +52,6 @@ App Store Connect REST API. Reads the API key from
 `~/.appstoreconnect/api_key.json` (or `$ASC_API_KEY_JSON`). Run after
 `upload-testflight.sh` once App Store Connect has finished processing the
 build. Prerequisites: Python 3.11+, `pyjwt`, `requests`.
-
-## sync-firebase-udids.py
-
-Reconciles tester UDIDs collected through Firebase App Distribution with
-the device registry in App Store Connect: reads a CSV exported from
-Firebase, fetches the current ASC device list, and registers any UDIDs not
-already present. Re-runnable; safe to invoke after every batch of new
-testers. Env: App Store Connect API key (same path as above). Inputs: a
-Firebase CSV path passed positionally.
 
 ## generate-app-icon.sh
 

@@ -59,17 +59,20 @@ final class MeowAPI: @unchecked Sendable {
     // MARK: - Endpoints
 
     func getProxies() async throws -> ProxiesResponse {
-        try await get("/proxies")
+        if Self.usesMockTransport { return Self.mockProxies() }
+        return try await get("/proxies")
     }
 
     func getConfigs() async throws -> ConfigsResponse {
-        try await get("/configs")
+        if Self.usesMockTransport { return .init(mode: "rule") }
+        return try await get("/configs")
     }
 
     /// Updates the routing mode in the running engine. Accepts the meow
     /// wire values: `rule`, `global`, `direct`. Persists across the engine
     /// lifetime only — engine restarts reset to the YAML default.
     func setMode(_ mode: String) async throws {
+        if Self.usesMockTransport { return }
         try await patch("/configs", body: ["mode": mode])
     }
 
@@ -90,6 +93,7 @@ final class MeowAPI: @unchecked Sendable {
     /// a clearer error). Set `MeowIPCDisabled = YES` in UserDefaults
     /// to force the HTTP path for debugging.
     func selectProxy(group: String, name: String) async throws {
+        if Self.usesMockTransport { return }
         let ipcDisabled = UserDefaults.standard.bool(forKey: "MeowIPCDisabled")
         if !ipcDisabled, let session = await Self.tunnelSession() {
             try await selectProxyViaIPC(session: session, group: group, name: name)
@@ -155,6 +159,10 @@ final class MeowAPI: @unchecked Sendable {
     }
 
     func testDelay(proxy: String, url: String, timeout: Int = 5000) async throws -> Int {
+        if Self.usesMockTransport {
+            return Self.mockDelay(for: proxy)
+        }
+
         struct Resp: Decodable { let delay: Int? }
         let target = try Self.buildTestDelayURL(base: baseURL, proxy: proxy, url: url, timeout: timeout)
         #if DEBUG
@@ -167,29 +175,35 @@ final class MeowAPI: @unchecked Sendable {
     }
 
     func getConnections() async throws -> ConnectionsResponse {
-        try await get("/connections")
+        if Self.usesMockTransport { return Self.mockConnections() }
+        return try await get("/connections")
     }
 
     func closeConnection(id: String) async throws {
+        if Self.usesMockTransport { return }
         try await delete("/connections/\(id)")
     }
 
     func closeAllConnections() async throws {
+        if Self.usesMockTransport { return }
         try await delete("/connections")
     }
 
     func getRules() async throws -> RulesResponse {
-        try await get("/rules")
+        if Self.usesMockTransport { return Self.mockRules() }
+        return try await get("/rules")
     }
 
     func getProviders() async throws -> ProvidersResponse {
-        try await get("/providers/proxies")
+        if Self.usesMockTransport { return Self.mockProviders() }
+        return try await get("/providers/proxies")
     }
 
     /// Triggers meow's bulk health-check for every proxy in a provider
     /// (`GET /providers/proxies/{name}/healthcheck`). The endpoint returns
     /// 204 on success; fresh delays are surfaced on the next `getProviders()`.
     func healthCheckProvider(name: String) async throws {
+        if Self.usesMockTransport { return }
         let url = baseURL.appending(path: "/providers/proxies/\(name.urlEscaped)/healthcheck")
         #if DEBUG
             // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
@@ -203,7 +217,11 @@ final class MeowAPI: @unchecked Sendable {
     /// Stream meow logs via WebSocket with auto-reconnect.
     /// Caller owns the AsyncStream — it stops when the task is cancelled.
     func streamLogs(level: String = "info") -> AsyncThrowingStream<LogEntry, Error> {
-        AsyncThrowingStream { continuation in
+        if Self.usesMockTransport {
+            return Self.mockLogStream(level: level)
+        }
+
+        return AsyncThrowingStream { continuation in
             let log = self.log
             let task = Task {
                 let url = baseURL
@@ -343,5 +361,157 @@ enum MeowAPIError: Error {
 private extension String {
     var urlEscaped: String {
         addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self
+    }
+}
+
+private extension MeowAPI {
+    static var usesMockTransport: Bool {
+        #if targetEnvironment(simulator)
+            true
+        #else
+            false
+        #endif
+    }
+
+    static func mockProxies() -> ProxiesResponse {
+        let history: [Proxy.History] = [
+            .init(time: "2026-06-28T09:40:00Z", delay: 82),
+            .init(time: "2026-06-28T09:41:00Z", delay: 76),
+        ]
+        let singaporeHistory: [Proxy.History] = [
+            .init(time: "2026-06-28T09:40:00Z", delay: 138),
+            .init(time: "2026-06-28T09:41:00Z", delay: 121),
+        ]
+        let westHistory: [Proxy.History] = [
+            .init(time: "2026-06-28T09:40:00Z", delay: 192),
+            .init(time: "2026-06-28T09:41:00Z", delay: 168),
+        ]
+        let proxies: [String: Proxy] = [
+            "GLOBAL": .init(
+                name: "GLOBAL",
+                type: "Selector",
+                now: "Auto",
+                all: ["Auto", "Tokyo 01", "Singapore 02", "US West 03", "DIRECT"],
+                history: nil,
+            ),
+            "Proxy": .init(
+                name: "Proxy",
+                type: "Selector",
+                now: "Auto",
+                all: ["Auto", "Tokyo 01", "Singapore 02", "US West 03"],
+                history: nil,
+            ),
+            "Auto": .init(
+                name: "Auto",
+                type: "URLTest",
+                now: "Tokyo 01",
+                all: ["Tokyo 01", "Singapore 02", "US West 03"],
+                history: nil,
+            ),
+            "Tokyo 01": .init(name: "Tokyo 01", type: "Shadowsocks", now: nil, all: nil, history: history),
+            "Singapore 02": .init(
+                name: "Singapore 02",
+                type: "Vmess",
+                now: nil,
+                all: nil,
+                history: singaporeHistory,
+            ),
+            "US West 03": .init(name: "US West 03", type: "Trojan", now: nil, all: nil, history: westHistory),
+            "DIRECT": .init(name: "DIRECT", type: "Direct", now: nil, all: nil, history: nil),
+        ]
+        return .init(proxies: proxies)
+    }
+
+    static func mockDelay(for proxy: String) -> Int {
+        switch proxy {
+        case "Tokyo 01": 76
+        case "Singapore 02": 121
+        case "US West 03": 168
+        default: 94
+        }
+    }
+
+    static func mockConnections() -> ConnectionsResponse {
+        .init(
+            downloadTotal: 3_842_146_304,
+            uploadTotal: 486_539_264,
+            connections: [
+                .init(
+                    id: "sim-1",
+                    metadata: .init(
+                        network: "tcp",
+                        type: "HTTP",
+                        sourceIP: "10.0.0.2",
+                        destinationIP: "142.250.72.14",
+                        destinationPort: "443",
+                        host: "www.gstatic.com",
+                    ),
+                    upload: 42496,
+                    download: 384_000,
+                    start: "2026-06-28T09:41:00Z",
+                    chains: ["Tokyo 01", "Proxy"],
+                    rule: "DOMAIN-SUFFIX",
+                    rulePayload: "gstatic.com",
+                ),
+                .init(
+                    id: "sim-2",
+                    metadata: .init(
+                        network: "tcp",
+                        type: "HTTPS",
+                        sourceIP: "10.0.0.2",
+                        destinationIP: "140.82.112.4",
+                        destinationPort: "443",
+                        host: "github.com",
+                    ),
+                    upload: 18944,
+                    download: 96512,
+                    start: "2026-06-28T09:41:07Z",
+                    chains: ["Auto", "Proxy"],
+                    rule: "MATCH",
+                    rulePayload: "",
+                ),
+            ],
+        )
+    }
+
+    static func mockRules() -> RulesResponse {
+        .init(rules: [
+            .init(type: "DOMAIN-SUFFIX", payload: "apple.com", proxy: "DIRECT"),
+            .init(type: "DOMAIN-SUFFIX", payload: "github.com", proxy: "Proxy"),
+            .init(type: "GEOIP", payload: "CN", proxy: "DIRECT"),
+            .init(type: "MATCH", payload: "", proxy: "Proxy"),
+        ])
+    }
+
+    static func mockProviders() -> ProvidersResponse {
+        let proxies = mockProxies().proxies
+        let providerProxies = ["Tokyo 01", "Singapore 02", "US West 03"].compactMap { proxies[$0] }
+        return .init(providers: [
+            "Demo": .init(
+                name: "Demo",
+                type: "Proxy",
+                vehicleType: "HTTP",
+                proxies: providerProxies,
+            ),
+        ])
+    }
+
+    static func mockLogStream(level: String) -> AsyncThrowingStream<LogEntry, Error> {
+        AsyncThrowingStream { continuation in
+            let entries = [
+                LogEntry(type: level, payload: "simulator mock engine ready"),
+                LogEntry(type: "debug", payload: "mock controller served /proxies"),
+                LogEntry(type: "info", payload: "traffic snapshot updated"),
+            ]
+            let task = Task {
+                var index = 0
+                while !Task.isCancelled {
+                    continuation.yield(entries[index % entries.count])
+                    index += 1
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 }

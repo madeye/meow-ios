@@ -6,7 +6,7 @@
 #         build/export-appstore/ (xcodebuild upload artefacts)
 #
 # Companion to:
-#   scripts/build-adhoc.sh             -- Firebase Ad Hoc IPA
+#   scripts/build-adhoc.sh             -- Ad Hoc IPA
 #   scripts/upload-testflight-metadata.py -- pushes whats_new + beta info
 #
 # Auth uses the production App Store Connect API key (team from prod.env):
@@ -201,24 +201,6 @@ if [[ "$SKIP_UPLOAD" -eq 1 ]]; then
     echo "==> Skipping upload (--skip-upload). Archive at $ARCHIVE_PATH"
     exit 0
 fi
-
-# Forge stub dSYMs for the Firebase / Google vendored static archives so
-# `xcodebuild -exportArchive` doesn't warn about missing UUIDs every
-# release.  Those binaries ship via SPM as DWARF-stripped static `.a`
-# files; the upstream maintainers do this on purpose to shrink the SDK,
-# and there is no source-side fix.  The script clones the host app's
-# dSYM and patches its `LC_UUID` to each missing per-framework UUID,
-# which satisfies Apple's symbol-upload check (no actual symbolication
-# is gained — none ever existed upstream — but the noise goes away).
-# Idempotent and discovers UUIDs from the archive itself, so no
-# hand-maintained list to drift.
-echo "==> Generating stub dSYMs for vendored stripped binaries"
-python3 "$ROOT/scripts/generate-stub-dsyms.py" \
-    --archive "$ARCHIVE_PATH" \
-    --export-plist "$EXPORT_PLIST" \
-    --asc-key-id "$ASC_KEY_ID" \
-    --asc-issuer "$ASC_ISSUER_ID" \
-    --asc-key-path "$ASC_KEY_PATH"
 
 echo "==> Exporting + uploading to App Store Connect (TestFlight)"
 xcodebuild -exportArchive \

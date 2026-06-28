@@ -1,1 +1,1 @@
-Clash proxy client
+meow-rs powered VPN client

@@ -49,6 +49,11 @@ final class VpnManager {
     /// explicit user actions: `connect()`, or the first-install branch here.
     /// On-demand pref changes are synced only when we already own the slot.
     func refresh() async {
+        if Self.usesMockTunnel {
+            refreshMockTunnel()
+            return
+        }
+
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             if let existing = managers.first {
@@ -78,6 +83,11 @@ final class VpnManager {
     /// through the user's first proxy via `internal_http`), so the app
     /// process does not run a pre-flight engine of its own.
     func connect() async {
+        if Self.usesMockTunnel {
+            await connectMockTunnel()
+            return
+        }
+
         lastError = nil
         // Always reload the manager from preferences before connecting, not
         // just when it's nil. When another VPN app becomes active, iOS disables
@@ -135,6 +145,11 @@ final class VpnManager {
     /// on-demand rule — so we have to actively disable it when the user
     /// intentionally wants the VPN off.
     func disconnect() async {
+        if Self.usesMockTunnel {
+            await disconnectMockTunnel()
+            return
+        }
+
         guard let manager else {
             clearStaleActiveExtensionState()
             applyConnectionStatus(.disconnected)
@@ -245,6 +260,11 @@ final class VpnManager {
     /// so an extension snapshot must never resurrect a tunnel iOS already tore
     /// down (which would leave the Home toggle calling `stop` forever).
     func applyExtensionState(_ state: VpnState) {
+        if Self.usesMockTunnel {
+            applyMockState(state)
+            return
+        }
+
         guard let status = manager?.connection.status else {
             applyExtensionStateWithoutConnection(state)
             return
@@ -319,6 +339,69 @@ final class VpnManager {
         case .reasserting: return .connecting
         case .disconnecting: return .stopping
         @unknown default: return .idle
+        }
+    }
+}
+
+private extension VpnManager {
+    nonisolated static var usesMockTunnel: Bool {
+        #if targetEnvironment(simulator)
+            true
+        #else
+            false
+        #endif
+    }
+
+    nonisolated static var shouldResetMockState: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ResetState")
+    }
+
+    func refreshMockTunnel() {
+        if Self.shouldResetMockState {
+            applyMockState(.init(stage: .stopped))
+            return
+        }
+
+        guard let state = SharedStore.readState(), state.errorMessage == nil else {
+            applyMockState(.init(stage: .stopped))
+            return
+        }
+        applyMockState(state)
+    }
+
+    func connectMockTunnel() async {
+        lastError = nil
+        applyMockState(.init(stage: .connecting))
+        try? await Task.sleep(for: .milliseconds(250))
+        let current = SharedStore.readState()
+        applyMockState(.init(
+            stage: .connected,
+            profileID: current?.profileID,
+            profileName: current?.profileName,
+            startedAt: current?.startedAt ?? Date(),
+        ))
+    }
+
+    func disconnectMockTunnel() async {
+        lastError = nil
+        applyMockState(.init(stage: .stopping))
+        try? await Task.sleep(for: .milliseconds(150))
+        applyMockState(.init(stage: .stopped))
+    }
+
+    func applyMockState(_ state: VpnState) {
+        let previous = stage
+        stage = state.stage
+        lastError = state.stage == .error ? state.errorMessage : nil
+        try? SharedStore.writeState(.init(
+            stage: stage,
+            profileID: state.profileID,
+            profileName: state.profileName,
+            errorMessage: lastError,
+            startedAt: state.startedAt,
+        ))
+        if stage == .connected, previous != .connected {
+            onConnected?()
         }
     }
 }

@@ -1,1 +1,1 @@
-Native iOS Clash client powered by the meow-rs engine. Shadowsocks, Trojan, and VLESS — bring your own subscription.
+Public beta. Full meow-rs proxy engine running on-device, with Clash-style YAML subscriptions, rule-based routing, and a Liquid Glass UI built for iOS 26.

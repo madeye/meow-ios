@@ -28,10 +28,6 @@ packages:
   Yams:
     url: https://github.com/jpsim/Yams.git
     from: "5.1.3"
-  Firebase:
-    url: https://github.com/firebase/firebase-ios-sdk.git
-    from: "12.0.0"
-
 targets:
   meow-ios:
     type: application
@@ -47,7 +43,7 @@ targets:
       properties:
         CFBundleDisplayName: meow
         CFBundleShortVersionString: "1.3.2"
-        CFBundleVersion: "2026062801"
+        CFBundleVersion: "2026062802"
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
@@ -63,8 +59,6 @@ targets:
           NSAllowsArbitraryLoads: false
           NSAllowsLocalNetworking: true
         ITSAppUsesNonExemptEncryption: false
-        GOOGLE_ANALYTICS_IDFA_COLLECTION_ENABLED: false
-        GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED: false
         CFBundleURLTypes:
           - CFBundleURLName: com.tangzixiang.meow.deeplink
             CFBundleURLSchemes:
@@ -95,6 +89,9 @@ targets:
           - $(SRCROOT)/MeowCore/Frameworks
         OTHER_LDFLAGS:
           - -ObjC
+          # boring-sys (via meow-transport boring-tls feature) vendors
+          # BoringSSL C++ — link libc++ so std::__1 symbols resolve.
+          - -lc++
     dependencies:
       - target: PacketTunnel
         embed: true
@@ -104,8 +101,6 @@ targets:
       - package: MeowShared
         product: MeowIPC
       - package: Yams
-      - package: Firebase
-        product: FirebaseAnalytics
       - framework: MeowCore/Frameworks/MeowCore.xcframework
         embed: false
         optional: true
@@ -193,7 +188,7 @@ targets:
       properties:
         CFBundleDisplayName: meow Tunnel
         CFBundleShortVersionString: "1.3.2"
-        CFBundleVersion: "2026062801"
+        CFBundleVersion: "2026062802"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: PacketTunnelProvider

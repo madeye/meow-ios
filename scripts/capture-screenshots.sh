@@ -10,9 +10,12 @@
 # `fastlane deliver` can upload it (deliver categorizes by pixel size).
 #
 # Prereq: build the app for the simulator first, e.g.
-#   xcodebuild build -scheme meow-ios -configuration Debug \
+#   xcodebuild build -allowProvisioningUpdates -xcconfig Local.xcconfig \
+#     -project meow-ios.xcodeproj -scheme meow-ios -configuration Debug \
 #     -destination 'generic/platform=iOS Simulator' \
-#     -derivedDataPath build/DerivedData-snapshot CODE_SIGNING_ALLOWED=NO
+#     -derivedDataPath build/DerivedData-snapshot DEVELOPMENT_TEAM=32B45SMMQL
+# Keep simulator signing enabled: App Group entitlements are required even
+# though the packet tunnel itself is mocked in simulator builds.
 # No `set -e`: simulator boot/install/launch return transient non-zero codes we
 # tolerate (we verify success by the captured PNG instead).
 set -uo pipefail

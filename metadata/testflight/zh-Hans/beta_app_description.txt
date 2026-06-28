@@ -4,6 +4,6 @@ meow 是基于 meow-rs 的原生 iOS 代理客户端——支持 Clash 风格的
 
 已知限制：尚未转发非 DNS 的 UDP 流量——QUIC/HTTP3 将回退至 TCP HTTP/2。
 
-应用集成了 Firebase Analytics 以收集匿名的聚合使用统计（会话、应用 / iOS 版本、页面浏览）。IDFA 采集已关闭。订阅地址、代理凭证、配置内容与隧道转发的流量均不会上报。
+应用不收集分析数据、订阅地址、代理凭证、配置内容、DNS 查询或隧道转发流量。
 
 GitHub：https://github.com/madeye/meow-ios

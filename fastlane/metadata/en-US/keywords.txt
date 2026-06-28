@@ -1,1 +1,1 @@
-clash,mihomo,proxy,shadowsocks,trojan,vless,tunnel,network,packet,routing
+clash,mihomo,proxy,vpn,shadowsocks,trojan,vless,xtls,yaml,tunnel

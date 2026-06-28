@@ -4,6 +4,6 @@ This public beta is for testers who want to try the iOS port and report issues. 
 
 Known limitation: non-DNS UDP traffic is not yet forwarded — QUIC/HTTP3 falls back to TCP HTTP/2.
 
-The app links Firebase Analytics for anonymous, aggregate usage metrics (sessions, app/iOS version, screen views). IDFA collection is disabled. No subscription URLs, proxy credentials, configuration contents, or tunneled traffic are sent to analytics.
+The app does not collect analytics, subscription URLs, proxy credentials, configuration contents, DNS queries, or tunneled traffic.
 
 GitHub: https://github.com/madeye/meow-ios

@@ -2,8 +2,8 @@
 # Build a Release IPA signed for Ad Hoc distribution (release-testing method).
 # Output: build/export-adhoc/meow-ios.ipa
 #
-# Companion to scripts/build-release.sh. Used for Firebase App Distribution
-# delivery to manually-registered tester UDIDs.
+# Companion to scripts/build-release.sh. Used for Ad Hoc delivery to
+# manually-registered tester UDIDs.
 set -euo pipefail
 
 # Warn (warn-only, exit 0) if any provisioning profile UUID expires within

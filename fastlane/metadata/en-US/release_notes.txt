@@ -1,8 +1,9 @@
-1.3.1 — reliability and performance:
-• Bounded TCP dial timeout fixes occasional connection hangs on DIRECT-routed traffic.
-• Cleaner TCP lifecycle when the network path changes (Wi-Fi ⇄ cellular).
-• Self-restart on memory pressure keeps the tunnel stable under heavy load.
-• Lazy GeoIP/ASN database download — faster first launch, smaller install.
-• Subscription updates send the clash.meta User-Agent for better provider compatibility.
-• Encrypted Client Hello (ECH) support via boring-tls.
-• Minimum supported OS lowered to iOS 17 (iPhone and iPad).
+Public beta on iOS 26.
+
+• Subscriptions: tap the pencil icon next to the refresh button to open a built-in YAML editor for any subscription
+• Settings → About → Memory now shows live PacketTunnel memory usage
+• Stability and signing improvements for the App Store / TestFlight distribution path
+
+Known limitation: non-DNS UDP traffic is not yet forwarded by the tunnel — QUIC/HTTP3 falls back to TCP HTTP/2 (usually transparent to the user). Fix is in progress.
+
+Issues and feedback: https://github.com/madeye/meow-ios/issues

@@ -419,8 +419,8 @@ Security checks are automated where possible and reviewed manually pre-release. 
 ### 9.7 Privacy
 
 - [ ] `PrivacyInfo.xcprivacy` declares all required reason APIs (file timestamp, user defaults, etc.)
-- [ ] No IDFA collection; no third-party SDKs at MVP (Firebase TBD — see PRD §Open Question 3)
-- [ ] Analytics events (if any) do not include user URLs, subscription contents, or connection payloads
+- [ ] No IDFA collection and no analytics SDKs embedded
+- [ ] If analytics are ever reintroduced, events do not include user URLs, subscription contents, or connection payloads
 
 **Automated gate:** there is no automated security-scan CI job at present. A prior grep-based scanner was removed (#34c) because it flagged literal key names (e.g. `NSAllowsArbitraryLoads`) without inspecting the XML value, producing false positives rather than signal. Re-introduction should be a deliberately chosen tool with known tuning knobs rather than an ad-hoc grep.
 
