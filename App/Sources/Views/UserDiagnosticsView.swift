@@ -78,7 +78,7 @@ struct UserDiagnosticsView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppTheme.warning)
                 .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
@@ -295,20 +295,20 @@ private func resultLabel(_ result: UserDiagnosticsCardResult) -> some View {
         if let httpStatus {
             Text("\(httpStatus) · \(latencyMs) ms")
                 .font(.caption.monospaced())
-                .foregroundStyle(httpStatus >= 200 && httpStatus < 400 ? .green : .orange)
+                .foregroundStyle(httpStatus >= 200 && httpStatus < 400 ? AppTheme.connected : AppTheme.warning)
                 .accessibilityLabel(
                     Text("a11y.userDiagnostics.result.httpStatus \(String(httpStatus)) \(String(latencyMs))"),
                 )
         } else {
             Text("\(latencyMs) ms")
                 .font(.caption.monospaced())
-                .foregroundStyle(.green)
+                .foregroundStyle(AppTheme.connected)
                 .accessibilityLabel(Text("a11y.userDiagnostics.result.success \(String(latencyMs))"))
         }
     case let .failure(reason):
         Text(reason)
             .font(.caption.monospaced())
-            .foregroundStyle(.red)
+            .foregroundStyle(AppTheme.danger)
             .lineLimit(2)
             .accessibilityLabel(Text("a11y.userDiagnostics.result.failure \(reason)"))
     }

@@ -4,7 +4,7 @@ import SwiftUI
 /// argument used by the App Store screenshot capture (honored only in UI-test
 /// builds — see `initialTab`).
 enum ContentTab: String {
-    case home, subscriptions, traffic, logs, settings
+    case subscriptions, proxyGroups, traffic, logs, settings
 }
 
 struct ContentView: View {
@@ -15,29 +15,35 @@ struct ContentView: View {
     @State private var selectedTab: ContentTab = initialTab()
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack { HomeView() }
-                .tabItem { Label("tabs.home", systemImage: "house.fill") }
-                .accessibilityIdentifier("Home")
-                .tag(ContentTab.home)
-            NavigationStack { SubscriptionsView() }
-                .tabItem { Label("tabs.subscriptions", systemImage: "text.document.fill") }
-                .accessibilityIdentifier("Subscriptions")
-                .tag(ContentTab.subscriptions)
-            NavigationStack { TrafficView() }
-                .tabItem { Label("tabs.traffic", systemImage: "chart.bar.fill") }
-                .accessibilityIdentifier("Traffic")
-                .tag(ContentTab.traffic)
-            NavigationStack { LogsView() }
-                .tabItem { Label("tabs.logs", systemImage: "list.bullet.rectangle.fill") }
-                .accessibilityIdentifier("Logs")
-                .tag(ContentTab.logs)
-            NavigationStack { SettingsView() }
-                .tabItem { Label("tabs.settings", systemImage: "gearshape.fill") }
-                .accessibilityIdentifier("Settings")
-                .tag(ContentTab.settings)
+        VStack(spacing: 0) {
+            GlobalVpnSwitchBar()
+
+            TabView(selection: $selectedTab) {
+                NavigationStack { SubscriptionsView() }
+                    .tabItem { Label("tabs.subscriptions", systemImage: "text.document.fill") }
+                    .accessibilityIdentifier("Subscriptions")
+                    .tag(ContentTab.subscriptions)
+                NavigationStack { ProxyGroupsView() }
+                    .tabItem { Label("tabs.proxyGroups", systemImage: "rectangle.stack.fill") }
+                    .accessibilityIdentifier("Proxy Groups")
+                    .tag(ContentTab.proxyGroups)
+                NavigationStack { TrafficView() }
+                    .tabItem { Label("tabs.traffic", systemImage: "chart.bar.fill") }
+                    .accessibilityIdentifier("Traffic")
+                    .tag(ContentTab.traffic)
+                NavigationStack { LogsView() }
+                    .tabItem { Label("tabs.logs", systemImage: "list.bullet.rectangle.fill") }
+                    .accessibilityIdentifier("Logs")
+                    .tag(ContentTab.logs)
+                NavigationStack { SettingsView() }
+                    .tabItem { Label("tabs.settings", systemImage: "gearshape.fill") }
+                    .accessibilityIdentifier("Settings")
+                    .tag(ContentTab.settings)
+            }
         }
+        .background(AppTheme.screenBackground)
         .tint(AppTheme.accent)
+        .preferredColorScheme(.light)
         .onOpenURL { url in
             if url.scheme == "meow", url.host == "diagnostics" {
                 showDiagnostics = true
@@ -95,12 +101,16 @@ struct ContentView: View {
 }
 
 /// Initial tab for the screenshot harness. Only honors `-screenshotTab <tab>`
-/// when launched with `-UITests`, so production launches always start on Home.
+/// when launched with `-UITests`, so production launches start on Subscriptions.
 private func initialTab() -> ContentTab {
     let argv = ProcessInfo.processInfo.arguments
     guard argv.contains("-UITests"),
-          let i = argv.firstIndex(of: "-screenshotTab"), i + 1 < argv.count,
-          let tab = ContentTab(rawValue: argv[i + 1])
-    else { return .home }
-    return tab
+          let i = argv.firstIndex(of: "-screenshotTab"), i + 1 < argv.count
+    else { return .subscriptions }
+
+    let rawTab = argv[i + 1]
+    // Historical screenshot scripts used `home`; Subscriptions is now the
+    // home tab surface, so keep old invocations useful.
+    if rawTab == "home" { return .subscriptions }
+    return ContentTab(rawValue: rawTab) ?? .subscriptions
 }

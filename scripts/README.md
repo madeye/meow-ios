@@ -75,10 +75,9 @@ Firebase CSV path passed positionally.
 
 ## generate-app-icon.sh
 
-Regenerates the iOS `AppIcon.appiconset` PNGs from the upstream Android
-Play Store icon at
-`/Volumes/DATA/workspace/mihomo-android/fastlane/metadata/android/en-US/images/icon.png`.
-Idempotent; prerequisites: `sips` (ships with macOS) and that source path
+Regenerates the iOS `AppIcon.appiconset` PNG and `docs/appicon.png` from the
+meow-rs website logo at `../meow-rs/website/public/logo.svg`. Idempotent;
+prerequisites: `rsvg-convert`, `python3`, `Pillow`, and that source path
 existing on the build host.
 
 ## generate-xcodeproj.sh

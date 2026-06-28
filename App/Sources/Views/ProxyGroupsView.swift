@@ -20,7 +20,7 @@ struct ProxyGroupsView: View {
                 if let loadError {
                     Text(loadError)
                         .font(.caption2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppTheme.danger)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 4)
                 }
@@ -206,7 +206,7 @@ private struct ProxyGroupCard: View {
     private func proxyRow(_ child: ProxyGroupModel.Child) -> some View {
         HStack(spacing: 10) {
             Image(systemName: child.name == group.now ? "largecircle.fill.circle" : "circle")
-                .foregroundStyle(child.name == group.now ? Color.accentColor : .secondary)
+                .foregroundStyle(child.name == group.now ? AppTheme.accent : .secondary)
                 .frame(width: 20)
             Text(child.name)
                 .font(.subheadline)
@@ -284,9 +284,9 @@ private struct DelayBadge: View {
 
     private func tint(for delay: Int) -> Color {
         switch delay {
-        case ..<200: .green
-        case 200 ..< 500: .yellow
-        default: .red
+        case ..<200: AppTheme.connected
+        case 200 ..< 500: AppTheme.warning
+        default: AppTheme.danger
         }
     }
 

@@ -110,6 +110,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(AppTheme.screenBackground)
         .navigationTitle("settings.nav.title")
+        .navigationBarTitleDisplayMode(.inline)
         #if DEBUG
             .navigationDestination(isPresented: $showDebugPanel) {
                 DiagnosticsPanelView()

@@ -71,6 +71,7 @@ struct LogsView: View {
             "logs.nav.titleFormat \(entries.count)",
             comment: "Logs screen navigation title; %lld = entry count",
         ))
+        .navigationBarTitleDisplayMode(.inline)
         .task { await subscribe() }
     }
 
@@ -94,7 +95,7 @@ struct LogsView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppTheme.warning)
                 .accessibilityHidden(true)
             Text(message)
                 .font(.caption)
@@ -127,9 +128,9 @@ struct LogsView: View {
     private func color(for type: String) -> Color {
         switch type.lowercased() {
         case "debug": .secondary
-        case "info": .blue
-        case "warning": .orange
-        case "error": .red
+        case "info": AppTheme.accent
+        case "warning": AppTheme.warning
+        case "error": AppTheme.danger
         default: .primary
         }
     }

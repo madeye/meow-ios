@@ -20,6 +20,7 @@ struct TrafficView: View {
             }
         }
         .navigationTitle("traffic.nav.title")
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: ipcBridge.currentTraffic) { _, snapshot in
             let sample = RateSample(
                 timestamp: snapshot.timestamp,
@@ -85,6 +86,10 @@ struct TrafficView: View {
                         .foregroundStyle(by: .value("series", "Download"))
                         .lineStyle(StrokeStyle(lineWidth: 2))
                 }
+                .chartForegroundStyleScale([
+                    "Upload": AppTheme.warning,
+                    "Download": AppTheme.accent,
+                ])
                 .frame(height: 180)
                 .accessibilityIdentifier("traffic.speedChart")
                 .accessibilityLabel(Text("traffic.label.speed"))
@@ -108,6 +113,10 @@ struct TrafficView: View {
                     BarMark(x: .value("day", day.date), y: .value("rx", day.rxBytes))
                         .foregroundStyle(by: .value("series", "Download"))
                 }
+                .chartForegroundStyleScale([
+                    "Upload": AppTheme.warning,
+                    "Download": AppTheme.accent,
+                ])
                 .chartYAxis {
                     AxisMarks { value in
                         AxisGridLine()

@@ -16,8 +16,8 @@
 
 
 /* Tab bar */
-"tabs.home" = "首页";
 "tabs.subscriptions" = "订阅";
+"tabs.proxyGroups" = "代理组";
 "tabs.traffic" = "流量";
 "tabs.logs" = "日志";
 "tabs.settings" = "设置";
@@ -69,6 +69,10 @@
 
 /* Subscriptions */
 "subscriptions.nav.title" = "订阅";
+"subscriptions.home.addTitle" = "添加订阅";
+"subscriptions.home.addSubtitle" = "连接 URL，或导入本地 YAML 配置。";
+"subscriptions.section.profiles" = "配置";
+"subscriptions.section.engine" = "引擎";
 "subscriptions.add.nav.title" = "添加订阅";
 "subscriptions.add.field.name" = "名称";
 "subscriptions.add.field.url" = "网址";

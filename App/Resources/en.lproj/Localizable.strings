@@ -10,8 +10,8 @@
 
 
 /* Tab bar */
-"tabs.home" = "Home";
 "tabs.subscriptions" = "Subscriptions";
+"tabs.proxyGroups" = "Proxy Groups";
 "tabs.traffic" = "Traffic";
 "tabs.logs" = "Logs";
 "tabs.settings" = "Settings";
@@ -63,6 +63,10 @@
 
 /* Subscriptions */
 "subscriptions.nav.title" = "Subscriptions";
+"subscriptions.home.addTitle" = "Add Subscription";
+"subscriptions.home.addSubtitle" = "Connect a URL or import a local YAML profile.";
+"subscriptions.section.profiles" = "Profiles";
+"subscriptions.section.engine" = "Engine";
 "subscriptions.add.nav.title" = "Add Subscription";
 "subscriptions.add.field.name" = "Name";
 "subscriptions.add.field.url" = "URL";

@@ -81,7 +81,7 @@ struct ProvidersView: View {
             }
             Text("\(delay) ms")
                 .font(.caption.monospaced())
-                .foregroundStyle(delay > 500 ? .red : .green)
+                .foregroundStyle(delay > 500 ? AppTheme.danger : AppTheme.connected)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("a11y.providers.row.delay.label"))
@@ -134,7 +134,7 @@ struct ProvidersView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppTheme.warning)
                 .accessibilityHidden(true)
             Text(message)
                 .font(.caption)

@@ -19,12 +19,12 @@ struct MeowApp {
     }
 
     /// Tab navigation
-    var homeTab: XCUIElement {
-        app.tabBars.buttons["Home"]
-    }
-
     var subscriptionsTab: XCUIElement {
         app.tabBars.buttons["Subscriptions"]
+    }
+
+    var proxyGroupsTab: XCUIElement {
+        app.tabBars.buttons["Proxy Groups"]
     }
 
     var trafficTab: XCUIElement {

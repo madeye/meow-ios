@@ -1,0 +1,1 @@
+Refreshes the app icon and the in-app status mark to use the simplified cat logo, including transparent rendering in the top-left status area. Also fixes Home/Engine navigation so tapping Connections opens the correct view, and keeps subscription adding in the toolbar while removing the duplicate add card.

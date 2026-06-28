@@ -33,7 +33,7 @@ DEVICE_NAMES=("iPhone 17 Pro Max" "iPad Pro 13-inch (M5)")
 # locale -> AppleLanguages token
 LOCALES=("en-US" "zh-Hans")
 # NN<Screen>:tab-tag
-SCREENS=("01Home:home" "02Subscriptions:subscriptions" "03Traffic:traffic" "04Settings:settings")
+SCREENS=("01Subscriptions:subscriptions" "02ProxyGroups:proxyGroups" "03Traffic:traffic" "04Settings:settings")
 
 udid_for() { xcrun simctl list devices available | grep -F "$1 (" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/'; }
 

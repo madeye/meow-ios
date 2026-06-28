@@ -19,8 +19,8 @@ final class AppModel {
 
     /// Monotonically bumped each time `replaySelectedProxies()` finishes a pass
     /// (successful replay, probe-timeout giveup, or no-active-profile no-op).
-    /// HomeView keys a `.task(id:)` on this so the proxy-groups UI re-fetches
-    /// `/proxies` AFTER replay has had its chance to mutate engine state —
+    /// EngineOverviewSection keys a `.task(id:)` on this so the proxy-groups UI
+    /// re-fetches `/proxies` AFTER replay has had its chance to mutate engine state —
     /// otherwise the view-mount fetch on the `.connected` edge races the
     /// replay PUTs and caches pre-replay defaults.
     private(set) var replayGeneration: Int = 0

@@ -3,85 +3,51 @@ import SwiftData
 import SwiftUI
 
 struct HomeView: View {
+    var body: some View {
+        ScrollView {
+            EngineOverviewSection()
+                .padding(16)
+        }
+        .background(AppTheme.screenBackground)
+        .scrollContentBackground(.hidden)
+        .navigationTitle("home.nav.title")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct EngineOverviewSection: View {
+    let showsStatusSummary: Bool
+
     @Environment(AppModel.self) private var appModel
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
     @Environment(MeowAPI.self) private var meowAPI
     @Query(filter: #Predicate<Profile> { $0.isSelected }) private var selected: [Profile]
 
-    @State private var groupCount: Int = 0
+    @State private var auxiliaryDestination: EngineAuxiliaryDestination?
     @State private var routeMode: RouteMode = .rule
 
+    init(showsStatusSummary: Bool = true) {
+        self.showsStatusSummary = showsStatusSummary
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if let message = vpnManager.lastError {
-                    errorBanner(message)
-                }
+        VStack(spacing: 16) {
+            if showsStatusSummary {
                 primaryCard
                 trafficRow
-                routeModeRow
-                proxyGroupsRow
-                auxiliaryNavSection
             }
-            .padding(16)
+            routeModeRow
+            auxiliaryNavSection
         }
-        .background(AppTheme.screenBackground)
-        .scrollContentBackground(.hidden)
-        .navigationTitle("home.nav.title")
         .task(id: vpnManager.stage) {
-            await refreshGroupCount()
             await refreshRouteMode()
         }
-        // The stage-keyed task above fires on the `.connected` edge and races
-        // `AppModel.replaySelectedProxies`; the pre-replay fetch caches YAML
-        // defaults and the UI never re-reads post-replay engine state. Keying
-        // a second task on `replayGeneration` guarantees a re-fetch AFTER the
-        // replay pass finishes (success, probe timeout, or no-op alike).
         .task(id: appModel.replayGeneration) {
-            await refreshGroupCount()
             await refreshRouteMode()
         }
         .refreshable {
-            await refreshGroupCount()
             await refreshRouteMode()
-        }
-    }
-
-    private func errorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("home.error.tunnelFailed.title")
-                    .font(.subheadline.weight(.semibold))
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: 8)
-            Button {
-                vpnManager.clearError()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("home.error.dismiss")
-            .accessibilityIdentifier("home.error.dismiss")
-        }
-        .padding(12)
-        .background(.regularMaterial, in: .rect(cornerRadius: 12))
-        .accessibilityIdentifier("home.error.banner")
-        .onAppear {
-            AccessibilityNotification.Announcement(
-                String(localized: "home.error.tunnelFailed.title"),
-            ).post()
         }
     }
 
@@ -91,7 +57,7 @@ struct HomeView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .center, spacing: 14) {
-                    StatusGlyph(stage: vpnManager.stage)
+                    VpnStatusGlyph(stage: vpnManager.stage)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(stageBadgeText)
                             .font(.title2.weight(.semibold))
@@ -118,33 +84,8 @@ struct HomeView: View {
                     )
                     Spacer()
                 }
-
-                vpnToggle
             }
         }
-    }
-
-    private var vpnToggle: some View {
-        Button(action: toggle) {
-            HStack(spacing: 8) {
-                if isInFlight {
-                    ProgressView().controlSize(.small).tint(.white)
-                        .accessibilityHidden(true)
-                }
-                Image(systemName: isConnected ? "power.circle.fill" : "power.circle")
-                    .imageScale(.large)
-                    .accessibilityHidden(true)
-                Text(toggleTitle)
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-        }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(toggleTint)
-        .disabled(toggleDisabled)
-        .accessibilityIdentifier("home.toggle.vpn")
     }
 
     // MARK: - Traffic row
@@ -208,47 +149,6 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Proxy groups
-
-    private var proxyGroupsRow: some View {
-        NavigationLink {
-            ProxyGroupsView()
-        } label: {
-            GlassCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "rectangle.stack")
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(width: 24)
-                        .accessibilityHidden(true)
-                    Text("home.proxyGroups.header")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(groupCountText)
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(groupCountAccessibilityLabel)
-                        .accessibilityIdentifier("home.proxyGroups.count")
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(groupCount == 0)
-        .accessibilityIdentifier("home.nav.proxyGroups")
-    }
-
-    private var groupCountText: String {
-        groupCount == 0 ? "—" : "\(groupCount)"
-    }
-
-    /// "—" is unspeakable for VoiceOver and Voice Control; substitute a real phrase.
-    private var groupCountAccessibilityLabel: Text {
-        groupCount == 0 ? Text("a11y.home.proxyGroups.none") : Text("\(groupCount)")
-    }
-
     // MARK: - Auxiliary nav
 
     private var auxiliaryNavSection: some View {
@@ -258,7 +158,7 @@ struct HomeView: View {
                     title: "home.nav.connections",
                     systemImage: "chevron.right.square",
                     identifier: "home.nav.connections",
-                ) { ConnectionsView() }
+                ) { auxiliaryDestination = .connections }
 
                 Divider().padding(.leading, 42)
 
@@ -266,7 +166,7 @@ struct HomeView: View {
                     title: "home.nav.rules",
                     systemImage: "arrow.triangle.branch",
                     identifier: "home.nav.rules",
-                ) { RulesView() }
+                ) { auxiliaryDestination = .rules }
 
                 Divider().padding(.leading, 42)
 
@@ -274,7 +174,7 @@ struct HomeView: View {
                     title: "home.nav.providers",
                     systemImage: "tray.full",
                     identifier: "home.nav.providers",
-                ) { ProvidersView() }
+                ) { auxiliaryDestination = .providers }
 
                 Divider().padding(.leading, 42)
 
@@ -282,12 +182,22 @@ struct HomeView: View {
                     title: "home.nav.diagnostics",
                     systemImage: "stethoscope",
                     identifier: "home.nav.diagnostics",
-                ) {
-                    DiagnosticsPanelView()
-                        .ignoresSafeArea(edges: .bottom)
-                        .navigationTitle("home.nav.diagnostics")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
+                ) { auxiliaryDestination = .diagnostics }
+            }
+        }
+        .navigationDestination(item: $auxiliaryDestination) { destination in
+            switch destination {
+            case .connections:
+                ConnectionsView()
+            case .rules:
+                RulesView()
+            case .providers:
+                ProvidersView()
+            case .diagnostics:
+                DiagnosticsPanelView()
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle("home.nav.diagnostics")
+                    .navigationBarTitleDisplayMode(.inline)
             }
         }
     }
@@ -297,17 +207,12 @@ struct HomeView: View {
     private var profileName: String {
         selected.first?.name ?? String(
             localized: "home.profile.none",
-            comment: "Placeholder shown in profile-name slot on Home when no subscription profile is selected",
+            comment: "Placeholder shown in profile-name slot when no subscription profile is selected",
         )
     }
 
     private var isConnected: Bool {
         vpnManager.stage == .connected
-    }
-
-    private var isInFlight: Bool {
-        let stage = vpnManager.stage
-        return stage == .preparing || stage == .connecting || stage == .stopping
     }
 
     private var stageBadgeText: LocalizedStringKey {
@@ -319,31 +224,6 @@ struct HomeView: View {
         case .stopping: "home.badge.disconnecting"
         }
     }
-
-    private var toggleTitle: LocalizedStringKey {
-        switch vpnManager.stage {
-        case .connected: "home.toggle.disconnect"
-        case .preparing: "home.toggle.preparing"
-        case .connecting: "home.toggle.connecting"
-        case .stopping: "home.toggle.disconnecting"
-        default: "home.toggle.connect"
-        }
-    }
-
-    private var toggleTint: Color {
-        switch vpnManager.stage {
-        case .connected: AppTheme.danger
-        case .preparing, .connecting, .stopping: AppTheme.warning
-        case .error: AppTheme.danger
-        default: AppTheme.accent
-        }
-    }
-
-    private var toggleDisabled: Bool {
-        if isInFlight { return true }
-        if isConnected { return false }
-        return selected.first == nil
-    }
 }
 
 // MARK: - Actions
@@ -352,17 +232,7 @@ struct HomeView: View {
 // only the declarative surface (stored state + subviews) — the action layer
 // is wiring between the view and the engine and reads as a separate concern.
 
-private extension HomeView {
-    func toggle() {
-        if isConnected {
-            ipcBridge.send(.stop)
-            Task { await vpnManager.disconnect() }
-        } else {
-            ipcBridge.send(.start, profileID: selected.first?.id)
-            Task { await vpnManager.connect() }
-        }
-    }
-
+private extension EngineOverviewSection {
     func refreshRouteMode() async {
         guard vpnManager.stage == .connected else { return }
         do {
@@ -382,19 +252,6 @@ private extension HomeView {
         } catch {
             // Re-fetch to revert the segmented control if the engine rejected it.
             await refreshRouteMode()
-        }
-    }
-
-    func refreshGroupCount() async {
-        guard vpnManager.stage == .connected else {
-            groupCount = 0
-            return
-        }
-        do {
-            let resp = try await meowAPI.getProxies()
-            groupCount = ProxyGroupModel.build(from: resp.proxies).count
-        } catch {
-            groupCount = 0
         }
     }
 }
@@ -439,6 +296,17 @@ enum RouteMode: String, CaseIterable, Identifiable {
     }
 }
 
+private enum EngineAuxiliaryDestination: Identifiable {
+    case connections
+    case rules
+    case providers
+    case diagnostics
+
+    var id: Self {
+        self
+    }
+}
+
 // MARK: - Subviews
 
 private struct PacketStat: View {
@@ -462,64 +330,6 @@ private struct PacketStat: View {
         .accessibilityLabel(Text(label))
         .accessibilityValue(Text("\(count)"))
         .accessibilityAddTraits(.updatesFrequently)
-    }
-}
-
-private struct StageDot: View {
-    let stage: VpnStage
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 10, height: 10)
-            .shadow(color: color.opacity(0.6), radius: 6)
-    }
-
-    private var color: Color {
-        switch stage {
-        case .idle, .stopped: .secondary
-        case .preparing, .connecting, .stopping: AppTheme.warning
-        case .connected: AppTheme.connected
-        case .error: AppTheme.danger
-        }
-    }
-}
-
-private struct StatusGlyph: View {
-    let stage: VpnStage
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(AppTheme.iconBackground)
-                .frame(width: 54, height: 54)
-            Image(systemName: symbol)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(color)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            StageDot(stage: stage)
-                .background(.background, in: Circle())
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var symbol: String {
-        switch stage {
-        case .connected: "checkmark.shield.fill"
-        case .preparing, .connecting, .stopping: "bolt.horizontal.circle.fill"
-        case .error: "exclamationmark.triangle.fill"
-        default: "shield"
-        }
-    }
-
-    private var color: Color {
-        switch stage {
-        case .connected: AppTheme.connected
-        case .preparing, .connecting, .stopping: AppTheme.warning
-        case .error: AppTheme.danger
-        default: AppTheme.accent
-        }
     }
 }
 
@@ -552,14 +362,14 @@ private struct TrafficTile: View {
     }
 }
 
-private struct NavRow<Destination: View>: View {
+private struct NavRow: View {
     let title: LocalizedStringKey
     let systemImage: String
     let identifier: String
-    @ViewBuilder let destination: () -> Destination
+    let action: () -> Void
 
     var body: some View {
-        NavigationLink(destination: destination) {
+        Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: systemImage)
                     .foregroundStyle(AppTheme.accent)
@@ -575,7 +385,7 @@ private struct NavRow<Destination: View>: View {
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
-            .frame(minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -275,7 +275,7 @@ struct RulesEditorView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(AppTheme.warning)
             Text(message)
                 .font(.caption)
                 .lineLimit(2)

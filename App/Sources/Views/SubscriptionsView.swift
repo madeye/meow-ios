@@ -13,112 +13,114 @@ struct SubscriptionsView: View {
 
     var body: some View {
         List {
-            ForEach(profiles) { profile in
-                GlassCard {
-                    HStack {
-                        Image(systemName: profile.isSelected ? "largecircle.fill.circle" : "circle")
-                            .foregroundStyle(profile.isSelected ? .green : .secondary)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(profile.name).font(.headline)
-                            Text(
-                                "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
-                                comment: "Subscription row subtitle; %@ = relative time since last update",
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityValue(Text(
-                            profile.isSelected
-                                ? "subscriptions.row.a11y.selected"
-                                : "subscriptions.row.a11y.notSelected",
-                        ))
-                        .accessibilityHint(Text("subscriptions.row.a11y.selectHint"))
-                        .accessibilityAddTraits(.isButton)
-                        Spacer()
-                        Button {
-                            editing = profile
-                        } label: {
-                            Image(systemName: "pencil")
-                                .frame(minWidth: 44, minHeight: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(Text("subscriptions.row.a11y.edit \(profile.name)"))
-                        .accessibilityHint(Text("subscriptions.row.a11y.editHint"))
-                        .accessibilityIdentifier("subscriptions.row.editYaml")
-                        if !profile.url.isEmpty {
+            Section {
+                if profiles.isEmpty {
+                    emptySubscriptionCard
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
+
+                ForEach(profiles) { profile in
+                    GlassCard {
+                        HStack {
+                            Image(systemName: profile.isSelected ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(profile.isSelected ? AppTheme.connected : .secondary)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(profile.name).font(.headline)
+                                Text(
+                                    "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
+                                    comment: "Subscription row subtitle; %@ = relative time since last update",
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityValue(Text(
+                                profile.isSelected
+                                    ? "subscriptions.row.a11y.selected"
+                                    : "subscriptions.row.a11y.notSelected",
+                            ))
+                            .accessibilityHint(Text("subscriptions.row.a11y.selectHint"))
+                            .accessibilityAddTraits(.isButton)
+                            Spacer()
                             Button {
-                                Task { try? await service.refresh(profile) }
+                                editing = profile
                             } label: {
-                                Image(systemName: "arrow.clockwise")
+                                Image(systemName: "pencil")
                                     .frame(minWidth: 44, minHeight: 44)
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.borderless)
-                            .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
-                            .accessibilityHint(Text("subscriptions.row.a11y.refreshHint"))
+                            .accessibilityLabel(Text("subscriptions.row.a11y.edit \(profile.name)"))
+                            .accessibilityHint(Text("subscriptions.row.a11y.editHint"))
+                            .accessibilityIdentifier("subscriptions.row.editYaml")
+                            if !profile.url.isEmpty {
+                                Button {
+                                    Task { try? await service.refresh(profile) }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                        .frame(minWidth: 44, minHeight: 44)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
+                                .accessibilityHint(Text("subscriptions.row.a11y.refreshHint"))
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("subscription.row.\(profile.name)")
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .contentShape(Rectangle())
+                    .onTapGesture { try? service.select(profile) }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            editingInfo = profile
+                        } label: {
+                            Label("subscriptions.editInfo.swipe", systemImage: "square.and.pencil")
+                        }
+                        .tint(AppTheme.accent)
+                        .accessibilityIdentifier("subscriptions.row.editInfo")
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            try? service.delete(profile)
+                        } label: {
+                            Label("common.delete", systemImage: "trash")
                         }
                     }
                 }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .contentShape(Rectangle())
-                .onTapGesture { try? service.select(profile) }
-                .swipeActions(edge: .leading) {
-                    Button {
-                        editingInfo = profile
-                    } label: {
-                        Label("subscriptions.editInfo.swipe", systemImage: "square.and.pencil")
-                    }
-                    .tint(.blue)
-                    .accessibilityIdentifier("subscriptions.row.editInfo")
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        try? service.delete(profile)
-                    } label: {
-                        Label("common.delete", systemImage: "trash")
-                    }
-                }
+            } header: {
+                Text("subscriptions.section.profiles")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.mutedText)
+                    .textCase(.uppercase)
+            }
+
+            Section {
+                EngineOverviewSection(showsStatusSummary: false)
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            } header: {
+                Text("subscriptions.section.engine")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.mutedText)
+                    .textCase(.uppercase)
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppTheme.screenBackground)
-        .overlay {
-            if profiles.isEmpty {
-                ContentUnavailableView(
-                    "subscriptions.empty.title",
-                    systemImage: "tray",
-                    description: Text("subscriptions.empty.description"),
-                )
-                .accessibilityIdentifier("subscriptions.emptyState")
-            }
-        }
         .navigationTitle("subscriptions.nav.title")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        showingAdd = true
-                    } label: {
-                        Label("subscriptions.toolbar.addFromURL", systemImage: "link")
-                    }
-                    .accessibilityIdentifier("subscriptions.toolbar.addFromURL")
-
-                    Button {
-                        showingImporter = true
-                    } label: {
-                        Label("subscriptions.toolbar.importFromFile", systemImage: "icloud.and.arrow.down")
-                    }
-                    .accessibilityIdentifier("subscriptions.toolbar.importFromFile")
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel(Text("subscriptions.toolbar.a11y.add"))
-                .accessibilityIdentifier("subscriptions.toolbar.add")
+                addSubscriptionMenu(identifier: "subscriptions.toolbar.add")
             }
         }
         .sheet(isPresented: $showingAdd) {
@@ -144,6 +146,46 @@ struct SubscriptionsView: View {
         } message: {
             Text(error ?? "")
         }
+    }
+
+    private var emptySubscriptionCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("subscriptions.empty.title", systemImage: "tray")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("subscriptions.empty.description")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityIdentifier("subscriptions.emptyState")
+    }
+
+    private func addSubscriptionMenu(identifier: String) -> some View {
+        Menu {
+            Button {
+                showingAdd = true
+            } label: {
+                Label("subscriptions.toolbar.addFromURL", systemImage: "link")
+            }
+            .accessibilityIdentifier("subscriptions.toolbar.addFromURL")
+
+            Button {
+                showingImporter = true
+            } label: {
+                Label("subscriptions.toolbar.importFromFile", systemImage: "icloud.and.arrow.down")
+            }
+            .accessibilityIdentifier("subscriptions.toolbar.importFromFile")
+        } label: {
+            Image(systemName: "plus")
+                .font(.headline.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(Text("subscriptions.toolbar.a11y.add"))
+        .accessibilityIdentifier(identifier)
     }
 
     /// File picker accepts YAML proper plus `.txt` and unspecified data —
