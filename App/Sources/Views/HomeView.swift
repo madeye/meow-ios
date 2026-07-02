@@ -361,4 +361,3 @@ private struct TrafficTile: View {
         .accessibilityAddTraits(.updatesFrequently)
     }
 }
-

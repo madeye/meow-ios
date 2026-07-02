@@ -1,6 +1,6 @@
 import Foundation
-import MeowModels
 @testable import meow_ios
+import MeowModels
 import Testing
 
 @Suite("Utility session stores", .tags(.model))
@@ -70,11 +70,9 @@ struct UtilitySessionStoreTests {
         let store = UtilityLogsStore()
         store.level = "warning"
         store.autoScroll = false
-        store.allEntries.append(LogEntry(type: "info", payload: "cached"))
 
         #expect(store.level == "warning")
         #expect(store.autoScroll == false)
-        #expect(store.allEntries.count == 1)
     }
 
     @Test

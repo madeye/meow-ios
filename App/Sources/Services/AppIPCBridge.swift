@@ -122,7 +122,11 @@ private extension AppIPCBridge {
 
         currentTraffic = Self.shouldRunMockTraffic(for: currentState) ? Self.mockTraffic(tick: 0) : .init()
         relayMemstats(currentTraffic)
-        onTrafficDidUpdate?(currentTraffic)
+        // Only chart live snapshots — a synthetic `.init()` reset would seed
+        // the Utility traffic chart and hide its fresh-install empty state.
+        if Self.shouldRunMockTraffic(for: currentState) {
+            onTrafficDidUpdate?(currentTraffic)
+        }
 
         configureMockTrafficTask()
     }
@@ -142,7 +146,9 @@ private extension AppIPCBridge {
         try? SharedStore.writeState(currentState)
         currentTraffic = Self.shouldRunMockTraffic(for: currentState) ? Self.mockTraffic(tick: 0) : .init()
         relayMemstats(currentTraffic)
-        onTrafficDidUpdate?(currentTraffic)
+        if Self.shouldRunMockTraffic(for: currentState) {
+            onTrafficDidUpdate?(currentTraffic)
+        }
         configureMockTrafficTask()
     }
 
