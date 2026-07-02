@@ -91,6 +91,7 @@
 "subscriptions.import.invalidEncoding" = "所选文件不是有效的 UTF-8 文本。";
 "subscriptions.empty.title" = "暂无订阅";
 "subscriptions.empty.description" = "点击右上角的 + 添加 Mihomo 或 Clash 订阅链接。";
+"subscriptions.empty.importFile" = "导入文件";
 
 
 /* Connections */

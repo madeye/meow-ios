@@ -85,6 +85,7 @@
 "subscriptions.import.invalidEncoding" = "The selected file isn't valid UTF-8 text.";
 "subscriptions.empty.title" = "No subscriptions yet";
 "subscriptions.empty.description" = "Tap + to add a Mihomo or Clash subscription URL.";
+"subscriptions.empty.importFile" = "Import File";
 
 
 /* Connections */

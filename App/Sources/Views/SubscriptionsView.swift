@@ -176,7 +176,10 @@ struct SubscriptionsView: View {
                     Button {
                         showingImporter = true
                     } label: {
-                        Label("subscriptions.toolbar.importFromFile", systemImage: "icloud.and.arrow.down")
+                        // Shorter than the toolbar-menu label — the full
+                        // "Import from iCloud Drive…" truncates at this
+                        // half-card width.
+                        Label("subscriptions.empty.importFile", systemImage: "icloud.and.arrow.down")
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
