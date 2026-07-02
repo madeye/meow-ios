@@ -21,6 +21,8 @@ Shadowsocks、Trojan、VLESS 出站协议（支持 TLS、WebSocket、gRPC、H2 �
 • iOS 26 或更高版本（iPhone、iPad）
 • 一份你信任的代理订阅——meow 本身不提供任何代理服务器
 
+meow 完全免费，不含任何内购。本页所述"订阅"指你自行提供的代理配置链接（Clash 风格配置订阅），并非付费订阅。
+
 公开测试版
 本次为公开测试版本。部分功能仍在开发中。请通过 GitHub 或 App 内的反馈链接报告问题。
 

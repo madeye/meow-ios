@@ -1,0 +1,17 @@
+# Demo configuration subscription for App Store review.
+#
+# This is a minimal Clash-format configuration that routes all traffic
+# DIRECT (no proxy server), so reviewers can exercise the full
+# subscribe -> import -> connect flow without needing credentials to a
+# real proxy server. It is referenced from the App Review notes.
+mixed-port: 7890
+mode: rule
+log-level: info
+proxies: []
+proxy-groups:
+  - name: Demo
+    type: select
+    proxies:
+      - DIRECT
+rules:
+  - MATCH,Demo

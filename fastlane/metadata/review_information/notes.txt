@@ -1,1 +1,14 @@
+meow is a client-side proxy / VPN utility. It has NO account system, NO in-app purchases, and NO paid subscriptions, so no demo account is needed.
 
+TERMINOLOGY: "Subscription" in our description means a proxy CONFIGURATION subscription — a Clash-format YAML configuration fetched from a URL the user supplies (the standard term in this app category). It is not a paid or auto-renewing subscription.
+
+HOW TO TEST THE SUBSCRIPTION FEATURE
+1. Launch meow. The first tab is "Subscriptions".
+2. Tap the "+" button in the top-right toolbar and choose "Add from URL".
+3. Enter any name and this demo configuration URL:
+   https://raw.githubusercontent.com/madeye/meow-ios/main/docs/review-demo-config.yaml
+4. Tap Add. The YAML configuration is downloaded and listed. The pencil icon opens the built-in YAML editor; the refresh icon re-fetches the subscription.
+5. With the demo subscription selected, turn on the switch in the bar at the top of the screen and approve the iOS VPN permission prompt. The packet tunnel starts; the "Proxy Groups" tab shows the "Demo" group from the configuration.
+6. Browse in Safari — traffic flows through the on-device tunnel (the demo configuration routes it DIRECT, since meow does not operate any proxy servers).
+
+PRIVACY: the app collects no user data of any kind (no analytics/tracking SDKs, no developer servers). Traffic is processed entirely on-device by the Network Extension and forwarded only to servers from the user's own configuration. Privacy policy: https://github.com/madeye/meow-ios/blob/main/PRIVACY.md
