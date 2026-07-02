@@ -11,6 +11,7 @@ enum AppModelContainer {
         do {
             let schema = Schema([Profile.self, DailyTraffic.self])
             let url = try storeURL()
+            resetStoreForUITestsIfRequested(at: url)
             let config = ModelConfiguration(
                 "meow",
                 schema: schema,
@@ -26,6 +27,18 @@ enum AppModelContainer {
 
     struct Holder {
         let container: ModelContainer
+    }
+
+    /// `-ResetState` promises UI tests a known state, but it only reset the
+    /// mock IPC snapshot — SwiftData profiles persisted across launches, so
+    /// empty-state tests flaked on whatever earlier runs left behind. Wipe
+    /// the store (and its SQLite sidecars) before the container opens it.
+    private static func resetStoreForUITestsIfRequested(at url: URL) {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-UITests"), args.contains("-ResetState") else { return }
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
+        }
     }
 
     private static func storeURL() throws -> URL {

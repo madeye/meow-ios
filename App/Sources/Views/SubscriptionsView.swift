@@ -150,16 +150,51 @@ struct SubscriptionsView: View {
 
     private var emptySubscriptionCard: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 Label("subscriptions.empty.title", systemImage: "tray")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 Text("subscriptions.empty.description")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Button {
+                        showingAdd = true
+                    } label: {
+                        Label("subscriptions.toolbar.addFromURL", systemImage: "link")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: 8))
+                    .tint(AppTheme.accent)
+                    .accessibilityIdentifier("subscriptions.empty.addFromURL")
+
+                    Button {
+                        showingImporter = true
+                    } label: {
+                        Label("subscriptions.toolbar.importFromFile", systemImage: "icloud.and.arrow.down")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.roundedRectangle(radius: 8))
+                    .tint(AppTheme.accent)
+                    .accessibilityIdentifier("subscriptions.empty.importFromFile")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // `.contain` keeps the card id on the group without clobbering the
+        // buttons' own identifiers (a bare identifier on a container view
+        // propagates to every child element).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("subscriptions.emptyState")
     }
 
