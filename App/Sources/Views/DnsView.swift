@@ -44,7 +44,13 @@ struct DnsView: View {
             comment: "DNS screen navigation title; %lld = result count",
         ))
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: query) { await poll() }
+        .task(id: query) {
+            // Debounce keystrokes so typing doesn't fire one request per character.
+            if !query.isEmpty {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            await poll()
+        }
     }
 
     private var displayCount: Int {
@@ -96,6 +102,8 @@ struct DnsView: View {
                 results = fetched
                 errorMessage = nil
             } catch {
+                // A cancelled fetch means the task was superseded; don't flash its error.
+                if Task.isCancelled { break }
                 errorMessage = error.localizedDescription
             }
             try? await Task.sleep(for: .seconds(2))
