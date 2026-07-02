@@ -7,36 +7,31 @@
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
 //! DNS: A (1), TXT (16), MX (15), PTR (12), and other non-blocked queries are
-//! sent as raw UDP packets to the local meow-dns listener. In `redir-host`
-//! (normal) mode the listener resolves A queries to the real upstream IP and
-//! records the IP->host mapping in its reverse cache; generic qtypes get
-//! meow-dns's upstream-forward behavior.
+//! sent as raw UDP packets to the local meow-dns listener. A gets fake-IP
+//! synthesis there; generic qtypes get meow-dns's upstream-forward behavior.
 //! AAAA (28) queries are answered NOERROR-empty by the FFI itself when IPv6 is
-//! disabled in app settings (the default) — the tunnel is then IPv4-only (the
-//! TUN advertises no v6 route), so stripping AAAA forces every client onto the
-//! v4 path instead of leaking (or black-holing) connections over v6. When IPv6
-//! is enabled, AAAA queries are forwarded to meow-dns like A queries (real v6
-//! addresses) and the Swift TUN advertises an IPv6 address + default route so
-//! those connections enter the netstack. When "block HTTP/3" is enabled,
-//! HTTPS/SVCB (65/64) queries also get NOERROR-empty so clients cannot
+//! disabled in app settings (the default) — the fake-IP pool is v4-only, so
+//! stripping AAAA forces every client onto it instead of leaking (or
+//! black-holing) connections over v6. When IPv6 is enabled, AAAA queries are
+//! forwarded to meow-dns like A queries — with a v4-only fake-IP pool the
+//! resolver itself suppresses AAAA for fake-IP'd domains, so clients still land
+//! on the v4 fake path; the Swift TUN advertises an IPv6 address + default
+//! route so v6-literal destinations enter the netstack. When "block HTTP/3" is
+//! enabled, HTTPS/SVCB (65/64) queries also get NOERROR-empty so clients cannot
 //! discover QUIC hints.
 //!
 //! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
 //! every UDP DNS query arrives as an in-TUN IP packet. netstack turns that into
 //! a UDP payload, the FFI branches on qtype, and non-blocked queries go to the
 //! local DNS listener with the reply injected back through netstack. The
-//! resolver owns resolution, reverse (IP->host) mapping, hosts / NXDOMAIN
+//! resolver owns fake-IP synthesis, reverse mapping, hosts / NXDOMAIN
 //! semantics, and TTL handling; the FFI owns only the qtype peek plus the
 //! blocked-query short-circuit.
 //!
-//! TCP/UDP destination IPs are the real upstream IPs returned by meow's
-//! resolver. `dispatch_tcp` and `dispatch_udp` pass the literal destination to
-//! the mixed listener via SOCKS5; meow's normal inbound path reverse-looks-up
-//! the IP back to the original qname (from the resolver's reverse cache) before
-//! rule matching. (Real upstream IPs reach the TUN because the Swift
-//! NEPacketTunnelProvider already advertises the IPv4 default route — see
-//! `MWTunnelSettings.m`, `ipv4.includedRoutes = defaultRoute` with RFC1918
-//! LAN exclusions — so no routing change was needed for the fake-IP drop.)
+//! TCP/UDP destination IPs come back as fake-IPs from meow's resolver pool.
+//! `dispatch_tcp` and `dispatch_udp` pass the literal destination to the
+//! mixed listener via SOCKS5; meow's normal inbound path reverses fake-IPs back
+//! to the original qname before rule matching.
 
 use crate::logging;
 use futures::{SinkExt, StreamExt};
