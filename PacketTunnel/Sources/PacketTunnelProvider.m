@@ -47,6 +47,12 @@ static os_log_t gLog;
     // so a canceled monitor cannot schedule a delayed restart for a later
     // tunnel generation.
     _Atomic uint64_t    _pathGeneration;
+    // CLOCK_MONOTONIC nanoseconds of the last successful engine start or
+    // restart (0 = never). Written on _engineControlQueue, read on _pathQueue,
+    // hence atomic. CLOCK_MONOTONIC keeps counting across sleep, so a grace
+    // window that straddles a sleep/wake cycle expires rather than suppressing
+    // a restart the post-wake network state genuinely needs.
+    _Atomic uint64_t    _lastEngineStartNs;
 }
 
 // Quiet window after the last path event before a triggered engine restart
@@ -54,6 +60,15 @@ static os_log_t gLog;
 // restarts, short enough that a genuine path change recovers connectivity
 // quickly.
 static const NSTimeInterval kEngineRestartDebounceS = 3.0;
+
+// Grace window after a successful engine (re)start during which an
+// address-family-only path change does NOT trigger another restart. Routers
+// commonly deliver the IPv6 RA / DHCPv6 prefix 5-30s after DHCPv4 completes,
+// so one physical reconnect would otherwise restart the engine twice —
+// dropping every connection again and re-resolving proxy hostnames from a
+// fresh (empty) DNS cache. A family change outside the window still restarts:
+// the network genuinely changed shape mid-session.
+static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
 
 + (void)initialize {
     if (self == [PacketTunnelProvider class]) {
@@ -72,6 +87,7 @@ static const NSTimeInterval kEngineRestartDebounceS = 3.0;
             "com.tangzixiang.meow.PacketTunnel.engine-control", attr);
         atomic_init(&_restartGeneration, 0);
         atomic_init(&_pathGeneration, 0);
+        atomic_init(&_lastEngineStartNs, 0);
     }
     return self;
 }
@@ -115,6 +131,9 @@ static const NSTimeInterval kEngineRestartDebounceS = 3.0;
                 return;
             }
             self->_engine = engine;
+            atomic_store_explicit(&self->_lastEngineStartNs,
+                                  clock_gettime_nsec_np(CLOCK_MONOTONIC),
+                                  memory_order_relaxed);
 
             MWIPCListener *listener = [[MWIPCListener alloc]
                 initWithHandler:^(NSDictionary *intent) {
@@ -217,6 +236,9 @@ static const NSTimeInterval kEngineRestartDebounceS = 3.0;
             return;
         }
 
+        atomic_store_explicit(&self->_lastEngineStartNs,
+                              clock_gettime_nsec_np(CLOCK_MONOTONIC),
+                              memory_order_relaxed);
         os_log_info(gLog, "%{public}@ restart: engine restarted", reason);
         MWEngineLogf(MWLogInfo, @"NE: %@ restart — engine restarted", reason);
     });
@@ -476,12 +498,31 @@ static const NSTimeInterval kEngineRestartDebounceS = 3.0;
         // Same interface, same satisfied state, but the address-family set
         // changed — e.g. the Wi-Fi network silently lost (or gained) IPv6
         // via expired RAs or an upstream change. Restart the engine + tun2socks
-        // after a debounce so the fresh stack tracks the new network shape.
-        os_log_info(gLog, "path: address family changed v4 %d -> %d, v6 %d -> %d",
-                    _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
-        MWEngineLogf(MWLogInfo, @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d",
-                     _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
-        shouldRestart = YES;
+        // after a debounce so the fresh stack tracks the new network shape —
+        // unless an engine (re)start just happened, in which case this is
+        // almost certainly the late-v6 tail of the same physical reconnect
+        // and the fresh engine will pick the family up lazily on next dial.
+        uint64_t lastStartNs = atomic_load_explicit(&_lastEngineStartNs,
+                                                    memory_order_relaxed);
+        uint64_t nowNs = clock_gettime_nsec_np(CLOCK_MONOTONIC);
+        NSTimeInterval sinceStart = (NSTimeInterval)(nowNs - lastStartNs) / NSEC_PER_SEC;
+        if (lastStartNs != 0 && sinceStart < kAddressFamilyRestartGraceS) {
+            os_log_info(gLog,
+                        "path: address family changed v4 %d -> %d, v6 %d -> %d "
+                        "within %.0fs of engine start, absorbing (no restart)",
+                        _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6, sinceStart);
+            MWEngineLogf(MWLogInfo,
+                         @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d "
+                         @"within %.0fs of engine start, absorbing (no restart)",
+                         _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6, sinceStart);
+        } else {
+            os_log_info(gLog, "path: address family changed v4 %d -> %d, v6 %d -> %d",
+                        _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
+            MWEngineLogf(MWLogInfo,
+                         @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d",
+                         _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
+            shouldRestart = YES;
+        }
     }
 
     _lastSatisfied = satisfied;
