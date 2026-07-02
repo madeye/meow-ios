@@ -455,6 +455,7 @@
 				B306CE837FA7A17D7D561877 /* SubscriptionDeepLinkTests.swift */,
 				A43280DA576025F244CD1432 /* SubscriptionServiceTests.swift */,
 				729BDB9DF0375708DCD8F84E /* TrafficAccumulatorTests.swift */,
+				8F3B5C7D2E9A814F6B2C3D4E /* UtilitySessionStoreTests.swift */,
 				24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */,
 			);
 			path = Services;
@@ -1105,6 +1106,7 @@
 				66C7B352BBD0B772976ABB1B /* SubscriptionServiceTests.swift in Sources */,
 				997AE63C0D074EA6370C5DA8 /* SwiftDataTestContainer.swift in Sources */,
 				28CB589E0ACE5C617C7DCD42 /* TrafficAccumulatorTests.swift in Sources */,
+				9E2A4B6C1D8F703E5A1B2C3D /* UtilitySessionStoreTests.swift in Sources */,
 				0F59DC382F259493E472348F /* URLProtocolStub.swift in Sources */,
 				D95EF7A2FB411B4088E3255C /* URLValidationTests.swift in Sources */,
 				5539FB5E77561B0464DE86DB /* VpnManagerTests.swift in Sources */,
