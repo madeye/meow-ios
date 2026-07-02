@@ -68,8 +68,12 @@ EXPORT_PLIST="$ROOT/build/ExportOptions-adhoc.plist"
 # under team 32B45SMMQL — "meow AdHoc" / "meow PT AdHoc". The old UUIDs here
 # were for the retired io.github.madeye.meow ids on team SK4GFF6AHN and made
 # exportArchive fall back to App Store profiles ("not an iOS Ad Hoc profile").
-APP_PROFILE="${APP_PROFILE:-699c208a-87ed-4d21-a5c1-2c4e9ad9a4b9}"
-PT_PROFILE="${PT_PROFILE:-a10c12ac-cbb5-4ec4-bfb4-1208f7c35252}"
+# Deliberately NOT named APP_PROFILE/PT_PROFILE: prod.env (sourced above)
+# exports those for the App Store upload flow, and they would clobber the
+# Ad Hoc defaults here — exportArchive then fails with
+# "meow AppStore is not an iOS Ad Hoc profile".
+APP_PROFILE="${ADHOC_APP_PROFILE:-699c208a-87ed-4d21-a5c1-2c4e9ad9a4b9}"
+PT_PROFILE="${ADHOC_PT_PROFILE:-a10c12ac-cbb5-4ec4-bfb4-1208f7c35252}"
 
 # Production team id + ASC key come from prod.env (gitignored, sourced above).
 # The team id is intentionally not committed.
