@@ -143,9 +143,12 @@ struct GlobalVpnSwitchBar: View {
         }
     }
 
+    /// Mirrors `StageDot`'s status palette so the switch reads as connection
+    /// state: green while connected, amber in flight, red for error / the
+    /// connect call-to-action.
     private var toggleTint: Color {
         switch vpnManager.stage {
-        case .connected: AppTheme.danger
+        case .connected: AppTheme.connected
         case .preparing, .connecting, .stopping: AppTheme.warning
         case .error: AppTheme.danger
         default: AppTheme.accent
