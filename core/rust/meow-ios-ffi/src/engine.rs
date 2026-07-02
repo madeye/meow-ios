@@ -339,8 +339,9 @@ pub fn start(config_path: &str) -> Result<()> {
     }
 
     // `ApiServer::new` grew from 5 to 9 parameters to serve the new
-    // `/providers/*`, `/rules`, `/listeners`, and `/logs` routes. Build the
-    // required shapes from the loaded Config.
+    // `/providers/*`, `/rules`, `/listeners`, and `/logs` routes (and a 10th,
+    // `external_ui`, in 0.16.0). Build the required shapes from the loaded
+    // Config.
     let proxy_providers = {
         let map: DashMap<_, _> = cfg.proxy_providers.into_iter().collect();
         Arc::new(map)
@@ -366,6 +367,9 @@ pub fn start(config_path: &str) -> Result<()> {
             proxy_providers,
             rule_providers,
             listeners,
+            // external_ui (0.16.0): directory for the /ui web frontend.
+            // The NE serves no web UI — the iOS app is the frontend.
+            None,
         );
         // Spawn on the dedicated API runtime, NOT the engine runtime: a burst
         // of REST calls (e.g. the host app's per-stage `/proxies` + `/configs`
