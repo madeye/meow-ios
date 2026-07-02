@@ -1,0 +1,5 @@
+Build 2026070202 (1.3.2)
+
+• DNS is back on fake-IP mode for more reliable domain-rule matching.
+• The connect switch now shows connection status at a glance: green while connected, amber while connecting or disconnecting.
+• First launch is friendlier: the home tab offers Add from URL / Import File buttons right on the empty subscriptions card.
