@@ -1,4 +1,4 @@
-meow is a client-side proxy / VPN utility. It has NO account system, NO in-app purchases, and NO paid subscriptions, so no demo account is needed.
+meow is a client-side proxy / VPN utility, sold as a one-time purchase. It has NO account system, NO in-app purchases, and NO auto-renewing subscriptions, so no demo account is needed.
 
 TERMINOLOGY: "Subscription" in our description means a proxy CONFIGURATION subscription — a Clash-format YAML configuration fetched from a URL the user supplies (the standard term in this app category). It is not a paid or auto-renewing subscription.
 
