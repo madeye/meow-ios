@@ -10,6 +10,8 @@ private enum UtilityDestination: String, Identifiable {
 
 struct UtilityView: View {
     @State private var destination: UtilityDestination? = Self.screenshotUtilityDestination()
+    @State private var trafficScreen = TrafficView()
+    @State private var logsScreen = LogsView()
 
     var body: some View {
         ScrollView {
@@ -47,9 +49,9 @@ struct UtilityView: View {
         .navigationDestination(item: $destination) { target in
             switch target {
             case .traffic:
-                TrafficView()
+                trafficScreen
             case .logs:
-                LogsView()
+                logsScreen
             case .dns:
                 DnsView()
             }

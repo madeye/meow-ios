@@ -39,12 +39,14 @@ struct TrafficRateSample: Identifiable {
 final class UtilityLogsStore {
     private(set) var allEntries: [LogEntry] = []
     var errorMessage: String?
+    var level = "info"
+    var autoScroll = true
 
     private var streamTask: Task<Void, Never>?
 
     func startStreaming(api: MeowAPI) {
         guard streamTask == nil else { return }
-        streamTask = Task { [weak self] in
+        streamTask = Task { @MainActor [weak self] in
             let stream = api.streamLogs(level: "debug")
             do {
                 for try await entry in stream {

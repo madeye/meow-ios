@@ -73,6 +73,7 @@ final class AppModel {
         GeoAssetStager.stageIfNeeded()
         await vpnManager.refresh()
         ipcBridge.start()
+        utilityTrafficChart.ingest(ipcBridge.currentTraffic)
         dailyTrafficAccumulator.start()
         utilityLogs.startStreaming(api: meowAPI)
     }

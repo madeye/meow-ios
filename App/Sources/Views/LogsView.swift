@@ -3,20 +3,18 @@ import SwiftUI
 struct LogsView: View {
     @Environment(UtilityLogsStore.self) private var logsStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var level = "info"
-    @State private var autoScroll = true
 
     private static let levelOrder = ["debug": 0, "info": 1, "warning": 2, "error": 3]
 
     private var entries: [LogEntry] {
-        let threshold = Self.levelOrder[level] ?? 0
+        let threshold = Self.levelOrder[logsStore.level] ?? 0
         return logsStore.allEntries.filter { (Self.levelOrder[$0.type.lowercased()] ?? 0) >= threshold }
     }
 
     var body: some View {
         VStack {
             HStack {
-                Picker("logs.picker.level", selection: $level) {
+                Picker("logs.picker.level", selection: levelBinding) {
                     Text("logs.level.debug").tag("debug")
                     Text("logs.level.info").tag("info")
                     Text("logs.level.warning").tag("warning")
@@ -24,7 +22,7 @@ struct LogsView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("logs.levelPicker")
-                Toggle("logs.toggle.autoScroll", isOn: $autoScroll)
+                Toggle("logs.toggle.autoScroll", isOn: autoScrollBinding)
                     .labelsHidden()
                     .toggleStyle(.button)
                     .accessibilityIdentifier("logs.autoScrollToggle")
@@ -48,7 +46,7 @@ struct LogsView: View {
                     }
                 }
                 .onChange(of: entries.count) { _, count in
-                    guard autoScroll, count > 0 else { return }
+                    guard logsStore.autoScroll, count > 0 else { return }
                     if reduceMotion {
                         proxy.scrollTo(count - 1, anchor: .bottom)
                     } else {
@@ -73,6 +71,20 @@ struct LogsView: View {
             comment: "Logs screen navigation title; %lld = entry count",
         ))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var levelBinding: Binding<String> {
+        Binding(
+            get: { logsStore.level },
+            set: { logsStore.level = $0 },
+        )
+    }
+
+    private var autoScrollBinding: Binding<Bool> {
+        Binding(
+            get: { logsStore.autoScroll },
+            set: { logsStore.autoScroll = $0 },
+        )
     }
 
     private func row(for entry: LogEntry, index: Int) -> some View {
