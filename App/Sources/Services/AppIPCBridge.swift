@@ -18,6 +18,10 @@ final class AppIPCBridge {
     private var trafficObserver: DarwinObserver?
     private var mockTrafficTask: Task<Void, Never>?
 
+    /// Optional hook for long-lived consumers (e.g. the Utility traffic chart)
+    /// that must keep sampling while the Traffic screen is off-screen.
+    var onTrafficDidUpdate: ((TrafficSnapshot) -> Void)?
+
     func start() {
         if Self.usesMockIPC {
             startMockIPC()
@@ -75,6 +79,7 @@ final class AppIPCBridge {
         if let traffic = SharedStore.readTraffic() {
             currentTraffic = traffic
             relayMemstats(traffic)
+            onTrafficDidUpdate?(traffic)
         }
     }
 
@@ -117,6 +122,7 @@ private extension AppIPCBridge {
 
         currentTraffic = Self.shouldRunMockTraffic(for: currentState) ? Self.mockTraffic(tick: 0) : .init()
         relayMemstats(currentTraffic)
+        onTrafficDidUpdate?(currentTraffic)
 
         configureMockTrafficTask()
     }
@@ -136,6 +142,7 @@ private extension AppIPCBridge {
         try? SharedStore.writeState(currentState)
         currentTraffic = Self.shouldRunMockTraffic(for: currentState) ? Self.mockTraffic(tick: 0) : .init()
         relayMemstats(currentTraffic)
+        onTrafficDidUpdate?(currentTraffic)
         configureMockTrafficTask()
     }
 
@@ -154,6 +161,7 @@ private extension AppIPCBridge {
                 guard let self else { return }
                 currentTraffic = Self.mockTraffic(tick: tick)
                 relayMemstats(currentTraffic)
+                onTrafficDidUpdate?(currentTraffic)
             }
         }
     }

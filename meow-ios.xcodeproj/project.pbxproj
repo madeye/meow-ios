@@ -20,6 +20,7 @@
 		1705DA22AD7A785A8E0A5DF5 /* MeowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 332AEAFC0EED0EC4C05576EC /* MeowApp.swift */; };
 		1C4A14F944F334280633F3C1 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6DE9E643D70646873B923B /* ConnectionsView.swift */; };
 		1DC1B422EB6A35C59910D0E5 /* UtilityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB85D08A244615CFA035C0B3 /* UtilityView.swift */; };
+		8FC2607392E5903FB3648190 /* UtilitySessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EB15F6281D48F2EA253708F /* UtilitySessionStore.swift */; };
 		1DEF3FB14FBD667C00541BFF /* IdentifierSlugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B54369F081E1B728712CC9 /* IdentifierSlugTests.swift */; };
 		1DFB9CC9D7520C6342B580D2 /* IPCRoundTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5173E18BCFC9C0CBADC96556 /* IPCRoundTripTests.swift */; };
 		2063EF5A21DBDB2E5097D885 /* MeowCoreBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA64C2503B8306CC64B9D23D /* MeowCoreBridgeTests.swift */; };
@@ -79,6 +80,7 @@
 		90E26674740B7C7141781B01 /* ProxyGroupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7193B43D94BD4897FEDF967 /* ProxyGroupsView.swift */; };
 		91159B9CB1EDFE43070C3A4E /* GlobalVpnSwitchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF41AF44DDC9B81E01AF637 /* GlobalVpnSwitchBar.swift */; };
 		9212E710474142F878EC5ABC /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4B1F7C57B22583A6919A107 /* LogsView.swift */; };
+		4B8E2D3F6EA15C9B7F204D5C /* NavRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7F1C2E5D904B8A6E1F3C4B /* NavRow.swift */; };
 		94FA8AB54FFDDD7D188A8C2A /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 459136B958385ACB511D5D14 /* PacketTunnel.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		9609134F0D274943E5E18297 /* LogsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F1B0B431DA0DD132F917FF /* LogsTests.swift */; };
 		9942BB6B9F5CDAD3CEA4B98E /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED84393AA4FF1CADF9FCC53 /* HomeView.swift */; };
@@ -117,6 +119,7 @@
 		D95EF7A2FB411B4088E3255C /* URLValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA1935B322CD5DD66E23F0 /* URLValidationTests.swift */; };
 		DC1D5D2FD5AFDC3D1D3F2602 /* TrafficScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC73D84B5978335B9C07A8A /* TrafficScreenTests.swift */; };
 		DCC6938C0A43984B033BCD68 /* AppIPCBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */; };
+		6DA04F5170C37E1D91426F7E /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9F3E406FB26D0C80315E6D /* ErrorBanner.swift */; };
 		DF9A0976E5BE73EF1F9DFC91 /* VpnToggleFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */; };
 		E164E98C5E2EDB5B326E2B98 /* UtilityScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F7BB3C0C2648B6097E52E53 /* UtilityScreenTests.swift */; };
 		E5EEB30272FBA79B72C45004 /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86AFFBA5F04A152705EE60CA /* AccessibilityTests.swift */; };
@@ -193,7 +196,8 @@
 		24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDarwinBridge.m; sourceTree = "<group>"; };
 		2E2B37B72F11B1B2B1118221 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		3172561A6CE70D61D7666597 /* ChinaDirectKeywords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinaDirectKeywords.swift; sourceTree = "<group>"; };
-		329B260F122D91D5DDB24C44 /* MWIPCListener.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWIPCListener.m; sourceTree = "<group>"; };
+		3A7F1C2E5D904B8A6E1F3C4B /* NavRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavRow.swift; sourceTree = "<group>"; };
+		5C9F3E406FB26D0C80315E6D /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		332AEAFC0EED0EC4C05576EC /* MeowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowApp.swift; sourceTree = "<group>"; };
 		33307DC76F162EF6A99F0DDE /* MeowIntegrationTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MeowIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B0CE1B314060B8B82956086 /* ProvidersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvidersView.swift; sourceTree = "<group>"; };
@@ -300,6 +304,7 @@
 		FA317DD319BE5DA6206036F1 /* MWEngineLog.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWEngineLog.m; sourceTree = "<group>"; };
 		FA64C2503B8306CC64B9D23D /* MeowCoreBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowCoreBridgeTests.swift; sourceTree = "<group>"; };
 		FB11E2BC5612E27CCE83B0DC /* TunnelLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelLifecycleTests.swift; sourceTree = "<group>"; };
+		7EB15F6281D48F2EA253708F /* UtilitySessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilitySessionStore.swift; sourceTree = "<group>"; };
 		FB85D08A244615CFA035C0B3 /* UtilityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilityView.swift; sourceTree = "<group>"; };
 		FC654683AAE620AA9C1DCEBF /* TunBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunBridgeTests.swift; sourceTree = "<group>"; };
 		FD9FC97CA0606C12439B0684 /* EmojiGroupSelectNodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiGroupSelectNodeTests.swift; sourceTree = "<group>"; };
@@ -494,10 +499,12 @@
 				AF51AD7DD7946AB70970C9A8 /* ContentView.swift */,
 				CA20D7D98E7BC4663E289174 /* DiagnosticsViewController.swift */,
 				711184DB8878CD1F212CEEA3 /* DnsView.swift */,
+				5C9F3E406FB26D0C80315E6D /* ErrorBanner.swift */,
 				2E2B37B72F11B1B2B1118221 /* GlassCard.swift */,
 				AEF41AF44DDC9B81E01AF637 /* GlobalVpnSwitchBar.swift */,
 				7ED84393AA4FF1CADF9FCC53 /* HomeView.swift */,
 				B4B1F7C57B22583A6919A107 /* LogsView.swift */,
+				3A7F1C2E5D904B8A6E1F3C4B /* NavRow.swift */,
 				3B0CE1B314060B8B82956086 /* ProvidersView.swift */,
 				B7193B43D94BD4897FEDF967 /* ProxyGroupsView.swift */,
 				1711243E170547D1DA68FCD6 /* RuleEditorSheet.swift */,
@@ -547,6 +554,7 @@
 				601ADF66737508CC359C4936 /* SubscriptionConverter.swift */,
 				D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */,
 				9C5369F7A0022B20FF1321D5 /* SubscriptionService.swift */,
+				7EB15F6281D48F2EA253708F /* UtilitySessionStore.swift */,
 				930ED8C12FBC2859BCDC56E4 /* VpnManager.swift */,
 			);
 			path = Services;
@@ -1117,12 +1125,14 @@
 				AFFFD00A574AA3A9C3D33248 /* DailyTrafficAccumulator.swift in Sources */,
 				08501362516FC991AE70B3EF /* DiagnosticsViewController.swift in Sources */,
 				D5E3B0B2C42A294616BB2263 /* DnsView.swift in Sources */,
+				6DA04F5170C37E1D91426F7E /* ErrorBanner.swift in Sources */,
 				54E371A3BCD0A05882842AC6 /* EditableRule.swift in Sources */,
 				C1187CD2F55A4E1F99C1FB54 /* GeoAssetStager.swift in Sources */,
 				FC4878B603356FA17059AB46 /* GlassCard.swift in Sources */,
 				91159B9CB1EDFE43070C3A4E /* GlobalVpnSwitchBar.swift in Sources */,
 				9942BB6B9F5CDAD3CEA4B98E /* HomeView.swift in Sources */,
 				9212E710474142F878EC5ABC /* LogsView.swift in Sources */,
+				4B8E2D3F6EA15C9B7F204D5C /* NavRow.swift in Sources */,
 				C05561AA0530BFF897CDEB8F /* MeowAPI.swift in Sources */,
 				3BAE21D06E5B9935E58FDF1B /* MeowAPITypes.swift in Sources */,
 				1705DA22AD7A785A8E0A5DF5 /* MeowApp.swift in Sources */,
@@ -1142,6 +1152,7 @@
 				5C49A5DC6758BD9AB95DB5C2 /* TrafficView.swift in Sources */,
 				55FCE3874D6051B20C0A39AE /* UserDiagnosticsView.swift in Sources */,
 				1DC1B422EB6A35C59910D0E5 /* UtilityView.swift in Sources */,
+				8FC2607392E5903FB3648190 /* UtilitySessionStore.swift in Sources */,
 				B4CDE0AC50BC13DB22E90569 /* VpnManager.swift in Sources */,
 				2D71AA36DACB626D73AC50A3 /* YamlEditorView.swift in Sources */,
 			);

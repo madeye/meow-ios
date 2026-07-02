@@ -199,29 +199,13 @@ final class MeowAPI: @unchecked Sendable {
         return try await get("/providers/proxies")
     }
 
-    /// Cached DNS results for the panel UI. Optional `search` filters by
-    /// domain substring; `limit` is capped server-side at 1024.
     func getDnsResults(search: String? = nil, limit: Int = 256) async throws -> [DnsResult] {
         if Self.usesMockTransport { return Self.mockDnsResults(search: search) }
-        var endpoint = baseURL.appending(path: "/dns/results")
-        var items: [URLQueryItem] = [.init(name: "limit", value: String(limit))]
+        var queryItems = [URLQueryItem(name: "limit", value: String(limit))]
         if let search, !search.isEmpty {
-            items.append(.init(name: "search", value: search))
+            queryItems.append(URLQueryItem(name: "search", value: search))
         }
-        guard var comps = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
-            throw URLBuildError.invalidComponents(endpoint: endpoint)
-        }
-        comps.queryItems = items
-        guard let url = comps.url else {
-            throw URLBuildError.invalidComponents(endpoint: endpoint)
-        }
-        #if DEBUG
-            log.info("HTTP GET \(url.absoluteString, privacy: .public)")
-        #endif
-        let (data, resp) = try await session.data(for: request(for: url))
-        logResponse(resp, body: data, url: url)
-        try throwIfHTTPError(resp)
-        return try JSONDecoder().decode([DnsResult].self, from: data)
+        return try await get("/dns/results", queryItems: queryItems)
     }
 
     /// Triggers meow's bulk health-check for every proxy in a provider
@@ -293,8 +277,11 @@ final class MeowAPI: @unchecked Sendable {
 
     // MARK: - Helpers
 
-    private func get<T: Decodable>(_ path: String) async throws -> T {
-        let url = baseURL.appending(path: path)
+    private func get<T: Decodable>(_ path: String, queryItems: [URLQueryItem] = []) async throws -> T {
+        var url = baseURL.appending(path: path)
+        if !queryItems.isEmpty {
+            url = url.appending(queryItems: queryItems)
+        }
         #if DEBUG
             // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
             log.info("HTTP GET \(url.absoluteString, privacy: .public)")

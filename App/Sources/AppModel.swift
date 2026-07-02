@@ -16,6 +16,8 @@ final class AppModel {
     let subscriptionService: SubscriptionService
     let ipcBridge: AppIPCBridge
     let dailyTrafficAccumulator: DailyTrafficAccumulator
+    let utilityTrafficChart: UtilityTrafficChartStore
+    let utilityLogs: UtilityLogsStore
 
     /// Monotonically bumped each time `replaySelectedProxies()` finishes a pass
     /// (successful replay, probe-timeout giveup, or no-active-profile no-op).
@@ -50,6 +52,11 @@ final class AppModel {
         dailyTrafficAccumulator = DailyTrafficAccumulator(
             modelContext: AppModelContainer.shared.container.mainContext,
         )
+        utilityTrafficChart = UtilityTrafficChartStore()
+        utilityLogs = UtilityLogsStore()
+        ipcBridge.onTrafficDidUpdate = { [utilityTrafficChart] snapshot in
+            utilityTrafficChart.ingest(snapshot)
+        }
     }
 
     func bootstrap() async {
@@ -67,6 +74,7 @@ final class AppModel {
         await vpnManager.refresh()
         ipcBridge.start()
         dailyTrafficAccumulator.start()
+        utilityLogs.startStreaming(api: meowAPI)
     }
 
     /// Re-issues the active profile's persisted `selectedProxies` each time

@@ -5,11 +5,9 @@ import SwiftData
 import SwiftUI
 
 struct TrafficView: View {
-    @Environment(AppIPCBridge.self) private var ipcBridge
+    @Environment(UtilityTrafficChartStore.self) private var trafficChart
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Query(sort: \DailyTraffic.date, order: .reverse) private var daily: [DailyTraffic]
-    @State private var samples: [RateSample] = []
-    private let window: TimeInterval = 60
 
     var body: some View {
         Group {
@@ -21,16 +19,10 @@ struct TrafficView: View {
         }
         .navigationTitle("traffic.nav.title")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: ipcBridge.currentTraffic) { _, snapshot in
-            let sample = RateSample(
-                timestamp: snapshot.timestamp,
-                uploadRate: snapshot.uploadRate,
-                downloadRate: snapshot.downloadRate,
-            )
-            samples.append(sample)
-            let cutoff = Date().addingTimeInterval(-window)
-            samples.removeAll { $0.timestamp < cutoff }
-        }
+    }
+
+    private var samples: [TrafficRateSample] {
+        trafficChart.samples
     }
 
     private var isEmpty: Bool {
@@ -161,20 +153,8 @@ struct TrafficView: View {
         return f
     }()
 
-    private struct RateSample: Identifiable {
-        var id: Date {
-            timestamp
-        }
-
-        let timestamp: Date
-        let uploadRate: Int64
-        let downloadRate: Int64
-    }
-
-    /// Audio Graph descriptor for the live speed chart, so VoiceOver users can
-    /// sonically explore the upload/download curves.
     private struct SpeedChartDescriptor: AXChartDescriptorRepresentable {
-        let samples: [RateSample]
+        let samples: [TrafficRateSample]
 
         func makeChartDescriptor() -> AXChartDescriptor {
             let start = samples.first?.timestamp ?? .now
