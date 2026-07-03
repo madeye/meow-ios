@@ -332,6 +332,7 @@
 "a11y.proxyGroups.group.expanded" = "Expanded";
 "a11y.proxyGroups.group.collapsed" = "Collapsed";
 "a11y.proxyGroups.group.hint" = "Shows or hides the proxies in this group.";
+"a11y.proxyGroups.group.action.testAll" = "Test latency of all proxies";
 "a11y.proxyGroups.proxy.hint" = "Selects this proxy for the group.";
 "a11y.proxyGroups.proxy.action.ping" = "Test latency";
 "a11y.proxyGroups.proxy.delay %@" = "%@ milliseconds";

@@ -12,6 +12,7 @@ struct ProxyGroupsView: View {
     @State private var groups: [ProxyGroupModel] = []
     @State private var expandedGroupID: String?
     @State private var inflightDelay: Set<String> = []
+    @State private var inflightGroupTest: Set<String> = []
     @State private var loadError: String?
 
     var body: some View {
@@ -43,6 +44,7 @@ struct ProxyGroupsView: View {
                             group: group,
                             isExpanded: expandedGroupID == group.id,
                             inflight: inflightDelay,
+                            isTestingGroup: inflightGroupTest.contains(group.name),
                             onToggleExpand: {
                                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                                     expandedGroupID = expandedGroupID == group.id ? nil : group.id
@@ -53,6 +55,9 @@ struct ProxyGroupsView: View {
                             },
                             onPing: { proxy in
                                 Task { await ping(proxy: proxy) }
+                            },
+                            onPingGroup: {
+                                Task { await pingGroup(group) }
                             },
                         )
                     }
@@ -134,14 +139,29 @@ private extension ProxyGroupsView {
         return error.localizedDescription
     }
 
+    static let delayTestURL = "http://www.gstatic.com/generate_204"
+
     func ping(proxy: String) async {
         inflightDelay.insert(proxy)
-        _ = try? await meowAPI.testDelay(
-            proxy: proxy,
-            url: "http://www.gstatic.com/generate_204",
-        )
+        _ = try? await meowAPI.testDelay(proxy: proxy, url: Self.delayTestURL)
         await refresh()
         inflightDelay.remove(proxy)
+    }
+
+    /// One-tap batch test for a whole group (issue #255). The engine
+    /// probes every member and records the outcomes in each proxy's
+    /// history, so a single `refresh()` afterwards repaints all badges.
+    /// Failures are silent, matching the per-proxy `ping` — a 504 batch
+    /// overrun still leaves partial results in the histories.
+    func pingGroup(_ group: ProxyGroupModel) async {
+        guard !inflightGroupTest.contains(group.name) else { return }
+        inflightGroupTest.insert(group.name)
+        let members = Set(group.children.map(\.name))
+        inflightDelay.formUnion(members)
+        _ = try? await meowAPI.testGroupDelay(group: group.name, url: Self.delayTestURL)
+        await refresh()
+        inflightGroupTest.remove(group.name)
+        inflightDelay.subtract(members)
     }
 }
 
@@ -149,46 +169,53 @@ private struct ProxyGroupCard: View {
     let group: ProxyGroupModel
     let isExpanded: Bool
     let inflight: Set<String>
+    let isTestingGroup: Bool
     var onToggleExpand: () -> Void
     var onSelect: (String) -> Void
     var onPing: (String) -> Void
+    var onPingGroup: () -> Void
 
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: isExpanded ? 12 : 0) {
-                Button(action: onToggleExpand) {
-                    HStack(spacing: 10) {
-                        Image(systemName: groupSymbol)
+                // Tap-gesture row (not a Button) so the group-test control
+                // can live inside it with its own tap target — the same
+                // idiom `proxyRow` uses for the delay badge.
+                HStack(spacing: 10) {
+                    Image(systemName: groupSymbol)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(group.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(group.type)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .frame(width: 24)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(group.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Text(group.type)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if let now = group.now {
-                            Text(now)
-                                .font(.subheadline)
-                                .foregroundStyle(.tint)
-                                .lineLimit(1)
-                        }
-                        Image(systemName: "chevron.right")
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
                     }
-                    .contentShape(Rectangle())
+                    Spacer()
+                    if let now = group.now {
+                        Text(now)
+                            .font(.subheadline)
+                            .foregroundStyle(.tint)
+                            .lineLimit(1)
+                    }
+                    groupTestControl
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundStyle(.tertiary)
                 }
-                .buttonStyle(.plain)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onToggleExpand)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(group.name)
                 .accessibilityValue(isExpanded
                     ? Text("a11y.proxyGroups.group.expanded")
                     : Text("a11y.proxyGroups.group.collapsed"))
+                .accessibilityAddTraits(.isButton)
                 .accessibilityHint(Text("a11y.proxyGroups.group.hint"))
+                .accessibilityAction(named: Text("a11y.proxyGroups.group.action.testAll")) { onPingGroup() }
 
                 if isExpanded {
                     Divider()
@@ -203,14 +230,41 @@ private struct ProxyGroupCard: View {
         .accessibilityIdentifier("home.group.\(group.id.identifierSlug)")
     }
 
+    /// Lightning-bolt tap target that fires the whole-group delay test;
+    /// swaps to a spinner while the batch is in flight.
+    private var groupTestControl: some View {
+        Group {
+            if isTestingGroup {
+                ProgressView()
+                    .controlSize(.mini)
+            } else {
+                Image(systemName: "bolt.fill")
+                    .imageScale(.small)
+                    .foregroundStyle(.tint)
+            }
+        }
+        .frame(minWidth: 32, minHeight: 44)
+        .contentShape(Rectangle())
+        .onTapGesture { onPingGroup() }
+    }
+
     private func proxyRow(_ child: ProxyGroupModel.Child) -> some View {
         HStack(spacing: 10) {
             Image(systemName: child.name == group.now ? "largecircle.fill.circle" : "circle")
                 .foregroundStyle(child.name == group.now ? AppTheme.accent : .secondary)
                 .frame(width: 20)
-            Text(child.name)
-                .font(.subheadline)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(child.name)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                // Provider-sourced stubs (issue #180) have an unknown
+                // type — omit the caption instead of showing an empty row.
+                if !child.type.isEmpty {
+                    Text(child.type)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Spacer()
             DelayBadge(delay: child.delay, isLoading: inflight.contains(child.name))
                 .frame(minHeight: 44)

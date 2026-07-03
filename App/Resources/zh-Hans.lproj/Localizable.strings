@@ -338,6 +338,7 @@
 "a11y.proxyGroups.group.expanded" = "已展开";
 "a11y.proxyGroups.group.collapsed" = "已折叠";
 "a11y.proxyGroups.group.hint" = "显示或隐藏该组中的代理。";
+"a11y.proxyGroups.group.action.testAll" = "测试组内所有代理延迟";
 "a11y.proxyGroups.proxy.hint" = "为该组选择此代理。";
 "a11y.proxyGroups.proxy.action.ping" = "测试延迟";
 "a11y.proxyGroups.proxy.delay %@" = "%@ 毫秒";

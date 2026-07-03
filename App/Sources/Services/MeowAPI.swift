@@ -20,8 +20,8 @@ final class MeowAPI: @unchecked Sendable {
         case invalidComponents(endpoint: URL)
     }
 
-    private static func buildTestDelayURL(base: URL, proxy: String, url: String, timeout: Int) throws -> URL {
-        let endpoint = base.appending(path: "/proxies/\(proxy.urlEscaped)/delay")
+    private static func buildTestDelayURL(base: URL, path: String, url: String, timeout: Int) throws -> URL {
+        let endpoint = base.appending(path: path)
         guard var comps = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
             throw URLBuildError.invalidComponents(endpoint: endpoint)
         }
@@ -164,7 +164,12 @@ final class MeowAPI: @unchecked Sendable {
         }
 
         struct Resp: Decodable { let delay: Int? }
-        let target = try Self.buildTestDelayURL(base: baseURL, proxy: proxy, url: url, timeout: timeout)
+        let target = try Self.buildTestDelayURL(
+            base: baseURL,
+            path: "/proxies/\(proxy.urlEscaped)/delay",
+            url: url,
+            timeout: timeout,
+        )
         #if DEBUG
             // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
             log.info("HTTP GET \(target.absoluteString, privacy: .public)")
@@ -172,6 +177,36 @@ final class MeowAPI: @unchecked Sendable {
         let (data, resp) = try await session.data(for: request(for: target))
         logResponse(resp, body: data, url: target)
         return try (JSONDecoder().decode(Resp.self, from: data).delay) ?? -1
+    }
+
+    /// Batch delay test for every member of a proxy group
+    /// (`GET /group/{name}/delay`). The engine probes members with bounded
+    /// concurrency (16) under a *single* `timeout` budget for the whole
+    /// batch — hence the larger default than the per-proxy test — and
+    /// records each outcome in the proxy's delay history, so callers
+    /// refresh `/proxies` afterwards to pick up the new badges. Returns
+    /// the name → delay map; a whole-batch overrun surfaces as
+    /// `MeowAPIError.http(status: 504)` even when some members completed.
+    @discardableResult
+    func testGroupDelay(group: String, url: String, timeout: Int = 10000) async throws -> [String: Int] {
+        if Self.usesMockTransport {
+            return Self.mockGroupDelay(for: group)
+        }
+
+        let target = try Self.buildTestDelayURL(
+            base: baseURL,
+            path: "/group/\(group.urlEscaped)/delay",
+            url: url,
+            timeout: timeout,
+        )
+        #if DEBUG
+            // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
+            log.info("HTTP GET \(target.absoluteString, privacy: .public)")
+        #endif
+        let (data, resp) = try await session.data(for: request(for: target))
+        logResponse(resp, body: data, url: target)
+        try throwIfHTTPError(resp)
+        return try JSONDecoder().decode([String: Int].self, from: data)
     }
 
     func getConnections() async throws -> ConnectionsResponse {
@@ -441,6 +476,11 @@ private extension MeowAPI {
         case "US West 03": 168
         default: 94
         }
+    }
+
+    static func mockGroupDelay(for group: String) -> [String: Int] {
+        let members = mockProxies().proxies[group]?.all ?? []
+        return Dictionary(uniqueKeysWithValues: members.map { ($0, mockDelay(for: $0)) })
     }
 
     static func mockConnections() -> ConnectionsResponse {
