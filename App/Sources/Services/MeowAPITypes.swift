@@ -11,8 +11,13 @@ struct Proxy: Decodable, Identifiable {
     let all: [String]?
     let history: [History]?
 
+    /// `history[].time` is deliberately not decoded: the UI only reads
+    /// `delay`, and the engine's `time` wire format changed once already
+    /// (serde's default `SystemTime` object → RFC 3339 string, meow-rs
+    /// #290). Decoding it made the WHOLE /proxies payload undecodable the
+    /// moment any probe recorded history — proxy groups froze with no
+    /// delays (issue #255 follow-up).
     struct History: Decodable {
-        let time: String
         let delay: Int
     }
 }

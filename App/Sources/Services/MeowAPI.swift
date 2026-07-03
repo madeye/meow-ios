@@ -422,16 +422,16 @@ private extension MeowAPI {
 
     static func mockProxies() -> ProxiesResponse {
         let history: [Proxy.History] = [
-            .init(time: "2026-06-28T09:40:00Z", delay: 82),
-            .init(time: "2026-06-28T09:41:00Z", delay: 76),
+            .init(delay: 82),
+            .init(delay: 76),
         ]
         let singaporeHistory: [Proxy.History] = [
-            .init(time: "2026-06-28T09:40:00Z", delay: 138),
-            .init(time: "2026-06-28T09:41:00Z", delay: 121),
+            .init(delay: 138),
+            .init(delay: 121),
         ]
         let westHistory: [Proxy.History] = [
-            .init(time: "2026-06-28T09:40:00Z", delay: 192),
-            .init(time: "2026-06-28T09:41:00Z", delay: 168),
+            .init(delay: 192),
+            .init(delay: 168),
         ]
         let proxies: [String: Proxy] = [
             "GLOBAL": .init(

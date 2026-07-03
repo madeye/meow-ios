@@ -21,7 +21,7 @@ struct ProxyGroupModelTests {
             type: type,
             now: now,
             all: all,
-            history: delay.map { [Proxy.History(time: "", delay: $0)] },
+            history: delay.map { [Proxy.History(delay: $0)] },
         )
     }
 
