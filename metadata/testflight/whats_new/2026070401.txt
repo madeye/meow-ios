@@ -1,0 +1,5 @@
+Build 2026070401 (1.3.2)
+
+• Test a whole proxy group with one tap: every group header now has a lightning-bolt button that measures latency for all its proxies at once.
+• Each proxy row now shows its protocol type (Shadowsocks, Trojan, VLESS, …) under the name.
+• Fixed latency results never appearing after a delay test — the engine and app now agree on the timestamp format, so delay badges update reliably.
