@@ -74,4 +74,11 @@ extension ShadowsocksServer {
 
     /// SIP003 plugin name of the engine's built-in ECH-TLS client transport.
     static let echTLSPlugin = "ech-tls-tunnel"
+
+    /// Canonical Clash plugin name for simple-obfs (engine also accepts
+    /// "simple-obfs"; SIP003's "obfs-local" is canonicalized to this).
+    static let obfsPlugin = "obfs"
+
+    /// Plugin name of the engine's built-in v2ray-plugin websocket transport.
+    static let v2rayPlugin = "v2ray-plugin"
 }

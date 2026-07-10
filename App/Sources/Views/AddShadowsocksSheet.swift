@@ -20,21 +20,53 @@ struct AddShadowsocksSheet: View {
     @State private var password = ""
     @State private var udp = false
 
-    @State private var echEnabled = false
+    @State private var pluginChoice: PluginChoice = .none
+
+    // ECH-TLS tunnel fields.
     @State private var sni = ""
     @State private var path = ""
     @State private var echConfig = ""
     @State private var fingerprint = "chrome"
     @State private var fastOpen = false
 
-    /// Plugin parsed from a link that isn't ech-tls-tunnel. Preserved
-    /// verbatim so scanning an arbitrary SIP002 QR code doesn't silently
-    /// drop its plugin options; toggling the ECH section replaces it.
+    // simple-obfs fields.
+    @State private var obfsMode = "http"
+    @State private var obfsHost = ""
+
+    // v2ray-plugin fields (websocket transport).
+    @State private var v2rayTLS = false
+    @State private var v2rayHost = ""
+    @State private var v2rayPath = ""
+    @State private var v2rayMux = false
+
+    /// Plugin parsed from a link that the form has no dedicated fields for.
+    /// Preserved verbatim so scanning an arbitrary SIP002 QR code doesn't
+    /// silently drop its options; picking any explicit plugin replaces it.
     @State private var passthroughPlugin: PassthroughPlugin?
 
     @State private var submitting = false
 
-    private struct PassthroughPlugin: Equatable {
+    enum PluginChoice: String, CaseIterable, Identifiable {
+        case none
+        case ech
+        case obfs
+        case v2ray
+
+        var id: String {
+            rawValue
+        }
+
+        var labelKey: LocalizedStringKey {
+            switch self {
+            case .none: "ssAdd.plugin.none"
+            case .ech: "ssAdd.plugin.ech"
+            case .obfs: "ssAdd.plugin.obfs"
+            case .v2ray: "ssAdd.plugin.v2ray"
+            }
+        }
+    }
+
+    struct PassthroughPlugin: Equatable {
         var name: String
         var opts: [ShadowsocksServer.PluginOption]
     }
@@ -44,7 +76,7 @@ struct AddShadowsocksSheet: View {
             Form {
                 linkSection
                 serverSection
-                echSection
+                pluginSection
             }
             .navigationTitle("ssAdd.nav.title")
             .navigationBarTitleDisplayMode(.inline)
@@ -72,6 +104,137 @@ struct AddShadowsocksSheet: View {
         }
     }
 
+    // MARK: - Link import
+
+    private func applyLink() {
+        do {
+            let parsed = try ShadowsocksURIParser.parse(link)
+            apply(parsed)
+            linkInvalid = false
+        } catch {
+            linkInvalid = true
+        }
+    }
+
+    private func apply(_ parsed: ShadowsocksServer) {
+        name = parsed.name
+        server = parsed.server
+        port = String(parsed.port)
+        cipher = parsed.cipher
+        password = parsed.password
+        udp = parsed.udp
+        passthroughPlugin = nil
+        switch parsed.plugin {
+        case ShadowsocksServer.echTLSPlugin:
+            pluginChoice = .ech
+            sni = parsed.pluginOption("sni") ?? ""
+            path = parsed.pluginOption("path") ?? ""
+            echConfig = parsed.pluginOption("ech_config") ?? ""
+            fingerprint = parsed.pluginOption("fingerprint") ?? "chrome"
+            fastOpen = parsed.pluginOption("fast_open") == "true"
+        case ShadowsocksServer.obfsPlugin, "simple-obfs":
+            pluginChoice = .obfs
+            obfsMode = parsed.pluginOption("mode") ?? "http"
+            obfsHost = parsed.pluginOption("host") ?? ""
+        case ShadowsocksServer.v2rayPlugin:
+            pluginChoice = .v2ray
+            v2rayTLS = parsed.pluginOption("tls") == "true"
+            v2rayHost = parsed.pluginOption("host") ?? ""
+            v2rayPath = parsed.pluginOption("path") ?? ""
+            v2rayMux = parsed.pluginOption("mux") == "true"
+        case let .some(other):
+            pluginChoice = .none
+            passthroughPlugin = PassthroughPlugin(name: other, opts: parsed.pluginOpts)
+        case nil:
+            pluginChoice = .none
+        }
+    }
+
+    // MARK: - Save
+
+    private var builtServer: ShadowsocksServer? {
+        let host = server.trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty, !password.isEmpty, !cipher.isEmpty,
+              let portValue = Int(port), (1 ... 65535).contains(portValue)
+        else { return nil }
+
+        let (plugin, opts) = builtPlugin(host: host)
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        return ShadowsocksServer(
+            name: trimmedName.isEmpty
+                ? ShadowsocksServer.defaultName(server: host, port: portValue)
+                : trimmedName,
+            server: host,
+            port: portValue,
+            cipher: cipher,
+            password: password,
+            udp: udp,
+            plugin: plugin,
+            pluginOpts: opts,
+        )
+    }
+
+    private func builtPlugin(host: String) -> (String?, [ShadowsocksServer.PluginOption]) {
+        switch pluginChoice {
+        case .none:
+            passthroughPlugin.map { ($0.name, $0.opts) } ?? (nil, [])
+        case .ech:
+            (ShadowsocksServer.echTLSPlugin, echOpts(host: host))
+        case .obfs:
+            (ShadowsocksServer.obfsPlugin, obfsOpts())
+        case .v2ray:
+            (ShadowsocksServer.v2rayPlugin, v2rayOpts())
+        }
+    }
+
+    private func echOpts(host: String) -> [ShadowsocksServer.PluginOption] {
+        var opts: [ShadowsocksServer.PluginOption] = [.init("mode", "client")]
+        let sniValue = sni.trimmingCharacters(in: .whitespaces)
+        opts.append(.init("sni", sniValue.isEmpty ? host : sniValue))
+        let pathValue = path.trimmingCharacters(in: .whitespaces)
+        if !pathValue.isEmpty { opts.append(.init("path", pathValue)) }
+        let echValue = echConfig.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !echValue.isEmpty { opts.append(.init("ech_config", echValue)) }
+        let fingerprintValue = fingerprint.trimmingCharacters(in: .whitespaces)
+        if !fingerprintValue.isEmpty { opts.append(.init("fingerprint", fingerprintValue)) }
+        if fastOpen { opts.append(.init("fast_open", "true")) }
+        return opts
+    }
+
+    private func obfsOpts() -> [ShadowsocksServer.PluginOption] {
+        var opts: [ShadowsocksServer.PluginOption] = [.init("mode", obfsMode)]
+        let hostValue = obfsHost.trimmingCharacters(in: .whitespaces)
+        if !hostValue.isEmpty { opts.append(.init("host", hostValue)) }
+        return opts
+    }
+
+    private func v2rayOpts() -> [ShadowsocksServer.PluginOption] {
+        var opts: [ShadowsocksServer.PluginOption] = [.init("mode", "websocket")]
+        if v2rayTLS { opts.append(.init("tls", "true")) }
+        let hostValue = v2rayHost.trimmingCharacters(in: .whitespaces)
+        if !hostValue.isEmpty { opts.append(.init("host", hostValue)) }
+        let pathValue = v2rayPath.trimmingCharacters(in: .whitespaces)
+        if !pathValue.isEmpty { opts.append(.init("path", pathValue)) }
+        if v2rayMux { opts.append(.init("mux", "true")) }
+        return opts
+    }
+
+    private func save() {
+        guard let built = builtServer else { return }
+        submitting = true
+        defer { submitting = false }
+        do {
+            _ = try service.addShadowsocks(built)
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Form sections
+
+extension AddShadowsocksSheet {
     private var linkSection: some View {
         Section {
             Button {
@@ -134,136 +297,104 @@ struct AddShadowsocksSheet: View {
         } header: {
             Text("ssAdd.section.server")
         } footer: {
-            if let passthroughPlugin {
-                Text("ssAdd.plugin.passthrough \(passthroughPlugin.name)")
-            } else {
-                Text("ssAdd.footer.profile")
-            }
+            Text("ssAdd.footer.profile")
         }
     }
 
-    private var echSection: some View {
+    private var pluginSection: some View {
         Section {
-            Toggle("ssAdd.toggle.ech", isOn: $echEnabled)
-                .accessibilityIdentifier("ssAdd.echToggle")
-                .onChange(of: echEnabled) { _, enabled in
-                    if enabled { passthroughPlugin = nil }
+            Picker("ssAdd.plugin.picker", selection: $pluginChoice) {
+                ForEach(PluginChoice.allCases) { choice in
+                    Text(choice.labelKey).tag(choice)
                 }
-            if echEnabled {
-                TextField("ssAdd.field.sni", text: $sni)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .accessibilityIdentifier("ssAdd.sniField")
-                TextField("ssAdd.field.path", text: $path)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .accessibilityIdentifier("ssAdd.pathField")
-                TextField("ssAdd.field.echConfig", text: $echConfig)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .accessibilityIdentifier("ssAdd.echConfigField")
-                TextField("ssAdd.field.fingerprint", text: $fingerprint)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .accessibilityIdentifier("ssAdd.fingerprintField")
-                Toggle("ssAdd.toggle.fastOpen", isOn: $fastOpen)
-                    .accessibilityIdentifier("ssAdd.fastOpenToggle")
+            }
+            .accessibilityIdentifier("ssAdd.pluginPicker")
+            .onChange(of: pluginChoice) { _, choice in
+                if choice != .none { passthroughPlugin = nil }
+            }
+            switch pluginChoice {
+            case .none:
+                EmptyView()
+            case .ech:
+                echFields
+            case .obfs:
+                obfsFields
+            case .v2ray:
+                v2rayFields
             }
         } header: {
-            Text("ssAdd.section.ech")
+            Text("ssAdd.section.plugin")
         } footer: {
+            pluginFooter
+        }
+    }
+
+    @ViewBuilder
+    private var pluginFooter: some View {
+        switch pluginChoice {
+        case .none:
+            if let passthroughPlugin {
+                Text("ssAdd.plugin.passthrough \(passthroughPlugin.name)")
+            }
+        case .ech:
             Text("ssAdd.ech.footer")
+        case .obfs, .v2ray:
+            // Empty host falls back to the server address in the engine.
+            Text("ssAdd.plugin.hostFallback.footer")
         }
     }
 
-    // MARK: - Link import
-
-    private func applyLink() {
-        do {
-            let parsed = try ShadowsocksURIParser.parse(link)
-            apply(parsed)
-            linkInvalid = false
-        } catch {
-            linkInvalid = true
-        }
+    @ViewBuilder
+    private var echFields: some View {
+        TextField("ssAdd.field.sni", text: $sni)
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.sniField")
+        TextField("ssAdd.field.path", text: $path)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.pathField")
+        TextField("ssAdd.field.echConfig", text: $echConfig)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.echConfigField")
+        TextField("ssAdd.field.fingerprint", text: $fingerprint)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.fingerprintField")
+        Toggle("ssAdd.toggle.fastOpen", isOn: $fastOpen)
+            .accessibilityIdentifier("ssAdd.fastOpenToggle")
     }
 
-    private func apply(_ parsed: ShadowsocksServer) {
-        name = parsed.name
-        server = parsed.server
-        port = String(parsed.port)
-        cipher = parsed.cipher
-        password = parsed.password
-        udp = parsed.udp
-        if parsed.plugin == ShadowsocksServer.echTLSPlugin {
-            echEnabled = true
-            passthroughPlugin = nil
-            sni = parsed.pluginOption("sni") ?? ""
-            path = parsed.pluginOption("path") ?? ""
-            echConfig = parsed.pluginOption("ech_config") ?? ""
-            fingerprint = parsed.pluginOption("fingerprint") ?? "chrome"
-            fastOpen = parsed.pluginOption("fast_open") == "true"
-        } else if let plugin = parsed.plugin {
-            echEnabled = false
-            passthroughPlugin = PassthroughPlugin(name: plugin, opts: parsed.pluginOpts)
-        } else {
-            echEnabled = false
-            passthroughPlugin = nil
+    @ViewBuilder
+    private var obfsFields: some View {
+        Picker("ssAdd.field.obfsMode", selection: $obfsMode) {
+            Text(verbatim: "http").tag("http")
+            Text(verbatim: "tls").tag("tls")
         }
+        .accessibilityIdentifier("ssAdd.obfsModePicker")
+        TextField("ssAdd.field.obfsHost", text: $obfsHost)
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.obfsHostField")
     }
 
-    // MARK: - Save
-
-    private var builtServer: ShadowsocksServer? {
-        let host = server.trimmingCharacters(in: .whitespaces)
-        guard !host.isEmpty, !password.isEmpty, !cipher.isEmpty,
-              let portValue = Int(port), (1 ... 65535).contains(portValue)
-        else { return nil }
-
-        var plugin: String?
-        var opts: [ShadowsocksServer.PluginOption] = []
-        if echEnabled {
-            plugin = ShadowsocksServer.echTLSPlugin
-            opts.append(.init("mode", "client"))
-            let sniValue = sni.trimmingCharacters(in: .whitespaces)
-            opts.append(.init("sni", sniValue.isEmpty ? host : sniValue))
-            let pathValue = path.trimmingCharacters(in: .whitespaces)
-            if !pathValue.isEmpty { opts.append(.init("path", pathValue)) }
-            let echValue = echConfig.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !echValue.isEmpty { opts.append(.init("ech_config", echValue)) }
-            let fingerprintValue = fingerprint.trimmingCharacters(in: .whitespaces)
-            if !fingerprintValue.isEmpty { opts.append(.init("fingerprint", fingerprintValue)) }
-            if fastOpen { opts.append(.init("fast_open", "true")) }
-        } else if let passthroughPlugin {
-            plugin = passthroughPlugin.name
-            opts = passthroughPlugin.opts
-        }
-
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        return ShadowsocksServer(
-            name: trimmedName.isEmpty
-                ? ShadowsocksServer.defaultName(server: host, port: portValue)
-                : trimmedName,
-            server: host,
-            port: portValue,
-            cipher: cipher,
-            password: password,
-            udp: udp,
-            plugin: plugin,
-            pluginOpts: opts,
-        )
-    }
-
-    private func save() {
-        guard let built = builtServer else { return }
-        submitting = true
-        defer { submitting = false }
-        do {
-            _ = try service.addShadowsocks(built)
-            dismiss()
-        } catch {
-            self.error = error.localizedDescription
-        }
+    @ViewBuilder
+    private var v2rayFields: some View {
+        Toggle("ssAdd.toggle.v2rayTLS", isOn: $v2rayTLS)
+            .accessibilityIdentifier("ssAdd.v2rayTLSToggle")
+        TextField("ssAdd.field.v2rayHost", text: $v2rayHost)
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.v2rayHostField")
+        TextField("ssAdd.field.v2rayPath", text: $v2rayPath)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .accessibilityIdentifier("ssAdd.v2rayPathField")
+        Toggle("ssAdd.toggle.v2rayMux", isOn: $v2rayMux)
+            .accessibilityIdentifier("ssAdd.v2rayMuxToggle")
     }
 }

@@ -74,6 +74,30 @@ struct ShadowsocksURIParserTests {
     }
 
     @Test
+    func `canonicalizes obfs-local links to the engine's obfs plugin`() throws {
+        var comps = URLComponents(string: "ss://\(base64("aes-256-gcm:pw"))@obfs.example.com:8388")!
+        comps.queryItems = [URLQueryItem(name: "plugin", value: "obfs-local;obfs=http;obfs-host=www.bing.com")]
+        let server = try ShadowsocksURIParser.parse(comps.string!)
+        #expect(server.plugin == "obfs")
+        #expect(server.pluginOption("mode") == "http")
+        #expect(server.pluginOption("host") == "www.bing.com")
+        #expect(server.pluginOption("obfs") == nil)
+        #expect(server.pluginOption("obfs-host") == nil)
+    }
+
+    @Test
+    func `keeps v2ray-plugin name and decodes its bare tls flag`() throws {
+        var comps = URLComponents(string: "ss://\(base64("chacha20-ietf-poly1305:pw"))@ws.example.com:443")!
+        comps.queryItems = [URLQueryItem(name: "plugin", value: "v2ray-plugin;tls;host=cdn.example.com;path=/ws;mux")]
+        let server = try ShadowsocksURIParser.parse(comps.string!)
+        #expect(server.plugin == "v2ray-plugin")
+        #expect(server.pluginOption("tls") == "true")
+        #expect(server.pluginOption("host") == "cdn.example.com")
+        #expect(server.pluginOption("path") == "/ws")
+        #expect(server.pluginOption("mux") == "true")
+    }
+
+    @Test
     func `parses legacy whole-body base64 form`() throws {
         let uri = "ss://\(base64("aes-256-gcm:p@ss:word@1.2.3.4:8388"))#Legacy%20Node"
         let server = try ShadowsocksURIParser.parse(uri)

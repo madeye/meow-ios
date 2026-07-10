@@ -95,7 +95,30 @@ enum ShadowsocksURIParser {
                 opts.append(.init(part, "true"))
             }
         }
-        return (name, opts)
+        return canonicalizePlugin(name, opts)
+    }
+
+    /// Maps SIP003 spellings onto the Clash plugin names/opt keys the engine
+    /// dispatches on. Share links name simple-obfs's client binary
+    /// ("obfs-local") — left as-is the engine would treat it as an external
+    /// subprocess plugin, which can't exist on iOS.
+    private static func canonicalizePlugin(
+        _ name: String,
+        _ opts: [ShadowsocksServer.PluginOption],
+    ) -> (String, [ShadowsocksServer.PluginOption]) {
+        switch name {
+        case "obfs-local", "simple-obfs", ShadowsocksServer.obfsPlugin:
+            let mapped = opts.map { opt in
+                switch opt.key {
+                case "obfs": ShadowsocksServer.PluginOption("mode", opt.value)
+                case "obfs-host": ShadowsocksServer.PluginOption("host", opt.value)
+                default: opt
+                }
+            }
+            return (ShadowsocksServer.obfsPlugin, mapped)
+        default:
+            return (name, opts)
+        }
     }
 
     // MARK: - Legacy (whole-body base64)

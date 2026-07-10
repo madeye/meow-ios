@@ -117,4 +117,44 @@ struct ShadowsocksConfigBuilderTests {
         let yaml = try ShadowsocksConfigBuilder.render(servers: [echServer, plainServer])
         try MeowConfigValidator.validate(yaml)
     }
+
+    @Test(.tags(.ffi))
+    func `obfs and v2ray-plugin servers render and pass engine validation`() throws {
+        let obfsServer = ShadowsocksServer(
+            name: "obfs-node",
+            server: "obfs.example.com",
+            port: 8388,
+            cipher: "aes-256-gcm",
+            password: "pw",
+            plugin: "obfs",
+            pluginOpts: [.init("mode", "http"), .init("host", "www.bing.com")],
+        )
+        let v2rayServer = ShadowsocksServer(
+            name: "ws-node",
+            server: "ws.example.com",
+            port: 443,
+            cipher: "chacha20-ietf-poly1305",
+            password: "pw",
+            plugin: "v2ray-plugin",
+            pluginOpts: [
+                .init("mode", "websocket"),
+                .init("tls", "true"),
+                .init("host", "cdn.example.com"),
+                .init("path", "/ws"),
+                .init("mux", "true"),
+            ],
+        )
+        let yaml = try ShadowsocksConfigBuilder.render(servers: [obfsServer, v2rayServer])
+        try MeowConfigValidator.validate(yaml)
+
+        // Booleans must reach the engine as YAML bools, and the round-trip
+        // that repeated adds rely on must preserve both plugin blocks.
+        let root = try #require(try Yams.load(yaml: yaml) as? [String: Any])
+        let proxies = try #require(root["proxies"] as? [[String: Any]])
+        let ws = try #require(proxies.first { $0["name"] as? String == "ws-node" })
+        let opts = try #require(ws["plugin-opts"] as? [String: Any])
+        #expect(opts["tls"] as? Bool == true)
+        #expect(opts["mux"] as? Bool == true)
+        #expect(ShadowsocksConfigBuilder.extractServers(from: yaml) == [obfsServer, v2rayServer])
+    }
 }
