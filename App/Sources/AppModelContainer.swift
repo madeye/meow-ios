@@ -19,6 +19,7 @@ enum AppModelContainer {
                 cloudKitDatabase: .none,
             )
             let container = try ModelContainer(for: schema, configurations: config)
+            seedProfileForUITestsIfRequested(container)
             return Holder(container: container)
         } catch {
             fatalError("Unable to open SwiftData store: \(error)")
@@ -39,6 +40,27 @@ enum AppModelContainer {
         for suffix in ["", "-wal", "-shm"] {
             try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
         }
+    }
+
+    /// `-SeedProfile <name>` inserts a single local profile so UI tests that
+    /// act on an existing row (rename, delete, select) don't have to drive the
+    /// add flow — whose password SecureField triggers an iOS "Save Password?"
+    /// dialog that covers the list.
+    private static func seedProfileForUITestsIfRequested(_ container: ModelContainer) {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-UITests"), let idx = args.firstIndex(of: "-SeedProfile"),
+              idx + 1 < args.count
+        else { return }
+        let name = args[idx + 1]
+        let context = ModelContext(container)
+        let profile = Profile(
+            name: name,
+            url: "",
+            yamlContent: "proxies:\n  - name: seed\n    type: direct\n",
+            yamlBackup: "proxies:\n  - name: seed\n    type: direct\n",
+        )
+        context.insert(profile)
+        try? context.save()
     }
 
     private static func storeURL() throws -> URL {

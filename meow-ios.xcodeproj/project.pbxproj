@@ -130,6 +130,7 @@
 		D95EF7A2FB411B4088E3255C /* URLValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA1935B322CD5DD66E23F0 /* URLValidationTests.swift */; };
 		DC1D5D2FD5AFDC3D1D3F2602 /* TrafficScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC73D84B5978335B9C07A8A /* TrafficScreenTests.swift */; };
 		DCC6938C0A43984B033BCD68 /* AppIPCBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */; };
+		DE9A4BC5630A1A55FD1880C4 /* RenameSubscriptionFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25242F15DCC48F0C6C9BAD2C /* RenameSubscriptionFlowTests.swift */; };
 		DF9A0976E5BE73EF1F9DFC91 /* VpnToggleFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */; };
 		E164E98C5E2EDB5B326E2B98 /* UtilityScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F7BB3C0C2648B6097E52E53 /* UtilityScreenTests.swift */; };
 		E5EEB30272FBA79B72C45004 /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86AFFBA5F04A152705EE60CA /* AccessibilityTests.swift */; };
@@ -208,6 +209,7 @@
 		2286E52FC6D973728DE5D1A8 /* ShadowsocksConfigBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksConfigBuilderTests.swift; sourceTree = "<group>"; };
 		24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManagerTests.swift; sourceTree = "<group>"; };
 		24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDarwinBridge.m; sourceTree = "<group>"; };
+		25242F15DCC48F0C6C9BAD2C /* RenameSubscriptionFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameSubscriptionFlowTests.swift; sourceTree = "<group>"; };
 		2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksConfigBuilder.swift; sourceTree = "<group>"; };
 		2D7D7768D31382CD90DFEBA6 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		2E2B37B72F11B1B2B1118221 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
@@ -455,6 +457,7 @@
 			children = (
 				D5A3FCA37BA819ACC0A9D0EB /* AddShadowsocksFlowTests.swift */,
 				9CA7DC0A8AEAA9185A7B40F0 /* AddSubscriptionFlowTests.swift */,
+				25242F15DCC48F0C6C9BAD2C /* RenameSubscriptionFlowTests.swift */,
 				8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */,
 				3BA2BC08659A01899A4DB2CC /* YamlEditorFlowTests.swift */,
 			);
@@ -1086,6 +1089,7 @@
 				7770F0EA76C4181C58C020EC /* AppShellTests.swift in Sources */,
 				0AAE287B7127912BEE7EFC15 /* HomeScreenTests.swift in Sources */,
 				528DCD00B7A73F10142E0455 /* MeowApp.swift in Sources */,
+				DE9A4BC5630A1A55FD1880C4 /* RenameSubscriptionFlowTests.swift in Sources */,
 				CF37C3706513F515FED5B6FC /* SettingsScreenTests.swift in Sources */,
 				DC1D5D2FD5AFDC3D1D3F2602 /* TrafficScreenTests.swift in Sources */,
 				E164E98C5E2EDB5B326E2B98 /* UtilityScreenTests.swift in Sources */,

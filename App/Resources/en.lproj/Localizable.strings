@@ -79,6 +79,8 @@
 "subscriptions.row.updatedAgo %@" = "Updated %@ ago";
 "subscriptions.row.a11y.edit %@" = "Edit YAML for %@";
 "subscriptions.row.a11y.refresh %@" = "Refresh %@";
+"subscriptions.row.a11y.editInfo %@" = "Rename or edit info for %@";
+"subscriptions.row.a11y.editInfoHint" = "Opens the name and URL editor";
 "subscriptions.toolbar.a11y.add" = "Add subscription";
 "subscriptions.toolbar.addFromURL" = "Add from URL";
 "subscriptions.toolbar.importFromFile" = "Import from iCloud Drive…";

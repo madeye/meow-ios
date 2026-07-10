@@ -25,27 +25,38 @@ struct SubscriptionsView: View {
                 ForEach(profiles) { profile in
                     GlassCard {
                         HStack {
-                            Image(systemName: profile.isSelected ? "largecircle.fill.circle" : "circle")
-                                .foregroundStyle(profile.isSelected ? AppTheme.connected : .secondary)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(profile.name).font(.headline)
-                                Text(
-                                    "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
-                                    comment: "Subscription row subtitle; %@ = relative time since last update",
-                                )
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            // Selection is scoped to the leading label so the
+                            // trailing action buttons stay independently
+                            // tappable (a whole-row onTapGesture otherwise
+                            // shadows them and steals taps in UI tests).
+                            Button {
+                                try? service.select(profile)
+                            } label: {
+                                HStack {
+                                    Image(systemName: profile.isSelected ? "largecircle.fill.circle" : "circle")
+                                        .foregroundStyle(profile.isSelected ? AppTheme.connected : .secondary)
+                                        .accessibilityHidden(true)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(profile.name).font(.headline)
+                                        Text(
+                                            "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
+                                            comment: "Subscription row subtitle; %@ = relative time since last update",
+                                        )
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
                             }
-                            .accessibilityElement(children: .combine)
+                            .buttonStyle(.plain)
                             .accessibilityValue(Text(
                                 profile.isSelected
                                     ? "subscriptions.row.a11y.selected"
                                     : "subscriptions.row.a11y.notSelected",
                             ))
                             .accessibilityHint(Text("subscriptions.row.a11y.selectHint"))
-                            .accessibilityAddTraits(.isButton)
-                            Spacer()
+                            .accessibilityIdentifier("subscriptions.row.select")
                             Button {
                                 editing = profile
                             } label: {
@@ -69,14 +80,27 @@ struct SubscriptionsView: View {
                                 .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
                                 .accessibilityHint(Text("subscriptions.row.a11y.refreshHint"))
                             }
+                            Button {
+                                editingInfo = profile
+                            } label: {
+                                Image(systemName: "square.and.pencil")
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(Text("subscriptions.row.a11y.editInfo \(profile.name)"))
+                            .accessibilityHint(Text("subscriptions.row.a11y.editInfoHint"))
+                            .accessibilityIdentifier("subscriptions.row.editInfoButton")
                         }
                     }
+                    // `.contain` keeps the row id on the group without
+                    // clobbering the child buttons' own identifiers (a bare
+                    // identifier on a container propagates to every child).
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("subscription.row.\(profile.name)")
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .contentShape(Rectangle())
-                    .onTapGesture { try? service.select(profile) }
                     .swipeActions(edge: .leading) {
                         Button {
                             editingInfo = profile
@@ -358,10 +382,12 @@ private struct EditSubscriptionInfoSheet: View {
             Form {
                 Section {
                     TextField("subscriptions.add.field.name", text: $name)
+                        .accessibilityIdentifier("subscriptions.editInfo.nameField")
                     TextField("subscriptions.add.field.url", text: $url)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
+                        .accessibilityIdentifier("subscriptions.editInfo.urlField")
                 } footer: {
                     Text("subscriptions.editInfo.footer")
                 }
@@ -382,6 +408,7 @@ private struct EditSubscriptionInfoSheet: View {
                         }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityIdentifier("subscriptions.editInfo.saveButton")
                 }
             }
         }

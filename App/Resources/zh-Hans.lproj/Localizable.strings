@@ -85,6 +85,8 @@
 "subscriptions.row.updatedAgo %@" = "%@前更新";
 "subscriptions.row.a11y.edit %@" = "编辑 %@ 的 YAML";
 "subscriptions.row.a11y.refresh %@" = "刷新 %@";
+"subscriptions.row.a11y.editInfo %@" = "重命名或编辑 %@ 的信息";
+"subscriptions.row.a11y.editInfoHint" = "打开名称与 URL 编辑器";
 "subscriptions.toolbar.a11y.add" = "添加订阅";
 "subscriptions.toolbar.addFromURL" = "从 URL 添加";
 "subscriptions.toolbar.importFromFile" = "从 iCloud 云盘导入…";
