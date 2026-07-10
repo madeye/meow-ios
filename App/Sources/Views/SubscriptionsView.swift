@@ -6,6 +6,7 @@ struct SubscriptionsView: View {
     @Environment(SubscriptionService.self) private var service
     @Query(sort: \Profile.lastUpdated, order: .reverse) private var profiles: [Profile]
     @State private var showingAdd = false
+    @State private var showingAddShadowsocks = false
     @State private var showingImporter = false
     @State private var editing: Profile?
     @State private var editingInfo: Profile?
@@ -126,6 +127,9 @@ struct SubscriptionsView: View {
         .sheet(isPresented: $showingAdd) {
             AddSubscriptionSheet(error: $error)
         }
+        .sheet(isPresented: $showingAddShadowsocks) {
+            AddShadowsocksSheet(error: $error)
+        }
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: yamlContentTypes(),
@@ -209,6 +213,13 @@ struct SubscriptionsView: View {
                 Label("subscriptions.toolbar.addFromURL", systemImage: "link")
             }
             .accessibilityIdentifier("subscriptions.toolbar.addFromURL")
+
+            Button {
+                showingAddShadowsocks = true
+            } label: {
+                Label("subscriptions.toolbar.addShadowsocks", systemImage: "qrcode.viewfinder")
+            }
+            .accessibilityIdentifier("subscriptions.toolbar.addShadowsocks")
 
             Button {
                 showingImporter = true

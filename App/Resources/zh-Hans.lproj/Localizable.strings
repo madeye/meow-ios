@@ -92,6 +92,39 @@
 "subscriptions.empty.title" = "暂无订阅";
 "subscriptions.empty.description" = "点击右上角的 + 添加 Mihomo 或 Clash 订阅链接。";
 "subscriptions.empty.importFile" = "导入文件";
+"subscriptions.toolbar.addShadowsocks" = "添加 Shadowsocks 服务器";
+
+
+/* Add Shadowsocks server sheet */
+"ssAdd.nav.title" = "添加 Shadowsocks";
+"ssAdd.section.link" = "链接";
+"ssAdd.button.scan" = "扫描二维码";
+"ssAdd.button.applyLink" = "从链接填充";
+"ssAdd.error.invalidLink" = "不是有效的 ss:// 链接。";
+"ssAdd.section.server" = "服务器";
+"ssAdd.field.name" = "名称";
+"ssAdd.field.server" = "服务器";
+"ssAdd.field.port" = "端口";
+"ssAdd.field.cipher" = "加密方式";
+"ssAdd.field.password" = "密码";
+"ssAdd.toggle.udp" = "UDP";
+"ssAdd.section.ech" = "ECH-TLS 隧道";
+"ssAdd.toggle.ech" = "ECH-TLS 隧道插件";
+"ssAdd.ech.footer" = "引擎内置的 SIP003 ech-tls-tunnel 传输。普通 Shadowsocks 请保持关闭。";
+"ssAdd.field.sni" = "SNI";
+"ssAdd.field.path" = "路径";
+"ssAdd.field.echConfig" = "ECH 配置";
+"ssAdd.field.fingerprint" = "指纹";
+"ssAdd.toggle.fastOpen" = "Fast Open";
+"ssAdd.plugin.passthrough %@" = "来自链接的插件：%@";
+"ssAdd.footer.profile" = "保存到由内置模板生成的本地配置，继续添加服务器会更新同一配置。";
+"ssAdd.button.add" = "添加";
+"ssAdd.button.adding" = "正在添加…";
+"ssAdd.scanner.nav.title" = "扫描二维码";
+"ssAdd.scanner.unavailable.title" = "相机不可用";
+"ssAdd.scanner.unavailable.description" = "此设备无法扫描，请改为粘贴 ss:// 链接。";
+"ssAdd.scanner.denied.description" = "相机权限已被拒绝。请在系统设置中开启，或改为粘贴 ss:// 链接。";
+"ssAdd.profile.defaultName" = "我的服务器";
 
 
 /* Connections */

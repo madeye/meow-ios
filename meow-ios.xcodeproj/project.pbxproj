@@ -24,9 +24,11 @@
 		1DEF3FB14FBD667C00541BFF /* IdentifierSlugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B54369F081E1B728712CC9 /* IdentifierSlugTests.swift */; };
 		1DFB9CC9D7520C6342B580D2 /* IPCRoundTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5173E18BCFC9C0CBADC96556 /* IPCRoundTripTests.swift */; };
 		2063EF5A21DBDB2E5097D885 /* MeowCoreBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA64C2503B8306CC64B9D23D /* MeowCoreBridgeTests.swift */; };
+		2534B8CDD2E40D5F2105C9EF /* ShadowsocksServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F650A5FA59D90978E2D8BC6 /* ShadowsocksServer.swift */; };
 		25931B4F38353E7DF1CD7F5E /* ProxiesDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A0587577F4B11031F0816D /* ProxiesDecodingTests.swift */; };
 		25E66559A88A13B0FEE0233B /* SubscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5369F7A0022B20FF1321D5 /* SubscriptionService.swift */; };
 		2687DFC8A2EC27D66312C06F /* UtilitySessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B3F7EB51045141F84569793 /* UtilitySessionStore.swift */; };
+		27E34E45FFE9A9D2242373E2 /* ShadowsocksURIParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48800BB67F7CB5E42F942A83 /* ShadowsocksURIParser.swift */; };
 		28CB589E0ACE5C617C7DCD42 /* TrafficAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729BDB9DF0375708DCD8F84E /* TrafficAccumulatorTests.swift */; };
 		2A21E16ED84D0DF4A7C140A4 /* clash_emoji_groups_realworld.yaml in Resources */ = {isa = PBXBuildFile; fileRef = F73DB7377F110302EA3E8B4B /* clash_emoji_groups_realworld.yaml */; };
 		2D71AA36DACB626D73AC50A3 /* YamlEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 415A45F45F6FA01D8DA04A95 /* YamlEditorView.swift */; };
@@ -37,6 +39,7 @@
 		34358821D3A262F7D08C62D9 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 0CA41BA11AE3954D104A7AB8 /* MeowIPC */; };
 		34B4F8F808C424CBAF8E7EA9 /* MWSharedStore.m in Sources */ = {isa = PBXBuildFile; fileRef = AB83B7A37D165EF0E16A47BA /* MWSharedStore.m */; };
 		3BAE21D06E5B9935E58FDF1B /* MeowAPITypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A693FE7115671D717A87F1DB /* MeowAPITypes.swift */; };
+		43CC40E5E8E7DEEB9E61CEB8 /* ShadowsocksConfigBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */; };
 		45310440BCC0654BDE996BA2 /* SubscriptionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */; };
 		458E58A53D18E7E14542FAB8 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC4AC97B3877B1A566FBFF6 /* Profile.swift */; };
 		4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08020B398C102C110F6A8567 /* SharedStoreTests.swift */; };
@@ -48,6 +51,7 @@
 		4C1FB9714B9308B7577B9622 /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = 564BE37A8BC742522CCABC5E /* MeowModels */; };
 		4E366621A02CAF97E4AA2EF2 /* RulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE160D91FCAFCD07383E8CB5 /* RulesTests.swift */; };
 		4F29B935B393F48182AC7CE4 /* MWIPCListener.m in Sources */ = {isa = PBXBuildFile; fileRef = 329B260F122D91D5DDB24C44 /* MWIPCListener.m */; };
+		4F396A44EF40DD59F1A79D3B /* ShadowsocksConfigBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2286E52FC6D973728DE5D1A8 /* ShadowsocksConfigBuilderTests.swift */; };
 		51B3C9F10FE6A03AFD50A5E6 /* NavRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8D0D6120471BD1DBC4ACFB /* NavRow.swift */; };
 		5247368E57963DA43B22D272 /* UDPProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CF0A80A8CEB2105E171334C /* UDPProtocolTests.swift */; };
 		528DCD00B7A73F10142E0455 /* MeowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF3488443D31DA0A523BC30 /* MeowApp.swift */; };
@@ -64,6 +68,7 @@
 		6092CAC783B65174F68E0606 /* MWTunnelEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = 620106BFB5E8593748590EBA /* MWTunnelEngine.m */; };
 		63B152B9AED7714B67D9FA21 /* Country.mmdb in Resources */ = {isa = PBXBuildFile; fileRef = F2B40C39BB5FC5957F42AC74 /* Country.mmdb */; };
 		646AA7E070AB3AB4CD605644 /* RulesYAMLEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D2AA0F7CC09650CF8263EF /* RulesYAMLEditor.swift */; };
+		648D6C8316865A3DFBD6766D /* ShadowsocksURIParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6052B63FD334E86DC81BAE1E /* ShadowsocksURIParserTests.swift */; };
 		66C7B352BBD0B772976ABB1B /* SubscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43280DA576025F244CD1432 /* SubscriptionServiceTests.swift */; };
 		684752187B329EEE17E6EA1C /* MWAppGroup.m in Sources */ = {isa = PBXBuildFile; fileRef = E605B002F990CE95032AA3A8 /* MWAppGroup.m */; };
 		6A844E6BF259DEC60C66D7D9 /* clash_minimal.yaml in Resources */ = {isa = PBXBuildFile; fileRef = 47CD1F1E7DD00599AF2A5238 /* clash_minimal.yaml */; };
@@ -84,6 +89,7 @@
 		90E26674740B7C7141781B01 /* ProxyGroupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7193B43D94BD4897FEDF967 /* ProxyGroupsView.swift */; };
 		91159B9CB1EDFE43070C3A4E /* GlobalVpnSwitchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF41AF44DDC9B81E01AF637 /* GlobalVpnSwitchBar.swift */; };
 		9212E710474142F878EC5ABC /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4B1F7C57B22583A6919A107 /* LogsView.swift */; };
+		938E95C0263F042450113B67 /* ShadowsocksAddServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B378E3EF2591C9CD059E98 /* ShadowsocksAddServiceTests.swift */; };
 		94FA8AB54FFDDD7D188A8C2A /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 459136B958385ACB511D5D14 /* PacketTunnel.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		9609134F0D274943E5E18297 /* LogsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F1B0B431DA0DD132F917FF /* LogsTests.swift */; };
 		9942BB6B9F5CDAD3CEA4B98E /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED84393AA4FF1CADF9FCC53 /* HomeView.swift */; };
@@ -117,7 +123,9 @@
 		CADE5E260230B0FEB1F6786C /* MWTunnelSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = E8B56935362D1576450CB4A3 /* MWTunnelSettings.m */; };
 		CF37C3706513F515FED5B6FC /* SettingsScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD1BBDA36A305FAAF4B003E /* SettingsScreenTests.swift */; };
 		D0918A7D5C1B3C007EADE22E /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 027ADE8989FBD1E3F91B7209 /* MeowIPC */; };
+		D09A565179DB1D6C03527E69 /* AddShadowsocksSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B827CA25C7C1502C8AB3535 /* AddShadowsocksSheet.swift */; };
 		D2FF19F899EE357591812068 /* ProxyGroupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2EC54BA19FA9CC57BDD2AD /* ProxyGroupModelTests.swift */; };
+		D49CAAAAB4878A24C8A7D52B /* ShadowsocksQRScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1871555B4BB947666ABD54B /* ShadowsocksQRScannerSheet.swift */; };
 		D5E3B0B2C42A294616BB2263 /* DnsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 711184DB8878CD1F212CEEA3 /* DnsView.swift */; };
 		D95EF7A2FB411B4088E3255C /* URLValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA1935B322CD5DD66E23F0 /* URLValidationTests.swift */; };
 		DC1D5D2FD5AFDC3D1D3F2602 /* TrafficScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC73D84B5978335B9C07A8A /* TrafficScreenTests.swift */; };
@@ -127,6 +135,7 @@
 		E5EEB30272FBA79B72C45004 /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86AFFBA5F04A152705EE60CA /* AccessibilityTests.swift */; };
 		E64DA5B39E08AF0DF25BFCBC /* LocalizableParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7002E0BC1FFE0A41FEBE8F6 /* LocalizableParityTests.swift */; };
 		EDFDD3829637E5DE34AD5B02 /* MeowCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B807F37D85605FF0AD1427F5 /* MeowCore.xcframework */; };
+		F29284A5EE821CC192BE2993 /* AddShadowsocksFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A3FCA37BA819ACC0A9D0EB /* AddShadowsocksFlowTests.swift */; };
 		F3F6C8C58BB119BAA42C632B /* ChinaDirectKeywordsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C840E453765151986763DE2B /* ChinaDirectKeywordsTests.swift */; };
 		F453433A7CD958D28F7693DA /* ConnectionsScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E90E01A4CE68C4F872A40B /* ConnectionsScreenTests.swift */; };
 		F789FAB627C81F4087EEE0AF /* PacketTunnelProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = 71FF15AE48B5E9FFE60B4051 /* PacketTunnelProvider.m */; };
@@ -185,6 +194,7 @@
 		0539F84A7F111BFF4BDD1840 /* MWSharedStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWSharedStore.h; sourceTree = "<group>"; };
 		06D2AA0F7CC09650CF8263EF /* RulesYAMLEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesYAMLEditor.swift; sourceTree = "<group>"; };
 		08020B398C102C110F6A8567 /* SharedStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStoreTests.swift; sourceTree = "<group>"; };
+		0F650A5FA59D90978E2D8BC6 /* ShadowsocksServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksServer.swift; sourceTree = "<group>"; };
 		0F8A47B96274873533987FFA /* MeowTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MeowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1046B4656B3C3717791D82D4 /* EngineBootTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineBootTests.swift; sourceTree = "<group>"; };
 		134693AAF1481D4CF2945CAD /* MeowUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MeowUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -195,8 +205,10 @@
 		1CCF322677C8A124E9D9107D /* MWDiagnosticsRunner.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDiagnosticsRunner.m; sourceTree = "<group>"; };
 		1F7BB3C0C2648B6097E52E53 /* UtilityScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilityScreenTests.swift; sourceTree = "<group>"; };
 		20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoAssetStager.swift; sourceTree = "<group>"; };
+		2286E52FC6D973728DE5D1A8 /* ShadowsocksConfigBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksConfigBuilderTests.swift; sourceTree = "<group>"; };
 		24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManagerTests.swift; sourceTree = "<group>"; };
 		24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDarwinBridge.m; sourceTree = "<group>"; };
+		2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksConfigBuilder.swift; sourceTree = "<group>"; };
 		2D7D7768D31382CD90DFEBA6 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		2E2B37B72F11B1B2B1118221 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		3172561A6CE70D61D7666597 /* ChinaDirectKeywords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinaDirectKeywords.swift; sourceTree = "<group>"; };
@@ -213,7 +225,9 @@
 		468AB5369E33BCD92920CF52 /* MWPreferences.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWPreferences.m; sourceTree = "<group>"; };
 		47CD1F1E7DD00599AF2A5238 /* clash_minimal.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_minimal.yaml; sourceTree = "<group>"; };
 		48057A73B8C1C158EB155986 /* MWIPCListener.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWIPCListener.h; sourceTree = "<group>"; };
+		48800BB67F7CB5E42F942A83 /* ShadowsocksURIParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksURIParser.swift; sourceTree = "<group>"; };
 		4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionParserTests.swift; sourceTree = "<group>"; };
+		4B827CA25C7C1502C8AB3535 /* AddShadowsocksSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddShadowsocksSheet.swift; sourceTree = "<group>"; };
 		5173E18BCFC9C0CBADC96556 /* IPCRoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPCRoundTripTests.swift; sourceTree = "<group>"; };
 		5736CEC2431764A6D333891B /* KeychainStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStoreTests.swift; sourceTree = "<group>"; };
 		5BD1BBDA36A305FAAF4B003E /* SettingsScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreenTests.swift; sourceTree = "<group>"; };
@@ -221,6 +235,7 @@
 		5EC73D84B5978335B9C07A8A /* TrafficScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficScreenTests.swift; sourceTree = "<group>"; };
 		5EEF0D1CF99CA135B39D3676 /* MWPreferences.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWPreferences.h; sourceTree = "<group>"; };
 		601ADF66737508CC359C4936 /* SubscriptionConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionConverter.swift; sourceTree = "<group>"; };
+		6052B63FD334E86DC81BAE1E /* ShadowsocksURIParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksURIParserTests.swift; sourceTree = "<group>"; };
 		620106BFB5E8593748590EBA /* MWTunnelEngine.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWTunnelEngine.m; sourceTree = "<group>"; };
 		664BEEB7B966973C3D0A5074 /* DailyTrafficAccumulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTrafficAccumulator.swift; sourceTree = "<group>"; };
 		66EEA26ED8A4895932CE53E3 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
@@ -289,6 +304,7 @@
 		D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionDeepLink.swift; sourceTree = "<group>"; };
 		D1A7AFDD113E049439EEE4A9 /* MeowShared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MeowShared; path = MeowShared; sourceTree = SOURCE_ROOT; };
 		D51C2BC68B7800884B68643F /* DiagnosticsLabelParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLabelParserTests.swift; sourceTree = "<group>"; };
+		D5A3FCA37BA819ACC0A9D0EB /* AddShadowsocksFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddShadowsocksFlowTests.swift; sourceTree = "<group>"; };
 		D7A0587577F4B11031F0816D /* ProxiesDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxiesDecodingTests.swift; sourceTree = "<group>"; };
 		DAEF8BEDC4B0E7EF70E37EE1 /* UtilitySessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilitySessionStoreTests.swift; sourceTree = "<group>"; };
 		DFC4AC97B3877B1A566FBFF6 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -301,11 +317,13 @@
 		EE160D91FCAFCD07383E8CB5 /* RulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesTests.swift; sourceTree = "<group>"; };
 		EE63F2C20D91AB9B68EB33C8 /* MWAppGroup.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWAppGroup.h; sourceTree = "<group>"; };
 		F0A2F021F1A3C84F902320EB /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F1871555B4BB947666ABD54B /* ShadowsocksQRScannerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksQRScannerSheet.swift; sourceTree = "<group>"; };
 		F1F87C9BC53D85684F46CF05 /* TrafficView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficView.swift; sourceTree = "<group>"; };
 		F2B40C39BB5FC5957F42AC74 /* Country.mmdb */ = {isa = PBXFileReference; path = Country.mmdb; sourceTree = "<group>"; };
 		F4B2AEF174C775BBB240908B /* meow-ios.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "meow-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClashConfigLinter.swift; sourceTree = "<group>"; };
 		F58373225092C298E65BB090 /* geosite.mrs */ = {isa = PBXFileReference; path = geosite.mrs; sourceTree = "<group>"; };
+		F5B378E3EF2591C9CD059E98 /* ShadowsocksAddServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksAddServiceTests.swift; sourceTree = "<group>"; };
 		F73DB7377F110302EA3E8B4B /* clash_emoji_groups_realworld.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_emoji_groups_realworld.yaml; sourceTree = "<group>"; };
 		FA317DD319BE5DA6206036F1 /* MWEngineLog.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWEngineLog.m; sourceTree = "<group>"; };
 		FA64C2503B8306CC64B9D23D /* MeowCoreBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowCoreBridgeTests.swift; sourceTree = "<group>"; };
@@ -435,6 +453,7 @@
 		3E8C8F01F85BB79409FEB60B /* Flows */ = {
 			isa = PBXGroup;
 			children = (
+				D5A3FCA37BA819ACC0A9D0EB /* AddShadowsocksFlowTests.swift */,
 				9CA7DC0A8AEAA9185A7B40F0 /* AddSubscriptionFlowTests.swift */,
 				8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */,
 				3BA2BC08659A01899A4DB2CC /* YamlEditorFlowTests.swift */,
@@ -455,6 +474,7 @@
 		546289FB1F7F3C7197D240BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				F5B378E3EF2591C9CD059E98 /* ShadowsocksAddServiceTests.swift */,
 				B306CE837FA7A17D7D561877 /* SubscriptionDeepLinkTests.swift */,
 				A43280DA576025F244CD1432 /* SubscriptionServiceTests.swift */,
 				729BDB9DF0375708DCD8F84E /* TrafficAccumulatorTests.swift */,
@@ -500,6 +520,7 @@
 		82D5A212559F590D21A902F8 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4B827CA25C7C1502C8AB3535 /* AddShadowsocksSheet.swift */,
 				8E8110225EBDEBDC762A0E20 /* ClashYAMLTextView.swift */,
 				8E6DE9E643D70646873B923B /* ConnectionsView.swift */,
 				AF51AD7DD7946AB70970C9A8 /* ContentView.swift */,
@@ -517,6 +538,7 @@
 				BC8D42838BD27620D7F278DE /* RulesEditorView.swift */,
 				8A1CBAFD55A777C3B13296E2 /* RulesView.swift */,
 				F0A2F021F1A3C84F902320EB /* SettingsView.swift */,
+				F1871555B4BB947666ABD54B /* ShadowsocksQRScannerSheet.swift */,
 				3B1E9C4360B99CC50183F32A /* SubscriptionsView.swift */,
 				F1F87C9BC53D85684F46CF05 /* TrafficView.swift */,
 				E56D18B0FBFA455C9F60134A /* UserDiagnosticsView.swift */,
@@ -557,6 +579,8 @@
 				5E114A82C37433E90AFEAD0E /* MeowAPI.swift */,
 				A693FE7115671D717A87F1DB /* MeowAPITypes.swift */,
 				06D2AA0F7CC09650CF8263EF /* RulesYAMLEditor.swift */,
+				2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */,
+				48800BB67F7CB5E42F942A83 /* ShadowsocksURIParser.swift */,
 				601ADF66737508CC359C4936 /* SubscriptionConverter.swift */,
 				D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */,
 				9C5369F7A0022B20FF1321D5 /* SubscriptionService.swift */,
@@ -666,6 +690,7 @@
 				992E16ADDEBA2F4304D4E797 /* EditableRule.swift */,
 				DFC4AC97B3877B1A566FBFF6 /* Profile.swift */,
 				6A820C8680856C83B4C8EF7F /* ProxyGroupModel.swift */,
+				0F650A5FA59D90978E2D8BC6 /* ShadowsocksServer.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -709,6 +734,8 @@
 			isa = PBXGroup;
 			children = (
 				FD9FC97CA0606C12439B0684 /* EmojiGroupSelectNodeTests.swift */,
+				2286E52FC6D973728DE5D1A8 /* ShadowsocksConfigBuilderTests.swift */,
+				6052B63FD334E86DC81BAE1E /* ShadowsocksURIParserTests.swift */,
 				4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */,
 			);
 			path = Parsing;
@@ -1054,6 +1081,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E5EEB30272FBA79B72C45004 /* AccessibilityTests.swift in Sources */,
+				F29284A5EE821CC192BE2993 /* AddShadowsocksFlowTests.swift in Sources */,
 				FA6DFC3CA7B13A278CB1D630 /* AddSubscriptionFlowTests.swift in Sources */,
 				7770F0EA76C4181C58C020EC /* AppShellTests.swift in Sources */,
 				0AAE287B7127912BEE7EFC15 /* HomeScreenTests.swift in Sources */,
@@ -1105,6 +1133,9 @@
 				D2FF19F899EE357591812068 /* ProxyGroupModelTests.swift in Sources */,
 				4E366621A02CAF97E4AA2EF2 /* RulesTests.swift in Sources */,
 				C7B7EACD6297D7AA66065602 /* RulesYAMLEditorTests.swift in Sources */,
+				938E95C0263F042450113B67 /* ShadowsocksAddServiceTests.swift in Sources */,
+				4F396A44EF40DD59F1A79D3B /* ShadowsocksConfigBuilderTests.swift in Sources */,
+				648D6C8316865A3DFBD6766D /* ShadowsocksURIParserTests.swift in Sources */,
 				4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */,
 				AB4AFCDA6C326D173F7C6D01 /* SubscriptionDeepLinkTests.swift in Sources */,
 				45310440BCC0654BDE996BA2 /* SubscriptionParserTests.swift in Sources */,
@@ -1122,6 +1153,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D09A565179DB1D6C03527E69 /* AddShadowsocksSheet.swift in Sources */,
 				DCC6938C0A43984B033BCD68 /* AppIPCBridge.swift in Sources */,
 				ADBD29F9A34A3AF34057D104 /* AppModel.swift in Sources */,
 				B2761759D155051F32B46F2D /* AppModelContainer.swift in Sources */,
@@ -1154,6 +1186,10 @@
 				8E43F6904E5AAD529AACBA1C /* RulesView.swift in Sources */,
 				646AA7E070AB3AB4CD605644 /* RulesYAMLEditor.swift in Sources */,
 				A247AFB42C2CB73BACCD3CB0 /* SettingsView.swift in Sources */,
+				43CC40E5E8E7DEEB9E61CEB8 /* ShadowsocksConfigBuilder.swift in Sources */,
+				D49CAAAAB4878A24C8A7D52B /* ShadowsocksQRScannerSheet.swift in Sources */,
+				2534B8CDD2E40D5F2105C9EF /* ShadowsocksServer.swift in Sources */,
+				27E34E45FFE9A9D2242373E2 /* ShadowsocksURIParser.swift in Sources */,
 				9ADDC891C0BCC6053E86E2E2 /* SubscriptionConverter.swift in Sources */,
 				07BE855FF6DC83A07129C654 /* SubscriptionDeepLink.swift in Sources */,
 				25E66559A88A13B0FEE0233B /* SubscriptionService.swift in Sources */,

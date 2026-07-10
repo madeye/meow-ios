@@ -86,6 +86,39 @@
 "subscriptions.empty.title" = "No subscriptions yet";
 "subscriptions.empty.description" = "Tap + to add a Mihomo or Clash subscription URL.";
 "subscriptions.empty.importFile" = "Import File";
+"subscriptions.toolbar.addShadowsocks" = "Add Shadowsocks Server";
+
+
+/* Add Shadowsocks server sheet */
+"ssAdd.nav.title" = "Add Shadowsocks";
+"ssAdd.section.link" = "Link";
+"ssAdd.button.scan" = "Scan QR Code";
+"ssAdd.button.applyLink" = "Fill from Link";
+"ssAdd.error.invalidLink" = "Not a valid ss:// link.";
+"ssAdd.section.server" = "Server";
+"ssAdd.field.name" = "Name";
+"ssAdd.field.server" = "Server";
+"ssAdd.field.port" = "Port";
+"ssAdd.field.cipher" = "Cipher";
+"ssAdd.field.password" = "Password";
+"ssAdd.toggle.udp" = "UDP";
+"ssAdd.section.ech" = "ECH-TLS Tunnel";
+"ssAdd.toggle.ech" = "ECH-TLS Tunnel Plugin";
+"ssAdd.ech.footer" = "SIP003 ech-tls-tunnel transport built into the engine. Leave off for plain Shadowsocks.";
+"ssAdd.field.sni" = "SNI";
+"ssAdd.field.path" = "Path";
+"ssAdd.field.echConfig" = "ECH Config";
+"ssAdd.field.fingerprint" = "Fingerprint";
+"ssAdd.toggle.fastOpen" = "Fast Open";
+"ssAdd.plugin.passthrough %@" = "Plugin from link: %@";
+"ssAdd.footer.profile" = "Saved into a local profile generated from the built-in template. Adding more servers updates the same profile.";
+"ssAdd.button.add" = "Add";
+"ssAdd.button.adding" = "Adding…";
+"ssAdd.scanner.nav.title" = "Scan QR Code";
+"ssAdd.scanner.unavailable.title" = "Camera Unavailable";
+"ssAdd.scanner.unavailable.description" = "Scanning isn't available on this device. Paste the ss:// link instead.";
+"ssAdd.scanner.denied.description" = "Camera access is denied. Enable it in Settings, or paste the ss:// link instead.";
+"ssAdd.profile.defaultName" = "My Servers";
 
 
 /* Connections */

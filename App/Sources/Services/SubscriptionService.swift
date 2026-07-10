@@ -46,6 +46,44 @@ final class SubscriptionService {
         return profile
     }
 
+    /// Add a manually-entered / QR-scanned Shadowsocks server. Servers live
+    /// in a single locally generated profile (rendered from the built-in
+    /// template): the first add creates it, later adds re-render it with the
+    /// accumulated server list. A server whose name matches an existing one
+    /// replaces it. The rendered YAML is engine-validated before anything is
+    /// persisted.
+    @discardableResult
+    func addShadowsocks(_ server: ShadowsocksServer) throws -> Profile {
+        let all = try modelContext.fetch(FetchDescriptor<Profile>())
+        let generated = all.first { ShadowsocksConfigBuilder.isGenerated($0.yamlContent) }
+
+        var servers = generated.map { ShadowsocksConfigBuilder.extractServers(from: $0.yamlContent) } ?? []
+        servers.removeAll { $0.name == server.name }
+        servers.append(server)
+
+        let yaml = try ShadowsocksConfigBuilder.render(servers: servers)
+        try MeowConfigValidator.validate(yaml)
+
+        if let generated {
+            generated.yamlBackup = generated.yamlContent
+            generated.yamlContent = yaml
+            generated.lastUpdated = .now
+            try modelContext.save()
+            if generated.isSelected {
+                try writeActiveConfig(generated)
+            }
+            return generated
+        }
+        let name = String(
+            localized: "ssAdd.profile.defaultName",
+            comment: "Name of the auto-created profile holding manually added Shadowsocks servers",
+        )
+        let profile = Profile(name: name, url: "", yamlContent: yaml, yamlBackup: yaml)
+        modelContext.insert(profile)
+        try modelContext.save()
+        return profile
+    }
+
     func refresh(_ profile: Profile) async throws {
         guard !profile.url.isEmpty else { throw SubscriptionError.invalidURL }
         let yaml = try await fetchAndNormalize(url: profile.url)
