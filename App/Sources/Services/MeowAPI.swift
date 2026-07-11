@@ -3,15 +3,71 @@ import MeowIPC
 import NetworkExtension
 import os
 
+/// Seam over `URLSessionWebSocketTask` so `streamLogs`'s reconnect loop can be
+/// driven by a fake transport in tests (see `MeowAPITests`) without opening a
+/// real socket. `URLSessionWebSocketTask` already satisfies this shape, so no
+/// wrapper type is needed on the production path — see the `extension` below.
+protocol MeowWebSocketTransport: Sendable {
+    func resume()
+    func receive() async throws -> URLSessionWebSocketTask.Message
+    func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?)
+}
+
+extension URLSessionWebSocketTask: MeowWebSocketTransport {}
+
+/// Thread-safe holder for the mutable port/secret credentials the engine
+/// mints once the tunnel connects (see `MeowAPI.updateCredentials`). On a
+/// fresh install `MeowAPI` starts unconfigured (port 0); every request, and
+/// each `streamLogs` reconnect iteration, reads a fresh `baseURL`/`secret`/
+/// `snapshot` here instead of caching one, so a credential update retargets
+/// in-flight requests and streams instead of leaving them pinned to the old
+/// port forever (#290).
+private final class MeowAPICredentials: @unchecked Sendable {
+    private struct Values {
+        var baseURL: URL
+        var secret: String
+    }
+
+    private let lock: OSAllocatedUnfairLock<Values>
+
+    init(port: Int, secret: String) {
+        lock = OSAllocatedUnfairLock(initialState: Values(baseURL: Self.url(forPort: port), secret: secret))
+    }
+
+    var baseURL: URL {
+        lock.withLock { $0.baseURL }
+    }
+
+    var secret: String {
+        lock.withLock { $0.secret }
+    }
+
+    var snapshot: (baseURL: URL, secret: String) {
+        lock.withLock { ($0.baseURL, $0.secret) }
+    }
+
+    func update(port: Int, secret: String) {
+        lock.withLock { $0 = Values(baseURL: Self.url(forPort: port), secret: secret) }
+    }
+
+    private static func url(forPort port: Int) -> URL {
+        URL(string: "http://127.0.0.1:\(port)")!
+    }
+}
+
 /// REST client for the meow external-controller that runs inside the
 /// packet-tunnel extension on a random loopback port. The URLSession requests
 /// are issued from the main app process; iOS routes loopback traffic correctly
 /// even when the tunnel is active.
 @Observable
 final class MeowAPI: @unchecked Sendable {
-    private var baseURL: URL
-    private var secret: String
+    private let credentials: MeowAPICredentials
     private let session: URLSession
+    /// Creates the transport for `streamLogs`'s WebSocket upgrade. Defaults to
+    /// `session.webSocketTask(with:)`; tests inject a fake transport to
+    /// observe reconnect attempts without a real socket.
+    private let webSocketTaskFactory: @Sendable (URLRequest) -> MeowWebSocketTransport
+    private let usesInjectedWebSocketTransport: Bool
     // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
     // Mirrors the ingress-instrumentation pattern kept around #54.
     private let log = Logger(subsystem: "com.tangzixiang.meow.app", category: "meow-api")
@@ -39,10 +95,12 @@ final class MeowAPI: @unchecked Sendable {
         port: Int = 0,
         secret: String = "",
         session: URLSession = .shared,
+        webSocketTaskFactory: (@Sendable (URLRequest) -> MeowWebSocketTransport)? = nil,
     ) {
-        baseURL = URL(string: "http://127.0.0.1:\(port)")!
-        self.secret = secret
+        credentials = MeowAPICredentials(port: port, secret: secret)
         self.session = session
+        usesInjectedWebSocketTransport = webSocketTaskFactory != nil
+        self.webSocketTaskFactory = webSocketTaskFactory ?? { req in session.webSocketTask(with: req) }
     }
 
     /// Point the client at the port/secret the engine actually bound. On a
@@ -50,10 +108,14 @@ final class MeowAPI: @unchecked Sendable {
     /// first constructed (no tunnel has started), so the initial instance
     /// is intentionally unconfigured; once the extension mints credentials on
     /// connect, the app calls this to retarget before issuing requests.
-    /// No-op when `port`/`secret` are unchanged.
+    ///
+    /// Safe to call while `streamLogs`'s reconnect loop is running: the loop
+    /// recomputes its target from `credentials` on every retry iteration
+    /// (never once up front), so an in-flight socket's *next* reconnect
+    /// attempt — after its current attempt fails or is torn down — picks up
+    /// the new port/secret without needing an app relaunch.
     func updateCredentials(port: Int, secret: String) {
-        baseURL = URL(string: "http://127.0.0.1:\(port)")!
-        self.secret = secret
+        credentials.update(port: port, secret: secret)
     }
 
     // MARK: - Endpoints
@@ -165,7 +227,7 @@ final class MeowAPI: @unchecked Sendable {
 
         struct Resp: Decodable { let delay: Int? }
         let target = try Self.buildTestDelayURL(
-            base: baseURL,
+            base: credentials.baseURL,
             path: "/proxies/\(proxy.urlEscaped)/delay",
             url: url,
             timeout: timeout,
@@ -194,7 +256,7 @@ final class MeowAPI: @unchecked Sendable {
         }
 
         let target = try Self.buildTestDelayURL(
-            base: baseURL,
+            base: credentials.baseURL,
             path: "/group/\(group.urlEscaped)/delay",
             url: url,
             timeout: timeout,
@@ -248,7 +310,7 @@ final class MeowAPI: @unchecked Sendable {
     /// 204 on success; fresh delays are surfaced on the next `getProviders()`.
     func healthCheckProvider(name: String) async throws {
         if Self.usesMockTransport { return }
-        let url = baseURL.appending(path: "/providers/proxies/\(name.urlEscaped)/healthcheck")
+        let url = credentials.baseURL.appending(path: "/providers/proxies/\(name.urlEscaped)/healthcheck")
         #if DEBUG
             // DIAGNOSTIC: remove once Logs/Connections views are stable in v1.0.
             log.info("HTTP GET \(url.absoluteString, privacy: .public)")
@@ -261,26 +323,34 @@ final class MeowAPI: @unchecked Sendable {
     /// Stream meow logs via WebSocket with auto-reconnect.
     /// Caller owns the AsyncStream — it stops when the task is cancelled.
     func streamLogs(level: String = "info") -> AsyncThrowingStream<LogEntry, Error> {
-        if Self.usesMockTransport {
+        if Self.usesMockTransport, !usesInjectedWebSocketTransport {
             return Self.mockLogStream(level: level)
         }
 
         return AsyncThrowingStream { continuation in
             let log = self.log
             let task = Task {
-                let url = baseURL
-                    .appending(path: "/logs")
-                    .appending(queryItems: [.init(name: "level", value: level)])
                 var backoff: UInt64 = 1
                 while !Task.isCancelled {
+                    // Recompute the target from the CURRENT credentials on
+                    // every iteration — not once before the loop. A fresh
+                    // install starts this loop against port 0 before the
+                    // tunnel ever connects; `updateCredentials` retargets
+                    // `credentials` once the engine mints real ones, and this
+                    // snapshot is what makes the *next* retry pick that up
+                    // instead of looping against 127.0.0.1:0 forever (#290).
+                    let snapshot = credentials.snapshot
+                    let url = snapshot.baseURL
+                        .appending(path: "/logs")
+                        .appending(queryItems: [.init(name: "level", value: level)])
                     var req = URLRequest(url: url)
-                    if !secret.isEmpty {
-                        req.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+                    if !snapshot.secret.isEmpty {
+                        req.setValue("Bearer \(snapshot.secret)", forHTTPHeaderField: "Authorization")
                     }
                     #if DEBUG
                         log.info("WS upgrade \(url.absoluteString, privacy: .public)")
                     #endif
-                    let ws = session.webSocketTask(with: req)
+                    let ws = webSocketTaskFactory(req)
                     ws.resume()
                     do {
                         backoff = 1
@@ -313,7 +383,7 @@ final class MeowAPI: @unchecked Sendable {
     // MARK: - Helpers
 
     private func get<T: Decodable>(_ path: String, queryItems: [URLQueryItem] = []) async throws -> T {
-        var url = baseURL.appending(path: path)
+        var url = credentials.baseURL.appending(path: path)
         if !queryItems.isEmpty {
             url = url.appending(queryItems: queryItems)
         }
@@ -328,7 +398,7 @@ final class MeowAPI: @unchecked Sendable {
     }
 
     private func put(_ path: String, body: [String: String]) async throws {
-        let url = baseURL.appending(path: path)
+        let url = credentials.baseURL.appending(path: path)
         var req = request(for: url)
         req.httpMethod = "PUT"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -345,7 +415,7 @@ final class MeowAPI: @unchecked Sendable {
     }
 
     private func patch(_ path: String, body: [String: String]) async throws {
-        let url = baseURL.appending(path: path)
+        let url = credentials.baseURL.appending(path: path)
         var req = request(for: url)
         req.httpMethod = "PATCH"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -359,7 +429,7 @@ final class MeowAPI: @unchecked Sendable {
     }
 
     private func delete(_ path: String) async throws {
-        let url = baseURL.appending(path: path)
+        let url = credentials.baseURL.appending(path: path)
         var req = request(for: url)
         req.httpMethod = "DELETE"
         #if DEBUG
@@ -385,8 +455,8 @@ final class MeowAPI: @unchecked Sendable {
 
     private func request(for url: URL) -> URLRequest {
         var req = URLRequest(url: url)
-        if !secret.isEmpty {
-            req.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+        if !credentials.secret.isEmpty {
+            req.setValue("Bearer \(credentials.secret)", forHTTPHeaderField: "Authorization")
         }
         return req
     }
@@ -408,173 +478,5 @@ enum MeowAPIError: Error {
 private extension String {
     var urlEscaped: String {
         addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self
-    }
-}
-
-private extension MeowAPI {
-    static var usesMockTransport: Bool {
-        #if targetEnvironment(simulator)
-            true
-        #else
-            false
-        #endif
-    }
-
-    static func mockProxies() -> ProxiesResponse {
-        let history: [Proxy.History] = [
-            .init(delay: 82),
-            .init(delay: 76),
-        ]
-        let singaporeHistory: [Proxy.History] = [
-            .init(delay: 138),
-            .init(delay: 121),
-        ]
-        let westHistory: [Proxy.History] = [
-            .init(delay: 192),
-            .init(delay: 168),
-        ]
-        let proxies: [String: Proxy] = [
-            "GLOBAL": .init(
-                name: "GLOBAL",
-                type: "Selector",
-                now: "Auto",
-                all: ["Auto", "Tokyo 01", "Singapore 02", "US West 03", "DIRECT"],
-                history: nil,
-            ),
-            "Proxy": .init(
-                name: "Proxy",
-                type: "Selector",
-                now: "Auto",
-                all: ["Auto", "Tokyo 01", "Singapore 02", "US West 03"],
-                history: nil,
-            ),
-            "Auto": .init(
-                name: "Auto",
-                type: "URLTest",
-                now: "Tokyo 01",
-                all: ["Tokyo 01", "Singapore 02", "US West 03"],
-                history: nil,
-            ),
-            "Tokyo 01": .init(name: "Tokyo 01", type: "Shadowsocks", now: nil, all: nil, history: history),
-            "Singapore 02": .init(
-                name: "Singapore 02",
-                type: "VLESS",
-                now: nil,
-                all: nil,
-                history: singaporeHistory,
-            ),
-            "US West 03": .init(name: "US West 03", type: "Trojan", now: nil, all: nil, history: westHistory),
-            "DIRECT": .init(name: "DIRECT", type: "Direct", now: nil, all: nil, history: nil),
-        ]
-        return .init(proxies: proxies)
-    }
-
-    static func mockDelay(for proxy: String) -> Int {
-        switch proxy {
-        case "Tokyo 01": 76
-        case "Singapore 02": 121
-        case "US West 03": 168
-        default: 94
-        }
-    }
-
-    static func mockGroupDelay(for group: String) -> [String: Int] {
-        let members = mockProxies().proxies[group]?.all ?? []
-        return Dictionary(uniqueKeysWithValues: members.map { ($0, mockDelay(for: $0)) })
-    }
-
-    static func mockConnections() -> ConnectionsResponse {
-        .init(
-            downloadTotal: 3_842_146_304,
-            uploadTotal: 486_539_264,
-            connections: [
-                .init(
-                    id: "sim-1",
-                    metadata: .init(
-                        network: "tcp",
-                        type: "HTTP",
-                        sourceIP: "10.0.0.2",
-                        destinationIP: "142.250.72.14",
-                        destinationPort: "443",
-                        host: "www.gstatic.com",
-                    ),
-                    upload: 42496,
-                    download: 384_000,
-                    start: "2026-06-28T09:41:00Z",
-                    chains: ["Tokyo 01", "Proxy"],
-                    rule: "DOMAIN-SUFFIX",
-                    rulePayload: "gstatic.com",
-                ),
-                .init(
-                    id: "sim-2",
-                    metadata: .init(
-                        network: "tcp",
-                        type: "HTTPS",
-                        sourceIP: "10.0.0.2",
-                        destinationIP: "140.82.112.4",
-                        destinationPort: "443",
-                        host: "github.com",
-                    ),
-                    upload: 18944,
-                    download: 96512,
-                    start: "2026-06-28T09:41:07Z",
-                    chains: ["Auto", "Proxy"],
-                    rule: "MATCH",
-                    rulePayload: "",
-                ),
-            ],
-        )
-    }
-
-    static func mockRules() -> RulesResponse {
-        .init(rules: [
-            .init(type: "DOMAIN-SUFFIX", payload: "apple.com", proxy: "DIRECT"),
-            .init(type: "DOMAIN-SUFFIX", payload: "github.com", proxy: "Proxy"),
-            .init(type: "GEOIP", payload: "CN", proxy: "DIRECT"),
-            .init(type: "MATCH", payload: "", proxy: "Proxy"),
-        ])
-    }
-
-    static func mockProviders() -> ProvidersResponse {
-        let proxies = mockProxies().proxies
-        let providerProxies = ["Tokyo 01", "Singapore 02", "US West 03"].compactMap { proxies[$0] }
-        return .init(providers: [
-            "Demo": .init(
-                name: "Demo",
-                type: "Proxy",
-                vehicleType: "HTTP",
-                proxies: providerProxies,
-            ),
-        ])
-    }
-
-    static func mockDnsResults(search: String?) -> [DnsResult] {
-        let all: [DnsResult] = [
-            .init(name: "www.gstatic.com", ips: ["142.250.72.14"], fromServer: "119.29.29.29", ttl: 298),
-            .init(name: "github.com", ips: ["140.82.112.4"], fromServer: "223.5.5.5", ttl: 412),
-            .init(name: "api.github.com", ips: ["140.82.112.5"], fromServer: "223.5.5.5", ttl: 389),
-            .init(name: "apple.com", ips: ["17.253.144.10"], fromServer: "system", ttl: 600),
-        ]
-        guard let search, !search.isEmpty else { return all }
-        return all.filter { $0.name.localizedCaseInsensitiveContains(search) }
-    }
-
-    static func mockLogStream(level: String) -> AsyncThrowingStream<LogEntry, Error> {
-        AsyncThrowingStream { continuation in
-            let entries = [
-                LogEntry(type: level, payload: "simulator mock engine ready"),
-                LogEntry(type: "debug", payload: "mock controller served /proxies"),
-                LogEntry(type: "info", payload: "traffic snapshot updated"),
-            ]
-            let task = Task {
-                var index = 0
-                while !Task.isCancelled {
-                    continuation.yield(entries[index % entries.count])
-                    index += 1
-                    try? await Task.sleep(for: .seconds(1))
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
     }
 }

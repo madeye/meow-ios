@@ -12,6 +12,11 @@ public enum PreferenceKey {
     public static let ipv6Enabled = "com.meow.ipv6Enabled"
     public static let pendingIntent = "com.meow.pendingIntent"
     public static let selectedProfileID = "com.meow.selectedProfileID"
+    /// App-only bookkeeping for `DailyTrafficAccumulator` — the extension
+    /// never reads or writes this key. Lives in the App Group (rather than
+    /// the app's local `UserDefaults.standard`) purely for durability
+    /// alongside the rest of the shared state; no cross-process meaning.
+    public static let trafficAccumulatorBaseline = "com.meow.trafficAccumulatorBaseline"
 }
 
 public enum PreferenceDefaults {

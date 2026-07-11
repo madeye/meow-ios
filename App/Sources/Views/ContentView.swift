@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 /// Top-level tabs. Raw values double as the `-screenshotTab <value>` launch
@@ -10,9 +11,15 @@ enum ContentTab: String {
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SubscriptionService.self) private var subscriptionService
+    @Query private var profiles: [Profile]
     @State private var showDiagnostics = false
     @State private var importError: String?
     @State private var selectedTab: ContentTab = initialTab()
+    /// The confirmation currently on screen for a `meow://connect` deep
+    /// link, if any. A second deep link arriving while one is already
+    /// pending replaces it rather than stacking a second sheet (issue #293).
+    @State private var pendingDeepLinkConfirmation: DeepLinkImportConfirmation?
+    @State private var importingDeepLinkURLs: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,7 +53,19 @@ struct ContentView: View {
                 return
             }
             if let link = SubscriptionDeepLink.parse(url) {
-                Task { await handleSubscriptionImport(link) }
+                // Never fetch or import here — only build the confirmation.
+                // Replacing any already-pending confirmation (rather than
+                // stacking a second sheet) keeps a burst of replayed deep
+                // links from crashing or queuing indefinitely.
+                pendingDeepLinkConfirmation = DeepLinkImportConfirmation.make(
+                    for: link,
+                    existingProfiles: profiles.map { ($0.id, $0.url) },
+                )
+            }
+        }
+        .sheet(item: $pendingDeepLinkConfirmation) { confirmation in
+            DeepLinkConfirmationSheet(confirmation: confirmation) { action in
+                Task { await handleDeepLinkConfirmation(confirmation, action: action) }
             }
         }
         .fullScreenCover(isPresented: $showDiagnostics) {
@@ -81,15 +100,21 @@ struct ContentView: View {
     }
 
     @MainActor
-    private func handleSubscriptionImport(_ link: SubscriptionDeepLink) async {
+    private func handleDeepLinkConfirmation(
+        _ confirmation: DeepLinkImportConfirmation,
+        action: DeepLinkConfirmationAction,
+    ) async {
+        let url = confirmation.subscriptionURL.absoluteString
+        guard !importingDeepLinkURLs.contains(url) else { return }
+        importingDeepLinkURLs.insert(url)
+        defer { importingDeepLinkURLs.remove(url) }
+
+        let coordinator = DeepLinkImportCoordinator(subscriptionService: subscriptionService)
+        let existingProfile = confirmation.existingProfileID.flatMap { id in
+            profiles.first { $0.id == id }
+        }
         do {
-            let profile = try await subscriptionService.add(
-                name: link.name,
-                url: link.subscriptionURL.absoluteString,
-            )
-            if link.autoSelect {
-                try subscriptionService.select(profile)
-            }
+            try await coordinator.resolve(confirmation, action: action, existingProfile: existingProfile)
         } catch {
             importError = error.localizedDescription
         }

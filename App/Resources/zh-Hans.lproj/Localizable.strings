@@ -97,6 +97,21 @@
 "subscriptions.toolbar.addShadowsocks" = "添加 Shadowsocks 服务器";
 
 
+/* Deep-link import confirmation (meow://connect) */
+"deepLinkImport.nav.title" = "导入订阅";
+"deepLinkImport.section.subscription" = "此链接想要添加：";
+"deepLinkImport.field.name" = "名称";
+"deepLinkImport.field.host" = "主机";
+"deepLinkImport.warning.insecure" = "不安全的连接 — 此配置在传输过程中可能被篡改。如果服务商提供 https:// 链接，请优先使用。";
+"deepLinkImport.warning.acknowledge" = "我了解通过 HTTP 导入的风险";
+"deepLinkImport.notice.duplicate" = "已导入过此网址对应的订阅。继续操作将就地更新它，而不会新增重复项。";
+"deepLinkImport.button.import" = "导入";
+"deepLinkImport.button.update" = "更新现有订阅";
+"deepLinkImport.button.importAndActivate" = "导入并激活";
+"a11y.deepLinkImport.cancel" = "取消导入";
+"deepLinkImport.a11y.url %@" = "订阅网址：%@";
+
+
 /* Add Shadowsocks server sheet */
 "ssAdd.nav.title" = "添加 Shadowsocks";
 "ssAdd.section.link" = "链接";

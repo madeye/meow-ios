@@ -37,6 +37,16 @@ public enum SharedStore {
         return try? decoder.decode(TrafficSnapshot.self, from: data)
     }
 
+    public static func writeTrafficBaseline(_ baseline: TrafficBaseline) throws {
+        let data = try encoder.encode(baseline)
+        AppGroup.defaults.set(data, forKey: PreferenceKey.trafficAccumulatorBaseline)
+    }
+
+    public static func readTrafficBaseline() -> TrafficBaseline? {
+        guard let data = AppGroup.defaults.data(forKey: PreferenceKey.trafficAccumulatorBaseline) else { return nil }
+        return try? decoder.decode(TrafficBaseline.self, from: data)
+    }
+
     public static func queueIntent(_ intent: TunnelIntent) throws {
         let data = try encoder.encode(intent)
         AppGroup.defaults.set(data, forKey: PreferenceKey.pendingIntent)

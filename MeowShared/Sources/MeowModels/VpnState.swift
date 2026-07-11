@@ -86,6 +86,38 @@ public struct TrafficSnapshot: Codable, Sendable, Equatable {
     }
 }
 
+/// Durable reconciliation baseline for `DailyTrafficAccumulator`, persisted
+/// to the App Group so an app relaunch can credit bytes the extension
+/// counted while the app process was suspended or terminated.
+///
+/// `generation` is the engine-session identity to reconcile against — the
+/// extension's `VpnState.startedAt`, which `PacketTunnelProvider` sets fresh
+/// exactly once per successful `startTunnel` (see `writeState:"connected"`)
+/// and never rewrites again while that engine keeps running. Two snapshots
+/// sharing the same `generation` are guaranteed to come from the same
+/// continuously-running engine, so their cumulative counters are safely
+/// diffable; a different (or missing) `generation` means the engine was
+/// stopped and restarted since the baseline was captured, so counters must
+/// not be diffed (they may have reset to zero).
+public struct TrafficBaseline: Codable, Sendable, Equatable {
+    public var uploadBytes: Int64
+    public var downloadBytes: Int64
+    public var generation: Date?
+    public var capturedAt: Date
+
+    public init(
+        uploadBytes: Int64,
+        downloadBytes: Int64,
+        generation: Date?,
+        capturedAt: Date,
+    ) {
+        self.uploadBytes = uploadBytes
+        self.downloadBytes = downloadBytes
+        self.generation = generation
+        self.capturedAt = capturedAt
+    }
+}
+
 public enum TunnelCommand: String, Codable, Sendable {
     case start
     case stop

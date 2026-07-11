@@ -91,6 +91,21 @@
 "subscriptions.toolbar.addShadowsocks" = "Add Shadowsocks Server";
 
 
+/* Deep-link import confirmation (meow://connect) */
+"deepLinkImport.nav.title" = "Import Subscription";
+"deepLinkImport.section.subscription" = "This link wants to add:";
+"deepLinkImport.field.name" = "Name";
+"deepLinkImport.field.host" = "Host";
+"deepLinkImport.warning.insecure" = "Insecure connection — this profile can be tampered with in transit. Prefer an https:// link if the provider offers one.";
+"deepLinkImport.warning.acknowledge" = "I understand the risk of importing over HTTP";
+"deepLinkImport.notice.duplicate" = "A subscription with this URL is already imported. Continuing will update it in place instead of adding a duplicate.";
+"deepLinkImport.button.import" = "Import";
+"deepLinkImport.button.update" = "Update Existing Subscription";
+"deepLinkImport.button.importAndActivate" = "Import & Activate";
+"a11y.deepLinkImport.cancel" = "Cancel import";
+"deepLinkImport.a11y.url %@" = "Subscription URL: %@";
+
+
 /* Add Shadowsocks server sheet */
 "ssAdd.nav.title" = "Add Shadowsocks";
 "ssAdd.section.link" = "Link";

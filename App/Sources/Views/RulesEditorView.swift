@@ -260,9 +260,7 @@ struct RulesEditorView: View {
         do {
             let newYAML = try RulesYAMLEditor.apply(rules, to: profile.yamlContent)
             try MeowConfigValidator.validate(newYAML)
-            profile.yamlBackup = profile.yamlContent
-            profile.yamlContent = newYAML
-            try service.writeActiveConfig(profile)
+            try service.updateContent(profile, yaml: newYAML)
             hasUnsavedChanges = false
             dismiss()
         } catch {

@@ -12,15 +12,29 @@ final class SubscriptionService {
     private let modelContext: ModelContext
     private let session: URLSession
     private let converter: SubscriptionConverter
+    /// Directory + file the active config is written to. Defaults to the
+    /// real App Group container; tests inject a temporary directory so they
+    /// never touch the shared container (see `SubscriptionServiceTests`).
+    private let activeConfigDirectory: () -> URL
+    private let activeConfigURL: () -> URL
+    /// Suite the selected-profile preference is persisted to. Defaults to
+    /// the App Group suite; injectable for the same reason as above.
+    private let preferences: UserDefaults
 
     init(
         modelContext: ModelContext,
         session: URLSession = .shared,
         converter: SubscriptionConverter = ClashYAMLConverter(),
+        activeConfigDirectory: @escaping () -> URL = { AppGroup.containerURL },
+        activeConfigURL: @escaping () -> URL = { AppGroup.configURL },
+        preferences: UserDefaults = AppGroup.defaults,
     ) {
         self.modelContext = modelContext
         self.session = session
         self.converter = converter
+        self.activeConfigDirectory = activeConfigDirectory
+        self.activeConfigURL = activeConfigURL
+        self.preferences = preferences
     }
 
     // MARK: - CRUD
@@ -65,13 +79,7 @@ final class SubscriptionService {
         try MeowConfigValidator.validate(yaml)
 
         if let generated {
-            generated.yamlBackup = generated.yamlContent
-            generated.yamlContent = yaml
-            generated.lastUpdated = .now
-            try modelContext.save()
-            if generated.isSelected {
-                try writeActiveConfig(generated)
-            }
+            try updateContent(generated, yaml: yaml, lastUpdated: .now)
             return generated
         }
         let name = String(
@@ -84,16 +92,42 @@ final class SubscriptionService {
         return profile
     }
 
+    /// Refetch `profile`'s remote body and persist it. If `profile` is the
+    /// selected profile, atomically refreshes the active config file too —
+    /// refreshing an inactive profile only updates SwiftData.
     func refresh(_ profile: Profile) async throws {
         guard !profile.url.isEmpty else { throw SubscriptionError.invalidURL }
         let yaml = try await fetchAndNormalize(url: profile.url)
-        profile.yamlBackup = profile.yamlContent
-        profile.yamlContent = yaml
-        profile.lastUpdated = .now
-        try modelContext.save()
+        try updateContent(profile, yaml: yaml, lastUpdated: .now)
     }
 
+    /// Deletes `profile`. If it was the selected profile, this clears the
+    /// selected-profile preference and removes the active config file
+    /// rather than guessing a replacement — `writeEffectiveConfigWithPrefs`
+    /// (`PacketTunnel/Sources/MWTunnelEngine.m`) already fails coherently
+    /// (returns an error, doesn't crash) when `config.yaml` is absent, and
+    /// every "current selection" query in the UI (`SubscriptionsView`,
+    /// `HomeView`, `RulesView`, `ProxyGroupsView`, `GlobalVpnSwitchBar`)
+    /// already renders an empty/no-selection state when `isSelected` matches
+    /// nothing, so "no profile selected" is a well-supported state rather
+    /// than an edge case to special-case around.
     func delete(_ profile: Profile) throws {
+        let wasSelected = profile.isSelected
+        if wasSelected {
+            let previousPreference = preferences.string(forKey: PreferenceKey.selectedProfileID)
+            preferences.removeObject(forKey: PreferenceKey.selectedProfileID)
+            do {
+                try clearActiveConfig()
+            } catch {
+                // Active file couldn't be cleared — restore the preference and
+                // leave the profile in place rather than deleting it out from
+                // under a `config.yaml` that still references it.
+                if let previousPreference {
+                    preferences.set(previousPreference, forKey: PreferenceKey.selectedProfileID)
+                }
+                throw error
+            }
+        }
         modelContext.delete(profile)
         try modelContext.save()
     }
@@ -111,18 +145,70 @@ final class SubscriptionService {
     func select(_ profile: Profile) throws {
         let fetch = FetchDescriptor<Profile>()
         let all = try modelContext.fetch(fetch)
+        let previousSelectedIDs = Set(all.filter(\.isSelected).map(\.id))
+        let previousPreference = preferences.string(forKey: PreferenceKey.selectedProfileID)
         for p in all {
             p.isSelected = (p.id == profile.id)
         }
-        AppGroup.defaults.set(profile.id.uuidString, forKey: PreferenceKey.selectedProfileID)
-        try modelContext.save()
-        try writeActiveConfig(profile)
+        preferences.set(profile.id.uuidString, forKey: PreferenceKey.selectedProfileID)
+        do {
+            try modelContext.save()
+            try writeActiveConfig(profile)
+        } catch {
+            for p in all {
+                p.isSelected = previousSelectedIDs.contains(p.id)
+            }
+            if let previousPreference {
+                preferences.set(previousPreference, forKey: PreferenceKey.selectedProfileID)
+            } else {
+                preferences.removeObject(forKey: PreferenceKey.selectedProfileID)
+            }
+            try? modelContext.save()
+            throw error
+        }
+    }
+
+    /// Persist a new YAML body for `profile` — from a subscription refresh
+    /// or a manual YAML/rules edit — and, only when `profile` is currently
+    /// selected, atomically rewrite the active config file to match. Editing
+    /// or refreshing an inactive profile therefore never touches
+    /// `config.yaml`. Rolls the SwiftData change back if the active-file
+    /// write fails, so the two never diverge.
+    func updateContent(_ profile: Profile, yaml: String, lastUpdated: Date? = nil) throws {
+        let previousContent = profile.yamlContent
+        let previousBackup = profile.yamlBackup
+        let previousLastUpdated = profile.lastUpdated
+        profile.yamlBackup = profile.yamlContent
+        profile.yamlContent = yaml
+        if let lastUpdated {
+            profile.lastUpdated = lastUpdated
+        }
+        do {
+            try modelContext.save()
+            if profile.isSelected {
+                try writeActiveConfig(profile)
+            }
+        } catch {
+            profile.yamlContent = previousContent
+            profile.yamlBackup = previousBackup
+            profile.lastUpdated = previousLastUpdated
+            try? modelContext.save()
+            throw error
+        }
     }
 
     func writeActiveConfig(_ profile: Profile) throws {
-        let dir = AppGroup.containerURL
+        let dir = activeConfigDirectory()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try profile.yamlContent.write(to: AppGroup.configURL, atomically: true, encoding: .utf8)
+        try profile.yamlContent.write(to: activeConfigURL(), atomically: true, encoding: .utf8)
+    }
+
+    /// Removes the active config file, if present. Used when the selected
+    /// profile is deleted so `config.yaml` never outlives its profile.
+    func clearActiveConfig() throws {
+        let url = activeConfigURL()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
     }
 
     // MARK: - Fetch + normalize

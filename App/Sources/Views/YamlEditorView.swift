@@ -70,9 +70,7 @@ struct YamlEditorView: View {
         }
         do {
             try MeowConfigValidator.validate(text)
-            profile.yamlBackup = profile.yamlContent
-            profile.yamlContent = text
-            try service.writeActiveConfig(profile)
+            try service.updateContent(profile, yaml: text)
             dismiss()
         } catch {
             self.error = error.localizedDescription
