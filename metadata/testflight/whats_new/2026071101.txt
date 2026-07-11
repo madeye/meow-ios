@@ -1,0 +1,6 @@
+Build 2026071101 (1.3.2)
+
+• Dark mode is here — the whole app now follows your system appearance, with a refreshed color theme matched to the app icon.
+• Fixed the Connections screen showing "0 connections" with a data-format error while traffic was flowing; live connections now list reliably, and direct-IP connections show their destination address.
+• Fixed issues with opening profiles, the traffic chart, logs, and meow:// deep links.
+• Bundled geo data (GeoIP/GeoSite) now updates correctly when the app itself is upgraded.
