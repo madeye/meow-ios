@@ -51,10 +51,7 @@ struct ConnectionsView: View {
     // swiftlint:disable:next function_body_length
     private func row(for conn: Connection) -> some View {
         let slug = conn.id.identifierSlug
-        // meow-rs's `/connections` doesn't ship per-connection metadata
-        // yet (meow-api routes.rs:281-289), so fall back to the rule label
-        // when host/port/network aren't available.
-        let host = conn.metadata?.host ?? conn.rule
+        let host = Self.title(for: conn)
         let port = conn.metadata?.destinationPort ?? ""
         let network = conn.metadata?.network.uppercased() ?? "TCP"
         let address = port.isEmpty ? host : "\(host):\(port)"
@@ -108,6 +105,12 @@ struct ConnectionsView: View {
         }
     }
 
+    /// Row title: sniffed host, else destination IP (direct-IP connections
+    /// have an empty `host`), else the rule label.
+    private static func title(for conn: Connection) -> String {
+        conn.metadata.flatMap { $0.host.isEmpty ? $0.destinationIP : $0.host } ?? conn.rule
+    }
+
     private func errorBanner(_ message: String) -> some View {
         ErrorBanner(
             message: message,
@@ -119,7 +122,7 @@ struct ConnectionsView: View {
     private var filtered: [Connection] {
         guard !query.isEmpty else { return connections }
         return connections.filter { conn in
-            (conn.metadata?.host ?? conn.rule).localizedCaseInsensitiveContains(query)
+            Self.title(for: conn).localizedCaseInsensitiveContains(query)
         }
     }
 

@@ -28,8 +28,8 @@ struct ProxiesResponse: Decodable {
 
 struct Connection: Decodable, Identifiable {
     let id: String
-    // meow-rs's `/connections` payload (meow-api routes.rs:281-289)
-    // omits the per-connection metadata block today, so leave this optional.
+    // Optional so an idle engine (or an older build without meow-rs#241,
+    // which added the block) still decodes.
     let metadata: Metadata?
     let upload: Int64
     let download: Int64
@@ -38,14 +38,50 @@ struct Connection: Decodable, Identifiable {
     let rule: String
     let rulePayload: String
 
+    /// Only the fields ConnectionsView reads — same lesson as
+    /// `Proxy.History.time` above: every extra field decoded here is a way
+    /// for the WHOLE /connections payload to become undecodable. meow-rs
+    /// serializes `Metadata` (meow-common metadata.rs) with ports as JSON
+    /// numbers (`u16`) and `sourceIP`/`destinationIP` as nullable —
+    /// decoding the port as `String` blanked the screen the moment any
+    /// connection was active.
     struct Metadata: Decodable {
         let network: String
-        let type: String
-        let sourceIP: String
-        let destinationIP: String
-        let destinationPort: String
         let host: String
+        /// Kept as `String` for display; accepts both the engine's numeric
+        /// port and mihomo-compat string ports.
+        let destinationPort: String
+        /// Nullable on the wire (`Option<IpAddr>`); shown when `host` is
+        /// empty (no SNI/DNS sniff, direct-IP connection).
+        let destinationIP: String?
+
+        init(network: String, host: String, destinationPort: String, destinationIP: String?) {
+            self.network = network
+            self.host = host
+            self.destinationPort = destinationPort
+            self.destinationIP = destinationIP
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: ConnectionMetadataKeys.self)
+            network = try container.decodeIfPresent(String.self, forKey: .network) ?? ""
+            host = try container.decodeIfPresent(String.self, forKey: .host) ?? ""
+            destinationIP = try container.decodeIfPresent(String.self, forKey: .destinationIP)
+            if let port = try? container.decode(String.self, forKey: .destinationPort) {
+                destinationPort = port
+            } else if let port = try? container.decode(Int.self, forKey: .destinationPort) {
+                destinationPort = String(port)
+            } else {
+                destinationPort = ""
+            }
+        }
     }
+}
+
+/// Top-level so `Connection.Metadata` stays within swiftlint's 1-level
+/// type-nesting budget.
+private enum ConnectionMetadataKeys: String, CodingKey {
+    case network, host, destinationPort, destinationIP
 }
 
 struct ConnectionsResponse: Decodable {
