@@ -132,12 +132,14 @@ struct DeepLinkImportConfirmationTests {
     @MainActor
     func `import-only fetches and persists a new profile without selecting it`() async throws {
         let (coordinator, context) = try makeCoordinator()
-        let remote = URL(string: "https://example.com/sub.yaml")!
-        URLProtocolStub.responses[remote] = .init(body: Data("proxies: []\nproxy-groups: []\n".utf8))
-        defer { URLProtocolStub.reset() }
+        // Unique URL per test: stubs are process-global and tests run
+        // concurrently, so sharing one URL races bodies across tests.
+        let remote = URL(string: "https://example.com/import-only.yaml")!
+        URLProtocolStub.stub(remote, with: .init(body: Data("proxies: []\nproxy-groups: []\n".utf8)))
+        defer { URLProtocolStub.removeStub(remote) }
 
         let link = try #require(SubscriptionDeepLink.parse(
-            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml&select=1")!,
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fimport-only.yaml&select=1")!,
         ))
         let confirmation = DeepLinkImportConfirmation.make(for: link, existingProfiles: [])
 
@@ -156,12 +158,12 @@ struct DeepLinkImportConfirmationTests {
     @MainActor
     func `import-and-activate fetches, persists, and selects the profile`() async throws {
         let (coordinator, context) = try makeCoordinator()
-        let remote = URL(string: "https://example.com/sub.yaml")!
-        URLProtocolStub.responses[remote] = .init(body: Data("proxies: []\nproxy-groups: []\n".utf8))
-        defer { URLProtocolStub.reset() }
+        let remote = URL(string: "https://example.com/import-activate.yaml")!
+        URLProtocolStub.stub(remote, with: .init(body: Data("proxies: []\nproxy-groups: []\n".utf8)))
+        defer { URLProtocolStub.removeStub(remote) }
 
         let link = try #require(SubscriptionDeepLink.parse(
-            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml&select=1")!,
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fimport-activate.yaml&select=1")!,
         ))
         let confirmation = DeepLinkImportConfirmation.make(for: link, existingProfiles: [])
 
@@ -180,12 +182,12 @@ struct DeepLinkImportConfirmationTests {
         // confirmation that never offered it (no select=1 on the link), the
         // coordinator refuses to select the profile.
         let (coordinator, context) = try makeCoordinator()
-        let remote = URL(string: "https://example.com/sub.yaml")!
-        URLProtocolStub.responses[remote] = .init(body: Data("proxies: []\nproxy-groups: []\n".utf8))
-        defer { URLProtocolStub.reset() }
+        let remote = URL(string: "https://example.com/no-select.yaml")!
+        URLProtocolStub.stub(remote, with: .init(body: Data("proxies: []\nproxy-groups: []\n".utf8)))
+        defer { URLProtocolStub.removeStub(remote) }
 
         let link = try #require(SubscriptionDeepLink.parse(
-            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml")!,
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fno-select.yaml")!,
         ))
         #expect(link.autoSelect == false)
         let confirmation = DeepLinkImportConfirmation.make(for: link, existingProfiles: [])
@@ -201,18 +203,19 @@ struct DeepLinkImportConfirmationTests {
     @MainActor
     func `replaying a deep link for an already-imported URL updates in place instead of duplicating`() async throws {
         let (coordinator, context) = try makeCoordinator()
-        let remote = "https://example.com/sub.yaml"
+        let remote = "https://example.com/replay.yaml"
         let existing = Profile(name: "Old Name", url: remote, yamlContent: "proxies: []\nproxy-groups: []\n")
         context.insert(existing)
         try context.save()
 
-        URLProtocolStub.responses[URL(string: remote)!] = .init(
-            body: Data("proxies: []\nproxy-groups: []\n# refreshed\n".utf8),
+        URLProtocolStub.stub(
+            URL(string: remote)!,
+            with: .init(body: Data("proxies: []\nproxy-groups: []\n# refreshed\n".utf8)),
         )
-        defer { URLProtocolStub.reset() }
+        defer { URLProtocolStub.removeStub(URL(string: remote)!) }
 
         let link = try #require(SubscriptionDeepLink.parse(
-            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Fsub.yaml")!,
+            URL(string: "meow://connect?url=https%3A%2F%2Fexample.com%2Freplay.yaml")!,
         ))
         let confirmation = DeepLinkImportConfirmation.make(
             for: link,

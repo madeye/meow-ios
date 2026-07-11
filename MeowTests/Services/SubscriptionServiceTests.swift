@@ -53,7 +53,7 @@ struct SubscriptionServiceTests {
     }
 
     private func stubbedSession(url: String, yaml: String) -> URLSession {
-        URLProtocolStub.responses[URL(string: url)!] = .init(body: Data(yaml.utf8))
+        URLProtocolStub.stub(URL(string: url)!, with: .init(body: Data(yaml.utf8)))
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLProtocolStub.self]
         return URLSession(configuration: config)
@@ -107,7 +107,7 @@ struct SubscriptionServiceTests {
     func `refresh of the selected profile atomically rewrites the active file`() async throws {
         let url = "https://example.com/selected.yaml"
         let refreshed = "proxies:\n  - name: refreshed\n    type: direct\n"
-        defer { URLProtocolStub.reset() }
+        defer { URLProtocolStub.removeStub(URL(string: url)!) }
         let harness = try makeService(session: stubbedSession(url: url, yaml: refreshed))
         let service = harness.service
         let context = harness.context
@@ -132,7 +132,7 @@ struct SubscriptionServiceTests {
     func `refresh of an inactive profile updates SwiftData but not the active file`() async throws {
         let url = "https://example.com/inactive.yaml"
         let refreshed = "proxies:\n  - name: refreshed\n    type: direct\n"
-        defer { URLProtocolStub.reset() }
+        defer { URLProtocolStub.removeStub(URL(string: url)!) }
         let harness = try makeService(session: stubbedSession(url: url, yaml: refreshed))
         let service = harness.service
         let context = harness.context
@@ -283,7 +283,7 @@ struct SubscriptionServiceTests {
 
     @Test(.disabled("blocked on T4.5"))
     func `happy-path fetch returns body string`() {
-        // URLProtocolStub.responses[url] = .init(body: "mixed-port: 7890\n".data)
+        // URLProtocolStub.stub(url, with: .init(body: "mixed-port: 7890\n".data))
         // let body = try await service.fetchSubscription(url: url)
         // #expect(body.contains("mixed-port"))
     }
