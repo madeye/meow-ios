@@ -15,6 +15,7 @@
 		0AAE287B7127912BEE7EFC15 /* HomeScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59B5D27EF37B635FC5B38AA /* HomeScreenTests.swift */; };
 		0B13BCBE3F3A575D7E213399 /* TunnelLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB11E2BC5612E27CCE83B0DC /* TunnelLifecycleTests.swift */; };
 		0BDA436570A2C655E8210F0C /* TunnelSettingsLANExclusionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703008DEDF15E37B8C951A9A /* TunnelSettingsLANExclusionTests.swift */; };
+		0D7669C4305C607B8C449A54 /* GeoAssetStagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */; };
 		0F59DC382F259493E472348F /* URLProtocolStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819D62E17DBC5BC82869FA81 /* URLProtocolStub.swift */; };
 		1413B423DEE5A4AE17B4F677 /* DiagnosticsLabelParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51C2BC68B7800884B68643F /* DiagnosticsLabelParserTests.swift */; };
 		16FA48C705C2691763DE4187 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 8895187DE158A91BFC1775BE /* Localizable.strings */; };
@@ -253,6 +254,7 @@
 		71FF15AE48B5E9FFE60B4051 /* PacketTunnelProvider.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PacketTunnelProvider.m; sourceTree = "<group>"; };
 		729BDB9DF0375708DCD8F84E /* TrafficAccumulatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficAccumulatorTests.swift; sourceTree = "<group>"; };
 		797EA53C272DDA3EC6E73E6F /* MWDarwinBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWDarwinBridge.h; sourceTree = "<group>"; };
+		7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoAssetStagerTests.swift; sourceTree = "<group>"; };
 		7D936CF5D2CCA1B2D180C2D6 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellTests.swift; sourceTree = "<group>"; };
 		7ED84393AA4FF1CADF9FCC53 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		819D62E17DBC5BC82869FA81 /* URLProtocolStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolStub.swift; sourceTree = "<group>"; };
@@ -477,6 +479,7 @@
 		546289FB1F7F3C7197D240BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */,
 				F5B378E3EF2591C9CD059E98 /* ShadowsocksAddServiceTests.swift */,
 				B306CE837FA7A17D7D561877 /* SubscriptionDeepLinkTests.swift */,
 				A43280DA576025F244CD1432 /* SubscriptionServiceTests.swift */,
@@ -1126,6 +1129,7 @@
 				1413B423DEE5A4AE17B4F677 /* DiagnosticsLabelParserTests.swift in Sources */,
 				9D59A8F980E180CECE858F27 /* DnsTests.swift in Sources */,
 				74FE3E67A25CF1CE3E141EE2 /* EmojiGroupSelectNodeTests.swift in Sources */,
+				0D7669C4305C607B8C449A54 /* GeoAssetStagerTests.swift in Sources */,
 				1DEF3FB14FBD667C00541BFF /* IdentifierSlugTests.swift in Sources */,
 				5915355710B88CF6038756E6 /* KeychainStoreTests.swift in Sources */,
 				E64DA5B39E08AF0DF25BFCBC /* LocalizableParityTests.swift in Sources */,
