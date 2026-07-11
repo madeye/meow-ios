@@ -1,0 +1,21 @@
+# Fully synthetic smoke-test config for meow-utun. Reserved example
+# domains/addresses (RFC 2606 / RFC 5737) and a throwaway password —
+# nothing here corresponds to a real deployment.
+#
+# Real subscription snapshots or personal server configs must never be
+# committed: keep them outside the repo or name them *.local.yaml
+# (gitignored here).
+mixed-port: 7890
+log-level: info
+
+proxies:
+  - name: "example-ss"
+    type: ss
+    server: ss.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: synthetic-test-password
+    udp: true
+
+rules:
+  - MATCH,example-ss

@@ -1,0 +1,4 @@
+# Local harness configs (real subscription snapshots, personal servers)
+# stay out of git. Name yours *.local.yaml / *.local.yml.
+*.local.yaml
+*.local.yml

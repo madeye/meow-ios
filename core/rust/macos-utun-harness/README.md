@@ -30,6 +30,14 @@ sudo ./target/release/meow-utun \
     --home   /tmp/meow-home
 ```
 
+`example-config.yaml` in this directory is a fully synthetic smoke-test
+config (reserved example domains, throwaway password). To test against a
+real server or subscription snapshot, copy it to `<anything>.local.yaml`
+and edit that — `*.local.yaml` / `*.local.yml` are gitignored here.
+Never commit real server addresses, passwords, or subscription dumps;
+treat any credential that lands in git history as compromised and rotate
+it.
+
 The binary opens utun, prints `utun ready as utunN`, then waits. In a
 second shell (still as root) configure the interface + routing:
 
