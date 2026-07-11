@@ -356,7 +356,20 @@ private extension VpnManager {
         ProcessInfo.processInfo.arguments.contains("-ResetState")
     }
 
+    /// `-ScreenshotDemo` (with `-UITests`) makes the mock tunnel launch
+    /// already connected, so the App Store screenshot harness captures the
+    /// connected header and a populated Proxy Groups tab instead of the
+    /// fresh-install disconnected state.
+    nonisolated static var screenshotDemoRequested: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-UITests") && args.contains("-ScreenshotDemo")
+    }
+
     func refreshMockTunnel() {
+        if Self.screenshotDemoRequested {
+            applyMockState(.init(stage: .connected, startedAt: Date(timeIntervalSinceNow: -3600)))
+            return
+        }
         if Self.shouldResetMockState {
             applyMockState(.init(stage: .stopped))
             return

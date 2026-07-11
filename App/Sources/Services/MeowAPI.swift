@@ -458,7 +458,7 @@ private extension MeowAPI {
             "Tokyo 01": .init(name: "Tokyo 01", type: "Shadowsocks", now: nil, all: nil, history: history),
             "Singapore 02": .init(
                 name: "Singapore 02",
-                type: "Vmess",
+                type: "VLESS",
                 now: nil,
                 all: nil,
                 history: singaporeHistory,

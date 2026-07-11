@@ -83,6 +83,11 @@ struct ProxyGroupsView: View {
 }
 
 private extension ProxyGroupsView {
+    static var screenshotDemoRequested: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-UITests") && args.contains("-ScreenshotDemo")
+    }
+
     func refresh() async {
         guard vpnManager.stage == .connected else {
             groups = []
@@ -93,6 +98,11 @@ private extension ProxyGroupsView {
             let resp = try await meowAPI.getProxies()
             groups = ProxyGroupModel.build(from: resp.proxies)
             loadError = nil
+            // Screenshot harness: expand the first group so captures show
+            // member proxies and delay badges, not just collapsed cards.
+            if Self.screenshotDemoRequested, expandedGroupID == nil {
+                expandedGroupID = groups.first?.id
+            }
         } catch {
             loadError = String(
                 localized: "home.error.apiUnavailable",

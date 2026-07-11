@@ -64,7 +64,7 @@ for dev in "${DEVICE_NAMES[@]}"; do
             name="${entry%%:*}"; tab="${entry##*:}"
             xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl launch "$udid" "$BUNDLE_ID" \
-                -UITests -ResetState \
+                -UITests -ResetState -ScreenshotDemo \
                 -AppleLanguages "($locale)" -AppleLocale "$loc_underscore" \
                 -screenshotTab "$tab" >/dev/null
             sleep 3

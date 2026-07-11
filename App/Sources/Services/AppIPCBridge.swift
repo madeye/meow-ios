@@ -112,6 +112,16 @@ private extension AppIPCBridge {
     }
 
     func startMockIPC() {
+        if Self.screenshotDemoRequested {
+            currentState = .init(stage: .connected, startedAt: Date(timeIntervalSinceNow: -3600))
+            try? SharedStore.writeState(currentState)
+            currentTraffic = Self.mockTraffic(tick: 0)
+            relayMemstats(currentTraffic)
+            onTrafficDidUpdate?(currentTraffic)
+            configureMockTrafficTask()
+            return
+        }
+
         let persisted = Self.shouldResetMockState ? nil : SharedStore.readState()
         currentState = if let persisted, persisted.errorMessage == nil {
             persisted
@@ -180,6 +190,13 @@ private extension AppIPCBridge {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-screenshotTab"), i + 1 < args.count else { return false }
         return args[i + 1] == "traffic"
+    }
+
+    /// Mirrors `VpnManager.screenshotDemoRequested` — the screenshot harness
+    /// launches already connected, with the mock traffic ticker running.
+    nonisolated static var screenshotDemoRequested: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-UITests") && args.contains("-ScreenshotDemo")
     }
 
     nonisolated static func mockTraffic(tick: Int64) -> TrafficSnapshot {
