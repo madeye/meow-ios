@@ -57,6 +57,59 @@ jobs:
           path: MeowCore/Frameworks/MeowCore.xcframework
           if-no-files-found: error
 
+  aux-rust-geosite-mrs-builder:
+    # Standalone build-time tool (core/rust/geosite-mrs-builder) — not part of
+    # the meow-ios-ffi tree build-core exercises, and not covered by
+    # scripts/build-rust.sh. It has no Darwin-specific dependencies (plain
+    # anyhow/ureq/meow-rules), so ubuntu is sufficient and cheaper than a
+    # macOS runner. See issue #294: this crate silently drifted out of CI and
+    # broke after a meow-rules API change.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry, git, and build target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core/rust/geosite-mrs-builder/target
+          key: cargo-${{ runner.os }}-geosite-mrs-builder-${{ hashFiles('core/rust/geosite-mrs-builder/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-geosite-mrs-builder-
+      - name: cargo test --locked
+        working-directory: core/rust/geosite-mrs-builder
+        run: cargo test --locked
+
+  aux-rust-macos-utun-harness:
+    # Standalone developer harness (core/rust/macos-utun-harness) that path-
+    # depends on meow-ios-ffi directly (not the built xcframework), so it
+    # needs a native macOS build of the same FFI crate build-core packages
+    # for iOS. Requires macOS for the utun/objc2/dispatch2 surface. See
+    # issue #294: this crate imported a since-removed FFI symbol
+    # (meow_tun_set_accept_cap — TCP accept caps were deliberately removed,
+    # issues #259/#260) and drifted out of CI undetected.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry, git, and build target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core/rust/macos-utun-harness/target
+          key: cargo-${{ runner.os }}-macos-utun-harness-${{ hashFiles('core/rust/macos-utun-harness/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-macos-utun-harness-
+      - name: cargo test --locked
+        working-directory: core/rust/macos-utun-harness
+        run: cargo test --locked
+
   unit-test:
     needs: [build-core]
     # macos-15: required for Xcode 26 / Swift 6.2, which MeowShared/Package.swift

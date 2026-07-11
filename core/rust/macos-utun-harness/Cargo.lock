@@ -118,6 +118,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -197,7 +209,7 @@ dependencies = [
  "sha1",
  "sync_wrapper",
  "tokio",
- "tokio-tungstenite 0.29.0",
+ "tokio-tungstenite",
  "tower",
  "tower-layer",
  "tower-service",
@@ -281,6 +293,15 @@ name = "bitflags"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest",
+]
 
 [[package]]
 name = "blake3"
@@ -607,6 +628,15 @@ name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+dependencies = [
+ "crossbeam-utils",
+]
 
 [[package]]
 name = "crossbeam-deque"
@@ -1071,6 +1101,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "h3"
+version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10872b55cfb02a821b69dc7cf8dc6a71d6af25eb9a79662bec4a9d016056b3be"
+dependencies = [
+ "bytes",
+ "fastrand",
+ "futures-util",
+ "http",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "h3-quinn"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2e732c8d91a74731663ac8479ab505042fbf547b9a207213ab7fbcbfc4f8b4"
+dependencies = [
+ "bytes",
+ "futures",
+ "h3",
+ "quinn",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1198,6 +1256,12 @@ dependencies = [
  "http-body",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range-header"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "httparse"
@@ -1706,8 +1770,8 @@ dependencies = [
 
 [[package]]
 name = "meow-api"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "axum",
  "base64",
@@ -1738,8 +1802,8 @@ dependencies = [
 
 [[package]]
 name = "meow-common"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1754,14 +1818,15 @@ dependencies = [
  "socket2 0.5.10",
  "subtle",
  "thiserror 2.0.18",
+ "time",
  "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "meow-config"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1793,8 +1858,8 @@ dependencies = [
 
 [[package]]
 name = "meow-dns"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "async-trait",
  "dashmap 6.2.1",
@@ -1810,6 +1875,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "smallvec",
  "smol_str",
  "thiserror 2.0.18",
  "tokio",
@@ -1834,6 +1900,7 @@ dependencies = [
  "meow-common",
  "meow-config",
  "meow-dns",
+ "meow-listener",
  "meow-proxy",
  "meow-tunnel",
  "oslog",
@@ -1843,40 +1910,65 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tokio",
+ "tokio-util",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
  "url",
  "urlencoding",
 ]
 
 [[package]]
+name = "meow-listener"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
+dependencies = [
+ "base64",
+ "libc",
+ "meow-common",
+ "meow-trie",
+ "meow-tunnel",
+ "smallvec",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "meow-proxy"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "aes",
  "aes-gcm",
+ "argon2",
  "async-trait",
  "base64",
+ "blake2",
  "bytes",
  "chacha20poly1305",
  "crc32fast",
  "futures",
+ "h3",
+ "h3-quinn",
  "hex",
  "hmac",
+ "http",
  "libc",
  "md-5",
  "meow-common",
  "meow-dns",
  "meow-transport",
  "parking_lot",
+ "quinn",
  "rand 0.9.4",
  "rustls",
  "serde_json",
  "sha2",
  "shadowsocks",
+ "smallvec",
  "smol_str",
  "socket2 0.5.10",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-rustls",
  "tracing",
@@ -1885,8 +1977,8 @@ dependencies = [
 
 [[package]]
 name = "meow-rules"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "ipnet",
  "iprange",
@@ -1902,9 +1994,10 @@ dependencies = [
 
 [[package]]
 name = "meow-transport"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
+ "aes-gcm",
  "async-trait",
  "base64",
  "boring",
@@ -1912,15 +2005,17 @@ dependencies = [
  "bytes",
  "futures-util",
  "h2",
+ "hmac",
  "http",
  "httparse",
  "rand 0.9.4",
  "rustls",
+ "sha2",
  "thiserror 2.0.18",
  "tokio",
  "tokio-boring",
  "tokio-rustls",
- "tokio-tungstenite 0.24.0",
+ "tokio-tungstenite",
  "tracing",
  "webpki-root-certs",
  "webpki-roots 0.26.11",
@@ -1928,20 +2023,18 @@ dependencies = [
 
 [[package]]
 name = "meow-trie"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
-dependencies = [
- "smallvec",
-]
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 
 [[package]]
 name = "meow-tunnel"
-version = "0.11.0"
-source = "git+https://github.com/madeye/meow-rs?rev=71871a309e9e47945cb0fdf832e5e2a4425a7bea#71871a309e9e47945cb0fdf832e5e2a4425a7bea"
+version = "0.16.0"
+source = "git+https://github.com/madeye/meow-rs?rev=498967eed346477cf1d70760aa0b696c8b026291#498967eed346477cf1d70760aa0b696c8b026291"
 dependencies = [
  "arc-swap",
  "async-trait",
  "dashmap 6.2.1",
+ "ipnet",
  "itoa",
  "meow-common",
  "meow-dns",
@@ -1949,6 +2042,7 @@ dependencies = [
  "meow-rules",
  "meow-trie",
  "parking_lot",
+ "regex",
  "serde",
  "smallvec",
  "smol_str",
@@ -1962,6 +2056,16 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
 
 [[package]]
 name = "minimal-lexical"
@@ -2106,6 +2210,17 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
@@ -2259,6 +2374,7 @@ checksum = "b9e20a958963c291dc322d98411f541009df2ced7b5a4f2bd52337638cfccf20"
 dependencies = [
  "bytes",
  "cfg_aliases",
+ "futures-io",
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
@@ -2329,22 +2445,11 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rand"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
-dependencies = [
- "libc",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44c5af06bb1b7d3216d91932aed5265164bf384dc89cd6ba05cf59a35f5f76ea"
 dependencies = [
- "rand_chacha 0.9.0",
+ "rand_chacha",
  "rand_core 0.9.5",
 ]
 
@@ -2357,16 +2462,6 @@ dependencies = [
  "chacha20 0.10.0",
  "getrandom 0.4.2",
  "rand_core 0.10.1",
-]
-
-[[package]]
-name = "rand_chacha"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -2963,6 +3058,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "symlink"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7973cce6668464ea31f176d85b13c7ab3bba2cb3b77a2ed26abd7801688010a"
+
+[[package]]
 name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3193,18 +3294,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
-dependencies = [
- "futures-util",
- "log",
- "tokio",
- "tungstenite 0.24.0",
-]
-
-[[package]]
-name = "tokio-tungstenite"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
@@ -3212,7 +3301,7 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite 0.29.0",
+ "tungstenite",
 ]
 
 [[package]]
@@ -3224,6 +3313,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
@@ -3293,10 +3383,19 @@ checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
 dependencies = [
  "bitflags",
  "bytes",
+ "futures-core",
  "futures-util",
  "http",
  "http-body",
+ "http-body-util",
+ "http-range-header",
+ "httpdate",
+ "mime",
+ "mime_guess",
+ "percent-encoding",
  "pin-project-lite",
+ "tokio",
+ "tokio-util",
  "tower",
  "tower-layer",
  "tower-service",
@@ -3325,6 +3424,19 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-appender"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "050686193eb999b4bb3bc2acfa891a13da00f79734704c4b8b4ef1a10b368a3c"
+dependencies = [
+ "crossbeam-channel",
+ "symlink",
+ "thiserror 2.0.18",
+ "time",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3409,24 +3521,6 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tungstenite"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
-dependencies = [
- "byteorder",
- "bytes",
- "data-encoding",
- "http",
- "httparse",
- "log",
- "rand 0.8.6",
- "sha1",
- "thiserror 1.0.69",
- "utf-8",
-]
-
-[[package]]
-name = "tungstenite"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c01152af293afb9c7c2a57e4b559c5620b421f6d133261c60dd2d0cdb38e6b8"
@@ -3446,6 +3540,12 @@ name = "typenum"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40ce102ab67701b8526c123c1bab5cbe42d7040ccfd0f64af1a385808d2f43de"
+
+[[package]]
+name = "unicase"
+version = "2.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
 
 [[package]]
 name = "unicode-ident"
@@ -3498,12 +3598,6 @@ name = "urlencoding"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
-
-[[package]]
-name = "utf-8"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utf8_iter"

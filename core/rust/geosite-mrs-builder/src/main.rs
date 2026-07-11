@@ -272,7 +272,9 @@ mod tests {
     #[test]
     fn loads_back_via_geosite_db() {
         let bytes = std::fs::read("../../../App/Resources/GeoData/geosite.mrs").expect("read mrs");
-        let db = meow_rules::geosite::GeositeDB::from_bytes(&bytes).expect("load mrs");
+        // `None` = no category filter, load everything (preserves prior behavior
+        // from before `from_bytes` gained the category-filter argument).
+        let db = meow_rules::geosite::GeositeDB::from_bytes(&bytes, None).expect("load mrs");
         assert!(db.category_count() > 100, "expected many categories");
     }
 }

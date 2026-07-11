@@ -426,6 +426,7 @@ dependencies = [
  "ipnetwork",
  "log",
  "memchr",
+ "memmap2",
  "serde",
  "thiserror",
 ]
@@ -437,9 +438,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "memmap2"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "meow-common"
-version = "0.8.0"
-source = "git+https://github.com/madeye/meow-rs?rev=27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f#27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
 dependencies = [
  "async-trait",
  "bytes",
@@ -460,8 +470,8 @@ dependencies = [
 
 [[package]]
 name = "meow-rules"
-version = "0.8.0"
-source = "git+https://github.com/madeye/meow-rs?rev=27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f#27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
 dependencies = [
  "ipnet",
  "iprange",
@@ -477,8 +487,8 @@ dependencies = [
 
 [[package]]
 name = "meow-trie"
-version = "0.8.0"
-source = "git+https://github.com/madeye/meow-rs?rev=27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f#27f9d79bf31e7b23d1ccc98fbfe15ab16361ad9f"
+version = "0.11.0"
+source = "git+https://github.com/madeye/meow-rs?rev=f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a#f5dd5707ad8138a37361b0c6a8ec58c736e3bf0a"
 dependencies = [
  "smallvec",
 ]
