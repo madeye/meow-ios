@@ -72,6 +72,10 @@ enum AppModelContainer {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-UITests"), args.contains("-ScreenshotDemo") else { return }
         let context = ModelContext(container)
+        // The store persists across launches; without this guard every
+        // relaunch of the harness stacks another duplicate demo profile.
+        let seeded = (try? context.fetchCount(FetchDescriptor<Profile>())) ?? 0
+        guard seeded == 0 else { return }
         context.insert(Profile(
             name: "Meow Cloud",
             url: "https://example.com/meow-cloud.yaml",

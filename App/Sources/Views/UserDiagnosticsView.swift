@@ -25,7 +25,6 @@ import SwiftUI
 /// worse signal than one clear "needs VPN" message.
 struct UserDiagnosticsView: View {
     @Environment(VpnManager.self) private var vpnManager
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var error: String?
 
     var body: some View {
@@ -76,27 +75,11 @@ struct UserDiagnosticsView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppTheme.warning)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.caption)
-                .lineLimit(2)
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            reduceTransparency
-                ? AnyShapeStyle(Color(.secondarySystemBackground))
-                : AnyShapeStyle(.regularMaterial),
-            in: .rect(cornerRadius: 8),
+        ErrorBanner(
+            message: message,
+            accessibilityLabel: Text("a11y.userDiagnostics.errorBanner \(message)"),
+            identifier: "userDiagnostics.errorBanner",
         )
-        .padding(.horizontal)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("a11y.userDiagnostics.errorBanner \(message)"))
-        .accessibilityIdentifier("userDiagnostics.errorBanner")
         .onAppear {
             AccessibilityNotification.Announcement(message).post()
         }

@@ -4,6 +4,7 @@ struct ErrorBanner: View {
     let message: String
     let accessibilityLabel: Text
     let identifier: String
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         HStack(spacing: 8) {
@@ -17,7 +18,12 @@ struct ErrorBanner: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: .rect(cornerRadius: 8))
+        .background(
+            reduceTransparency
+                ? AnyShapeStyle(Color(.secondarySystemBackground))
+                : AnyShapeStyle(.regularMaterial),
+            in: .rect(cornerRadius: 12),
+        )
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)

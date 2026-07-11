@@ -1,39 +1,49 @@
 import SwiftUI
 
-private extension Color {
-    init(hex: Int, opacity: Double = 1) {
+private extension UIColor {
+    convenience init(hex: Int) {
         self.init(
-            .sRGB,
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255,
-            opacity: opacity,
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1,
         )
     }
 }
 
+private extension Color {
+    /// Dynamic brand color: resolves per trait collection so every AppTheme
+    /// token adapts when the system switches between light and dark.
+    init(light: Int, dark: Int) {
+        self.init(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light)
+        })
+    }
+}
+
 enum AppTheme {
-    // Brand colors sampled from the established leaping-cat app icon.
-    static let canvas = Color(hex: 0xEAF8FF)
-    static let panel = Color(hex: 0xFFFFFF)
-    static let panelRaised = Color(hex: 0xDDF3FF)
-    static let border = Color(hex: 0xA8D8F0)
-    static let accent = Color(hex: 0x0077CC)
-    static let navy = Color(hex: 0x0049B8)
-    static let ginger = Color(hex: 0xFE9B01)
+    // Brand colors sampled from the established leaping-cat app icon; each
+    // token carries a dark-appearance variant on the same hue.
+    static let canvas = Color(light: 0xEAF8FF, dark: 0x0B1720)
+    static let panel = Color(light: 0xFFFFFF, dark: 0x152430)
+    static let panelRaised = Color(light: 0xDDF3FF, dark: 0x1C3040)
+    static let border = Color(light: 0xA8D8F0, dark: 0x2C4A60)
+    static let accent = Color(light: 0x0077CC, dark: 0x2CB5FF)
+    static let navy = Color(light: 0x0049B8, dark: 0x000000)
+    static let ginger = Color(light: 0xFE9B01, dark: 0xFFB340)
 
     // Semantic colors remain distinct from the brand palette.
-    static let connected = Color(hex: 0x148742)
-    static let warning = Color(hex: 0xF29A00)
-    static let danger = Color(hex: 0xD9363E)
-    static let mutedText = Color(hex: 0x526B7A)
-    static let ink = Color(hex: 0x102A43)
+    static let connected = Color(light: 0x148742, dark: 0x33C377)
+    static let warning = Color(light: 0xF29A00, dark: 0xFFB84D)
+    static let danger = Color(light: 0xD9363E, dark: 0xFF6B70)
+    static let mutedText = Color(light: 0x526B7A, dark: 0x9DB6C6)
+    static let ink = Color(light: 0x102A43, dark: 0xE8F2FA)
 
     static var screenBackground: some ShapeStyle {
         LinearGradient(
             colors: [
                 canvas,
-                Color(hex: 0xF7FCFF),
+                Color(light: 0xF7FCFF, dark: 0x0E1C2A),
             ],
             startPoint: .top,
             endPoint: .bottom,

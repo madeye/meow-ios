@@ -19,7 +19,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("settings.section.general") {
+            Section {
                 Toggle("settings.toggle.allowLan", isOn: binding(\.allowLan))
                     .accessibilityIdentifier("settings.toggle.allowLan")
                     .accessibilityHint(Text("a11y.settings.allowLan.hint"))
@@ -52,8 +52,10 @@ struct SettingsView: View {
                     Text("settings.logLevel.silent").tag("silent")
                 }
                 .accessibilityIdentifier("settings.picker.logLevel")
+            } header: {
+                SectionHeader("settings.section.general")
             }
-            Section("settings.section.diagnostics") {
+            Section {
                 NavigationLink {
                     UserDiagnosticsView()
                 } label: {
@@ -76,8 +78,10 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.button.exportLogs")
                 .accessibilityValue(exportingLogs ? String(localized: "a11y.settings.exportLogs.inProgress") : "")
                 .accessibilityHint(Text("a11y.settings.exportLogs.hint"))
+            } header: {
+                SectionHeader("settings.section.diagnostics")
             }
-            Section("settings.section.about") {
+            Section {
                 LabeledContent("settings.about.version", value: appVersion)
                     .contentShape(Rectangle())
                     .accessibilityIdentifier("settings.about.version")
@@ -91,6 +95,8 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.about.memory")
                     .accessibilityValue(memoryText ?? String(localized: "a11y.settings.memory.unavailable"))
                     .accessibilityAddTraits(.updatesFrequently)
+            } header: {
+                SectionHeader("settings.section.about")
             }
             #if DEBUG
                 Section("Debug Tunnel") {

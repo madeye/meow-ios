@@ -46,7 +46,6 @@ struct ContentView: View {
         }
         .background(AppTheme.screenBackground)
         .tint(AppTheme.accent)
-        .preferredColorScheme(.light)
         .onOpenURL { url in
             if url.scheme == "meow", url.host == "diagnostics" {
                 showDiagnostics = true

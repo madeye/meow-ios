@@ -34,7 +34,7 @@ struct SubscriptionsView: View {
                             } label: {
                                 HStack {
                                     Image(systemName: profile.isSelected ? "largecircle.fill.circle" : "circle")
-                                        .foregroundStyle(profile.isSelected ? AppTheme.connected : .secondary)
+                                        .foregroundStyle(profile.isSelected ? AppTheme.accent : .secondary)
                                         .accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(profile.name).font(.headline)
@@ -119,10 +119,7 @@ struct SubscriptionsView: View {
                     }
                 }
             } header: {
-                Text("subscriptions.section.profiles")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.mutedText)
-                    .textCase(.uppercase)
+                SectionHeader("subscriptions.section.profiles")
             }
 
             Section {
@@ -132,10 +129,7 @@ struct SubscriptionsView: View {
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             } header: {
-                Text("subscriptions.section.engine")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.mutedText)
-                    .textCase(.uppercase)
+                SectionHeader("subscriptions.section.engine")
             }
         }
         .listStyle(.plain)

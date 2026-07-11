@@ -271,20 +271,10 @@ struct RulesEditorView: View {
     // MARK: - Error banner
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppTheme.warning)
-            Text(message)
-                .font(.caption)
-                .lineLimit(2)
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: .rect(cornerRadius: 8))
-        .padding(.horizontal)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("a11y.rulesEditor.error \(message)"))
-        .accessibilityIdentifier("rulesEditor.errorBanner")
+        ErrorBanner(
+            message: message,
+            accessibilityLabel: Text("a11y.rulesEditor.error \(message)"),
+            identifier: "rulesEditor.errorBanner",
+        )
     }
 }

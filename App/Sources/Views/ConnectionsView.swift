@@ -109,22 +109,11 @@ struct ConnectionsView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppTheme.warning)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.caption)
-                .lineLimit(2)
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: .rect(cornerRadius: 8))
-        .padding(.horizontal)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("a11y.connections.errorBanner \(message)"))
-        .accessibilityIdentifier("connections.errorBanner")
+        ErrorBanner(
+            message: message,
+            accessibilityLabel: Text("a11y.connections.errorBanner \(message)"),
+            identifier: "connections.errorBanner",
+        )
     }
 
     private var filtered: [Connection] {

@@ -2,19 +2,6 @@ import MeowModels
 import SwiftData
 import SwiftUI
 
-struct HomeView: View {
-    var body: some View {
-        ScrollView {
-            EngineOverviewSection()
-                .padding(16)
-        }
-        .background(AppTheme.screenBackground)
-        .scrollContentBackground(.hidden)
-        .navigationTitle("home.nav.title")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 struct EngineOverviewSection: View {
     let showsStatusSummary: Bool
 
