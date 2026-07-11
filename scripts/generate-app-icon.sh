@@ -1,56 +1,51 @@
 #!/usr/bin/env bash
-# Regenerate the iOS and docs app icons from the meow-rs website logo.
+# Regenerate the iOS icon assets from the authored meow artwork.
 #
-# Source:       ../meow-rs/website/public/logo.svg
-#               — 32×32 SVG, authoritative web pixel-art mark.
+# Sources:      docs/appicon.png — 1024x1024 opaque home-screen icon.
+#               docs/appmark.png — 1024x1024 transparent in-app mascot.
 # Destinations: App/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
-#               docs/appicon.png
-#               — 1024×1024 opaque PNGs.
-#
-# The SVG is first rendered on its native 32×32 grid, then scaled to 1024×1024
-# with nearest-neighbor resampling so the home-screen icon keeps the same
-# pixel-art silhouette as the web logo.
+#               App/Resources/Assets.xcassets/AppMark.imageset/AppMark.png
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MEOW_RS_ROOT="${MEOW_RS_ROOT:-"$ROOT/../meow-rs"}"
-SRC="$MEOW_RS_ROOT/website/public/logo.svg"
-APP_ICON_DST="$ROOT/App/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
-DOCS_ICON_DST="$ROOT/docs/appicon.png"
-BACKGROUND_COLOR="${BACKGROUND_COLOR:-#FFF4E8}"
+ICON_SRC="${APP_ICON_SOURCE:-"$ROOT/docs/appicon.png"}"
+MARK_SRC="${APP_MARK_SOURCE:-"$ROOT/docs/appmark.png"}"
+ICON_DST="$ROOT/App/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+MARK_DST="$ROOT/App/Resources/Assets.xcassets/AppMark.imageset/AppMark.png"
 
-render_icon() {
-    local native_png
-    command -v rsvg-convert >/dev/null || { echo "error: rsvg-convert not found" >&2; exit 1; }
+render_icons() {
     command -v python3 >/dev/null || { echo "error: python3 not found" >&2; exit 1; }
+    mkdir -p "$(dirname "$ICON_DST")" "$(dirname "$MARK_DST")"
 
-    ICON_TMPDIR="$(mktemp -d)"
-    trap 'rm -rf "$ICON_TMPDIR"' EXIT
-    native_png="$ICON_TMPDIR/logo-32.png"
-
-    rsvg-convert -w 32 -h 32 -b "$BACKGROUND_COLOR" -o "$native_png" "$SRC"
-    mkdir -p "$(dirname "$APP_ICON_DST")" "$(dirname "$DOCS_ICON_DST")"
-
-    python3 - "$native_png" "$APP_ICON_DST" "$DOCS_ICON_DST" <<'PY'
+    python3 - "$ICON_SRC" "$MARK_SRC" "$ICON_DST" "$MARK_DST" <<'PY'
 import sys
 from pathlib import Path
 from PIL import Image
 
-source = Path(sys.argv[1])
-destinations = [Path(path) for path in sys.argv[2:]]
+icon_source, mark_source, icon_destination, mark_destination = map(Path, sys.argv[1:])
 
-with Image.open(source) as image:
-    icon = image.convert("RGB").resize((1024, 1024), Image.Resampling.NEAREST)
-    for destination in destinations:
-        icon.save(destination, format="PNG", optimize=True)
-        print(f"Wrote 1024x1024 opaque PNG to {destination}")
+with Image.open(icon_source) as image:
+    if image.size != (1024, 1024):
+        raise SystemExit(f"error: source icon must be 1024x1024, got {image.size}")
+    image.convert("RGB").save(icon_destination, format="PNG", optimize=True)
+
+with Image.open(mark_source) as image:
+    if image.size != (1024, 1024):
+        raise SystemExit(f"error: source mark must be 1024x1024, got {image.size}")
+    if "A" not in image.getbands():
+        raise SystemExit("error: source mark must have an alpha channel")
+    image.convert("RGBA").save(mark_destination, format="PNG", optimize=True)
+
+print(f"Wrote 1024x1024 opaque PNG to {icon_destination}")
+print(f"Wrote 1024x1024 transparent mascot PNG to {mark_destination}")
 PY
 }
 
 main() {
-    [[ -f "$SRC" ]] || { echo "error: source logo not found at $SRC" >&2; exit 1; }
-    render_icon
+    [[ -f "$ICON_SRC" ]] || { echo "error: source icon not found at $ICON_SRC" >&2; exit 1; }
+    [[ -f "$MARK_SRC" ]] || { echo "error: source mark not found at $MARK_SRC" >&2; exit 1; }
+    render_icons
 }
 
 main "$@"

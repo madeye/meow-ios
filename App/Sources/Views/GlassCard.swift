@@ -13,23 +13,27 @@ private extension Color {
 }
 
 enum AppTheme {
-    static let canvas = Color(hex: 0xFBF3E4)
-    static let panel = Color(hex: 0xFFFBF2)
-    static let panelRaised = Color(hex: 0xF4E7CE)
-    static let border = Color(hex: 0xD8C39B)
-    static let accent = Color(hex: 0xE23E2C)
-    static let connected = Color(hex: 0x156A5B)
-    static let warning = Color(hex: 0xFF9E2C)
-    static let danger = Color(hex: 0xE23E2C)
-    static let mutedText = Color(hex: 0x6A574C)
-    static let ink = Color(hex: 0x20140F)
-    static let ginger = Color(hex: 0xED7E2B)
+    // Brand colors sampled from the established leaping-cat app icon.
+    static let canvas = Color(hex: 0xEAF8FF)
+    static let panel = Color(hex: 0xFFFFFF)
+    static let panelRaised = Color(hex: 0xDDF3FF)
+    static let border = Color(hex: 0xA8D8F0)
+    static let accent = Color(hex: 0x0077CC)
+    static let navy = Color(hex: 0x0049B8)
+    static let ginger = Color(hex: 0xFE9B01)
+
+    // Semantic colors remain distinct from the brand palette.
+    static let connected = Color(hex: 0x148742)
+    static let warning = Color(hex: 0xF29A00)
+    static let danger = Color(hex: 0xD9363E)
+    static let mutedText = Color(hex: 0x526B7A)
+    static let ink = Color(hex: 0x102A43)
 
     static var screenBackground: some ShapeStyle {
         LinearGradient(
             colors: [
                 canvas,
-                panel,
+                Color(hex: 0xF7FCFF),
             ],
             startPoint: .top,
             endPoint: .bottom,
@@ -39,8 +43,8 @@ enum AppTheme {
     static var iconBackground: some ShapeStyle {
         LinearGradient(
             colors: [
-                ginger.opacity(0.22),
-                accent.opacity(0.08),
+                ginger.opacity(0.18),
+                accent.opacity(0.12),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing,
@@ -48,8 +52,8 @@ enum AppTheme {
     }
 }
 
-/// Container for major card surfaces, matching the meow-rs landing page paper
-/// cards: warm paper, kraft border, and a restrained ink shadow.
+/// Container for major card surfaces, using the app icon's white, cyan, and
+/// scarf-navy visual language without competing with the content.
 /// Wrapper API is intentionally unchanged so the ~11 existing call sites
 /// (Home, Traffic, Subscriptions, Providers, Rules, Connections) need no edits.
 struct GlassCard<Content: View>: View {
@@ -60,12 +64,12 @@ struct GlassCard<Content: View>: View {
             .padding(16)
             .background(
                 AppTheme.panel,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous),
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(AppTheme.border, lineWidth: 1),
             )
-            .shadow(color: AppTheme.ink.opacity(0.08), radius: 14, x: 0, y: 8)
+            .shadow(color: AppTheme.navy.opacity(0.10), radius: 16, x: 0, y: 8)
     }
 }

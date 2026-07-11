@@ -52,7 +52,7 @@ struct GlobalVpnSwitchBar: View {
                     .padding(.vertical, 9)
                 }
                 .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: 8))
+                .buttonBorderShape(.roundedRectangle(radius: 12))
                 .tint(toggleTint)
                 .disabled(toggleDisabled)
                 .accessibilityIdentifier("vpn.toggle")
@@ -60,7 +60,13 @@ struct GlobalVpnSwitchBar: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        .background(AppTheme.panelRaised)
+        .background(
+            LinearGradient(
+                colors: [AppTheme.panelRaised, AppTheme.canvas],
+                startPoint: .leading,
+                endPoint: .trailing,
+            ),
+        )
         .overlay(alignment: .bottom) {
             AppTheme.border.frame(height: 1)
         }
@@ -94,9 +100,9 @@ struct GlobalVpnSwitchBar: View {
             .accessibilityIdentifier("vpn.error.dismiss")
         }
         .padding(12)
-        .background(AppTheme.panel, in: .rect(cornerRadius: 8))
+        .background(AppTheme.panel, in: .rect(cornerRadius: 12))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(AppTheme.border, lineWidth: 1),
         )
         .accessibilityIdentifier("vpn.error.banner")
@@ -143,15 +149,12 @@ struct GlobalVpnSwitchBar: View {
         }
     }
 
-    /// Mirrors `StageDot`'s status palette so the switch reads as connection
-    /// state: green while connected, amber in flight, red for error / the
-    /// connect call-to-action.
+    /// Colors communicate the action the button will perform, not the current
+    /// tunnel status: connecting is green; disconnecting is destructive red.
     private var toggleTint: Color {
         switch vpnManager.stage {
-        case .connected: AppTheme.connected
-        case .preparing, .connecting, .stopping: AppTheme.warning
-        case .error: AppTheme.danger
-        default: AppTheme.accent
+        case .connected, .stopping: AppTheme.danger
+        case .idle, .preparing, .connecting, .stopped, .error: AppTheme.connected
         }
     }
 
