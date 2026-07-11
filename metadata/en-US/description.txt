@@ -1,4 +1,4 @@
-meow is a native iOS port of the Android "meow" client — a full meow-rs proxy engine wrapped in a SwiftUI iOS 26 Liquid Glass UI, with traffic carried by a NetworkExtension packet tunnel provider.
+meow is a native iOS proxy client built on the meow-rs engine — wrapped in a SwiftUI iOS 26 Liquid Glass UI, with traffic carried by a NetworkExtension packet tunnel provider.
 
 If you have ever managed a Clash or meow-rs configuration, meow will feel familiar. Subscribe to a YAML config, choose a proxy group, flip the toggle, and your traffic flows through the proxy engine — all on-device, with no cloud component.
 
@@ -20,6 +20,8 @@ The app does not collect analytics, subscription URLs, proxy credentials, config
 REQUIREMENTS
 • iOS 26 or later (iPhone and iPad)
 • A proxy subscription you trust — meow does not provide any proxy servers
+
+meow is a one-time purchase, with no in-app purchases and no subscription fees. "Subscription" here means a proxy configuration URL (a Clash-style config subscription) that you supply — not a paid subscription.
 
 PUBLIC BETA
 This release is a public beta. Some features are in active development. Please report issues on GitHub or via the in-app feedback link.
