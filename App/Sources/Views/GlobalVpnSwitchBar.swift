@@ -183,7 +183,7 @@ struct VpnStatusGlyph: View {
 
     var body: some View {
         ZStack {
-            Image("AppMark")
+            Image(stage == .connected ? "AppMarkConnected" : "AppMark")
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
