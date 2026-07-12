@@ -20,6 +20,7 @@ enum AppModelContainer {
             )
             let container = try ModelContainer(for: schema, configurations: config)
             seedProfileForUITestsIfRequested(container)
+            seedShadowsocksProfileForUITestsIfRequested(container)
             seedScreenshotDemoIfRequested(container)
             return Holder(container: container)
         } catch {
@@ -61,6 +62,27 @@ enum AppModelContainer {
             yamlBackup: "proxies:\n  - name: seed\n    type: direct\n",
         )
         context.insert(profile)
+        try? context.save()
+    }
+
+    /// `-SeedShadowsocksProfile <name>` seeds the locally generated
+    /// Shadowsocks profile (template render, marker line included) with one
+    /// server, so QR-export tests act on an existing exportable row instead
+    /// of driving the add flow — same "Save Password?" rationale as above.
+    private static func seedShadowsocksProfileForUITestsIfRequested(_ container: ModelContainer) {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-UITests"), let idx = args.firstIndex(of: "-SeedShadowsocksProfile"),
+              idx + 1 < args.count,
+              let yaml = try? ShadowsocksConfigBuilder.render(servers: [ShadowsocksServer(
+                  name: "seed-ss",
+                  server: "qr-export.example.com",
+                  port: 8388,
+                  cipher: "aes-128-gcm",
+                  password: "seed-password",
+              )])
+        else { return }
+        let context = ModelContext(container)
+        context.insert(Profile(name: args[idx + 1], url: "", yamlContent: yaml, yamlBackup: yaml))
         try? context.save()
     }
 
