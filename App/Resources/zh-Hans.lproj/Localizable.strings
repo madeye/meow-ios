@@ -87,6 +87,20 @@
 "subscriptions.row.a11y.refresh %@" = "刷新 %@";
 "subscriptions.row.a11y.editInfo %@" = "重命名或编辑 %@ 的信息";
 "subscriptions.row.a11y.editInfoHint" = "打开名称与 URL 编辑器";
+"subscriptions.row.a11y.exportQR %@" = "导出 %@ 的二维码";
+"subscriptions.row.a11y.exportQRHint" = "显示可扫描的分享链接二维码";
+
+/* QR export sheet */
+"qrExport.nav.title" = "导出二维码";
+"qrExport.picker.server" = "服务器";
+"qrExport.button.copy" = "复制链接";
+"qrExport.button.copied" = "已复制";
+"qrExport.button.share" = "分享";
+"qrExport.empty" = "没有可导出的内容 — 此配置不包含 Shadowsocks 服务器。";
+"qrExport.error.tooLong" = "链接过长，无法生成二维码。请使用复制或分享。";
+"qrExport.caption.subscription" = "扫描即可将此订阅地址导入其他客户端。";
+"qrExport.caption.shadowsocks" = "扫描即可将此服务器导入任意兼容 Shadowsocks 的客户端。";
+"qrExport.a11y.qrImage %@" = "%@ 的二维码";
 "subscriptions.toolbar.a11y.add" = "添加订阅";
 "subscriptions.toolbar.addFromURL" = "从 URL 添加";
 "subscriptions.toolbar.importFromFile" = "从 iCloud 云盘导入…";

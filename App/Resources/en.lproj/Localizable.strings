@@ -81,6 +81,20 @@
 "subscriptions.row.a11y.refresh %@" = "Refresh %@";
 "subscriptions.row.a11y.editInfo %@" = "Rename or edit info for %@";
 "subscriptions.row.a11y.editInfoHint" = "Opens the name and URL editor";
+"subscriptions.row.a11y.exportQR %@" = "Export QR code for %@";
+"subscriptions.row.a11y.exportQRHint" = "Shows a scannable QR code of the share link";
+
+/* QR export sheet */
+"qrExport.nav.title" = "Export QR Code";
+"qrExport.picker.server" = "Server";
+"qrExport.button.copy" = "Copy Link";
+"qrExport.button.copied" = "Copied";
+"qrExport.button.share" = "Share";
+"qrExport.empty" = "Nothing to export — this profile has no Shadowsocks servers.";
+"qrExport.error.tooLong" = "This link is too long to fit in a QR code. Use Copy or Share instead.";
+"qrExport.caption.subscription" = "Scan to import this subscription URL into another client.";
+"qrExport.caption.shadowsocks" = "Scan to import this server into any Shadowsocks-compatible client.";
+"qrExport.a11y.qrImage %@" = "QR code for %@";
 "subscriptions.toolbar.a11y.add" = "Add subscription";
 "subscriptions.toolbar.addFromURL" = "Add from URL";
 "subscriptions.toolbar.importFromFile" = "Import from iCloud Drive…";

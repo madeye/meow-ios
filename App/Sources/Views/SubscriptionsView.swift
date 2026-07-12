@@ -10,6 +10,7 @@ struct SubscriptionsView: View {
     @State private var showingImporter = false
     @State private var editing: Profile?
     @State private var editingInfo: Profile?
+    @State private var exporting: Profile?
     @State private var error: String?
 
     var body: some View {
@@ -79,6 +80,19 @@ struct SubscriptionsView: View {
                                 .buttonStyle(.borderless)
                                 .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
                                 .accessibilityHint(Text("subscriptions.row.a11y.refreshHint"))
+                            }
+                            if isExportable(profile) {
+                                Button {
+                                    exporting = profile
+                                } label: {
+                                    Image(systemName: "qrcode")
+                                        .frame(minWidth: 44, minHeight: 44)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(Text("subscriptions.row.a11y.exportQR \(profile.name)"))
+                                .accessibilityHint(Text("subscriptions.row.a11y.exportQRHint"))
+                                .accessibilityIdentifier("subscriptions.row.exportQR")
                             }
                             Button {
                                 editingInfo = profile
@@ -162,6 +176,9 @@ struct SubscriptionsView: View {
         }
         .sheet(item: $editingInfo) { profile in
             EditSubscriptionInfoSheet(profile: profile, error: $error)
+        }
+        .sheet(item: $exporting) { profile in
+            QRExportSheet(kind: exportKind(profile), payloads: exportPayloads(profile))
         }
         .alert("common.error", isPresented: .constant(error != nil)) {
             Button("common.ok") { error = nil }
@@ -304,6 +321,32 @@ struct SubscriptionsView: View {
             )
         }
         return yaml
+    }
+}
+
+// MARK: - QR export
+
+extension SubscriptionsView {
+    /// A profile is QR-exportable when there's a share link to encode: the
+    /// locally generated Shadowsocks profile exports per-server `ss://` URIs,
+    /// URL subscriptions export the subscription URL itself. Local YAML
+    /// imports (empty URL, not generated) have nothing link-shaped to share.
+    private func isExportable(_ profile: Profile) -> Bool {
+        ShadowsocksConfigBuilder.isGenerated(profile.yamlContent) || !profile.url.isEmpty
+    }
+
+    private func exportKind(_ profile: Profile) -> QRExportSheet.Kind {
+        ShadowsocksConfigBuilder.isGenerated(profile.yamlContent) ? .shadowsocksURI : .subscriptionURL
+    }
+
+    private func exportPayloads(_ profile: Profile) -> [QRExportSheet.Payload] {
+        if ShadowsocksConfigBuilder.isGenerated(profile.yamlContent) {
+            return ShadowsocksConfigBuilder.extractServers(from: profile.yamlContent).map {
+                QRExportSheet.Payload(title: $0.name, text: ShadowsocksURIEncoder.encode($0))
+            }
+        }
+        guard !profile.url.isEmpty else { return [] }
+        return [QRExportSheet.Payload(title: profile.name, text: profile.url)]
     }
 }
 

@@ -13,6 +13,7 @@
 		0784F0245333B91BE515A7F1 /* EngineOverviewSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3521886886FB3552D3753B1B /* EngineOverviewSection.swift */; };
 		07BE855FF6DC83A07129C654 /* SubscriptionDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */; };
 		08501362516FC991AE70B3EF /* DiagnosticsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA20D7D98E7BC4663E289174 /* DiagnosticsViewController.swift */; };
+		08E3A9B66D5881AF7F22A799 /* ShadowsocksURIEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03081064CD4E37ACB92EA355 /* ShadowsocksURIEncoderTests.swift */; };
 		0AAE287B7127912BEE7EFC15 /* HomeScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59B5D27EF37B635FC5B38AA /* HomeScreenTests.swift */; };
 		0B13BCBE3F3A575D7E213399 /* TunnelLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB11E2BC5612E27CCE83B0DC /* TunnelLifecycleTests.swift */; };
 		0BDA436570A2C655E8210F0C /* TunnelSettingsLANExclusionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703008DEDF15E37B8C951A9A /* TunnelSettingsLANExclusionTests.swift */; };
@@ -39,6 +40,7 @@
 		2E4C5E6BA16E22D2EAD4EB22 /* MeowAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1746752AC889A678F94A02 /* MeowAPITests.swift */; };
 		2E70DD05E62B166087AA7207 /* TunnelSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE41537EBB7380469E247A65 /* TunnelSettings.swift */; };
 		3211232F74DEF5C2141AAB3F /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = A4C4C3CB93C1D3A437D659F8 /* MeowModels */; };
+		33E77D1331C9AA6795569373 /* ExportQRFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00F6BDADF0FACF2ED3B0447 /* ExportQRFlowTests.swift */; };
 		34358821D3A262F7D08C62D9 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 0CA41BA11AE3954D104A7AB8 /* MeowIPC */; };
 		34B4F8F808C424CBAF8E7EA9 /* MWSharedStore.m in Sources */ = {isa = PBXBuildFile; fileRef = AB83B7A37D165EF0E16A47BA /* MWSharedStore.m */; };
 		3BAE21D06E5B9935E58FDF1B /* MeowAPITypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A693FE7115671D717A87F1DB /* MeowAPITypes.swift */; };
@@ -52,6 +54,7 @@
 		4A6D4B20B4094E334F26892F /* TunBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC654683AAE620AA9C1DCEBF /* TunBridgeTests.swift */; };
 		4AFF0859870D8941AC3CE716 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = BE92B6925662A398B4A18E9C /* MeowIPC */; };
 		4C1FB9714B9308B7577B9622 /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = 564BE37A8BC742522CCABC5E /* MeowModels */; };
+		4E0EE8ED5787010E844F6F87 /* ShadowsocksURIEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FF63D9219A475F002F2734 /* ShadowsocksURIEncoder.swift */; };
 		4E366621A02CAF97E4AA2EF2 /* RulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE160D91FCAFCD07383E8CB5 /* RulesTests.swift */; };
 		4F29B935B393F48182AC7CE4 /* MWIPCListener.m in Sources */ = {isa = PBXBuildFile; fileRef = 329B260F122D91D5DDB24C44 /* MWIPCListener.m */; };
 		4F396A44EF40DD59F1A79D3B /* ShadowsocksConfigBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2286E52FC6D973728DE5D1A8 /* ShadowsocksConfigBuilderTests.swift */; };
@@ -104,6 +107,7 @@
 		A247AFB42C2CB73BACCD3CB0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A2F021F1A3C84F902320EB /* SettingsView.swift */; };
 		A582A655A6EA5FF633395AD9 /* ChinaDirectKeywords.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3172561A6CE70D61D7666597 /* ChinaDirectKeywords.swift */; };
 		A80A176366D289562219D18D /* DarwinBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B120EAA4365C4F723B0FED /* DarwinBridgeTests.swift */; };
+		A9CC84474AFAAD1C4DCE3CAC /* QRCodeRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF623F1E34B38A27E15C6B36 /* QRCodeRendererTests.swift */; };
 		AB4AFCDA6C326D173F7C6D01 /* SubscriptionDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B306CE837FA7A17D7D561877 /* SubscriptionDeepLinkTests.swift */; };
 		ACB0FE6DC7CD1D5E824CCB35 /* EngineBootTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1046B4656B3C3717791D82D4 /* EngineBootTests.swift */; };
 		ADBD29F9A34A3AF34057D104 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1880D3F09797DFE2718AFC /* AppModel.swift */; };
@@ -138,6 +142,7 @@
 		DCC6938C0A43984B033BCD68 /* AppIPCBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */; };
 		DE9A4BC5630A1A55FD1880C4 /* RenameSubscriptionFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25242F15DCC48F0C6C9BAD2C /* RenameSubscriptionFlowTests.swift */; };
 		DF9A0976E5BE73EF1F9DFC91 /* VpnToggleFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */; };
+		DFC8E7A2F7941A994200FF6C /* QRExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257652A3B2BA6B1E11BA6252 /* QRExportSheet.swift */; };
 		E164E98C5E2EDB5B326E2B98 /* UtilityScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F7BB3C0C2648B6097E52E53 /* UtilityScreenTests.swift */; };
 		E5EEB30272FBA79B72C45004 /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86AFFBA5F04A152705EE60CA /* AccessibilityTests.swift */; };
 		E64DA5B39E08AF0DF25BFCBC /* LocalizableParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7002E0BC1FFE0A41FEBE8F6 /* LocalizableParityTests.swift */; };
@@ -199,6 +204,7 @@
 /* Begin PBXFileReference section */
 		00F3DBAD225AF1027B18873A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		01E90E01A4CE68C4F872A40B /* ConnectionsScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsScreenTests.swift; sourceTree = "<group>"; };
+		03081064CD4E37ACB92EA355 /* ShadowsocksURIEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksURIEncoderTests.swift; sourceTree = "<group>"; };
 		0539F84A7F111BFF4BDD1840 /* MWSharedStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWSharedStore.h; sourceTree = "<group>"; };
 		06D2AA0F7CC09650CF8263EF /* RulesYAMLEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesYAMLEditor.swift; sourceTree = "<group>"; };
 		08020B398C102C110F6A8567 /* SharedStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStoreTests.swift; sourceTree = "<group>"; };
@@ -217,6 +223,7 @@
 		24AB2D298F7A38F31686BF15 /* VpnManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnManagerTests.swift; sourceTree = "<group>"; };
 		24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDarwinBridge.m; sourceTree = "<group>"; };
 		25242F15DCC48F0C6C9BAD2C /* RenameSubscriptionFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameSubscriptionFlowTests.swift; sourceTree = "<group>"; };
+		257652A3B2BA6B1E11BA6252 /* QRExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRExportSheet.swift; sourceTree = "<group>"; };
 		2583E90C66D44FFDC834DAB9 /* DeepLinkImportConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkImportConfirmation.swift; sourceTree = "<group>"; };
 		2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksConfigBuilder.swift; sourceTree = "<group>"; };
 		2D7D7768D31382CD90DFEBA6 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
@@ -309,6 +316,7 @@
 		BC43530025FE948C50C6C78E /* ConnectionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsTests.swift; sourceTree = "<group>"; };
 		BC8D42838BD27620D7F278DE /* RulesEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesEditorView.swift; sourceTree = "<group>"; };
 		BCEC443073450BDC4FC7E1D3 /* MWEngineLog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWEngineLog.h; sourceTree = "<group>"; };
+		C0FF63D9219A475F002F2734 /* ShadowsocksURIEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksURIEncoder.swift; sourceTree = "<group>"; };
 		C2BB9ECB4E5C46D70B0CE6B2 /* RulesYAMLEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesYAMLEditorTests.swift; sourceTree = "<group>"; };
 		C2BE1F013E2C0B2B1E591FEA /* MWDiagnosticsRunner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWDiagnosticsRunner.h; sourceTree = "<group>"; };
 		C5D0FAA1804EB1A35F47036A /* SectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionHeader.swift; sourceTree = "<group>"; };
@@ -317,12 +325,14 @@
 		CDFB76E2466D24EF8DF96740 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		CF2336C906828FDB560633D6 /* ProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileTests.swift; sourceTree = "<group>"; };
 		CFAA1935B322CD5DD66E23F0 /* URLValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLValidationTests.swift; sourceTree = "<group>"; };
+		D00F6BDADF0FACF2ED3B0447 /* ExportQRFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportQRFlowTests.swift; sourceTree = "<group>"; };
 		D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionDeepLink.swift; sourceTree = "<group>"; };
 		D1A7AFDD113E049439EEE4A9 /* MeowShared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MeowShared; path = MeowShared; sourceTree = SOURCE_ROOT; };
 		D51C2BC68B7800884B68643F /* DiagnosticsLabelParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsLabelParserTests.swift; sourceTree = "<group>"; };
 		D5A3FCA37BA819ACC0A9D0EB /* AddShadowsocksFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddShadowsocksFlowTests.swift; sourceTree = "<group>"; };
 		D7A0587577F4B11031F0816D /* ProxiesDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxiesDecodingTests.swift; sourceTree = "<group>"; };
 		DAEF8BEDC4B0E7EF70E37EE1 /* UtilitySessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilitySessionStoreTests.swift; sourceTree = "<group>"; };
+		DF623F1E34B38A27E15C6B36 /* QRCodeRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeRendererTests.swift; sourceTree = "<group>"; };
 		DFC4AC97B3877B1A566FBFF6 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		E327200BE05E4504B91CAACC /* .swiftformat */ = {isa = PBXFileReference; path = .swiftformat; sourceTree = "<group>"; };
 		E56D18B0FBFA455C9F60134A /* UserDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDiagnosticsView.swift; sourceTree = "<group>"; };
@@ -471,6 +481,7 @@
 			children = (
 				D5A3FCA37BA819ACC0A9D0EB /* AddShadowsocksFlowTests.swift */,
 				9CA7DC0A8AEAA9185A7B40F0 /* AddSubscriptionFlowTests.swift */,
+				D00F6BDADF0FACF2ED3B0447 /* ExportQRFlowTests.swift */,
 				25242F15DCC48F0C6C9BAD2C /* RenameSubscriptionFlowTests.swift */,
 				8E4FF4D4C7BBBCF3E43AF134 /* VpnToggleFlowTests.swift */,
 				3BA2BC08659A01899A4DB2CC /* YamlEditorFlowTests.swift */,
@@ -493,6 +504,7 @@
 			children = (
 				8B8C6076C2AFE3F87452DDEF /* DeepLinkImportConfirmationTests.swift */,
 				7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */,
+				DF623F1E34B38A27E15C6B36 /* QRCodeRendererTests.swift */,
 				F5B378E3EF2591C9CD059E98 /* ShadowsocksAddServiceTests.swift */,
 				B306CE837FA7A17D7D561877 /* SubscriptionDeepLinkTests.swift */,
 				A43280DA576025F244CD1432 /* SubscriptionServiceTests.swift */,
@@ -554,6 +566,7 @@
 				8E8D0D6120471BD1DBC4ACFB /* NavRow.swift */,
 				3B0CE1B314060B8B82956086 /* ProvidersView.swift */,
 				B7193B43D94BD4897FEDF967 /* ProxyGroupsView.swift */,
+				257652A3B2BA6B1E11BA6252 /* QRExportSheet.swift */,
 				1711243E170547D1DA68FCD6 /* RuleEditorSheet.swift */,
 				BC8D42838BD27620D7F278DE /* RulesEditorView.swift */,
 				8A1CBAFD55A777C3B13296E2 /* RulesView.swift */,
@@ -603,6 +616,7 @@
 				A693FE7115671D717A87F1DB /* MeowAPITypes.swift */,
 				06D2AA0F7CC09650CF8263EF /* RulesYAMLEditor.swift */,
 				2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */,
+				C0FF63D9219A475F002F2734 /* ShadowsocksURIEncoder.swift */,
 				48800BB67F7CB5E42F942A83 /* ShadowsocksURIParser.swift */,
 				601ADF66737508CC359C4936 /* SubscriptionConverter.swift */,
 				D17FF5C7044F3F3FF3153128 /* SubscriptionDeepLink.swift */,
@@ -759,6 +773,7 @@
 			children = (
 				FD9FC97CA0606C12439B0684 /* EmojiGroupSelectNodeTests.swift */,
 				2286E52FC6D973728DE5D1A8 /* ShadowsocksConfigBuilderTests.swift */,
+				03081064CD4E37ACB92EA355 /* ShadowsocksURIEncoderTests.swift */,
 				6052B63FD334E86DC81BAE1E /* ShadowsocksURIParserTests.swift */,
 				4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */,
 			);
@@ -1108,6 +1123,7 @@
 				F29284A5EE821CC192BE2993 /* AddShadowsocksFlowTests.swift in Sources */,
 				FA6DFC3CA7B13A278CB1D630 /* AddSubscriptionFlowTests.swift in Sources */,
 				7770F0EA76C4181C58C020EC /* AppShellTests.swift in Sources */,
+				33E77D1331C9AA6795569373 /* ExportQRFlowTests.swift in Sources */,
 				0AAE287B7127912BEE7EFC15 /* HomeScreenTests.swift in Sources */,
 				528DCD00B7A73F10142E0455 /* MeowApp.swift in Sources */,
 				DE9A4BC5630A1A55FD1880C4 /* RenameSubscriptionFlowTests.swift in Sources */,
@@ -1159,10 +1175,12 @@
 				8C45959FE9EE5CD0D3F06BB7 /* ProfileTests.swift in Sources */,
 				25931B4F38353E7DF1CD7F5E /* ProxiesDecodingTests.swift in Sources */,
 				D2FF19F899EE357591812068 /* ProxyGroupModelTests.swift in Sources */,
+				A9CC84474AFAAD1C4DCE3CAC /* QRCodeRendererTests.swift in Sources */,
 				4E366621A02CAF97E4AA2EF2 /* RulesTests.swift in Sources */,
 				C7B7EACD6297D7AA66065602 /* RulesYAMLEditorTests.swift in Sources */,
 				938E95C0263F042450113B67 /* ShadowsocksAddServiceTests.swift in Sources */,
 				4F396A44EF40DD59F1A79D3B /* ShadowsocksConfigBuilderTests.swift in Sources */,
+				08E3A9B66D5881AF7F22A799 /* ShadowsocksURIEncoderTests.swift in Sources */,
 				648D6C8316865A3DFBD6766D /* ShadowsocksURIParserTests.swift in Sources */,
 				4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */,
 				AB4AFCDA6C326D173F7C6D01 /* SubscriptionDeepLinkTests.swift in Sources */,
@@ -1212,6 +1230,7 @@
 				4702884A9BD243CD419172C4 /* ProvidersView.swift in Sources */,
 				784598C57754825780BD4F2C /* ProxyGroupModel.swift in Sources */,
 				90E26674740B7C7141781B01 /* ProxyGroupsView.swift in Sources */,
+				DFC8E7A2F7941A994200FF6C /* QRExportSheet.swift in Sources */,
 				C0EE6EDCE210308C46DE6856 /* RuleEditorSheet.swift in Sources */,
 				B92365F2ACFA408CA226CA7F /* RulesEditorView.swift in Sources */,
 				8E43F6904E5AAD529AACBA1C /* RulesView.swift in Sources */,
@@ -1221,6 +1240,7 @@
 				43CC40E5E8E7DEEB9E61CEB8 /* ShadowsocksConfigBuilder.swift in Sources */,
 				D49CAAAAB4878A24C8A7D52B /* ShadowsocksQRScannerSheet.swift in Sources */,
 				2534B8CDD2E40D5F2105C9EF /* ShadowsocksServer.swift in Sources */,
+				4E0EE8ED5787010E844F6F87 /* ShadowsocksURIEncoder.swift in Sources */,
 				27E34E45FFE9A9D2242373E2 /* ShadowsocksURIParser.swift in Sources */,
 				9ADDC891C0BCC6053E86E2E2 /* SubscriptionConverter.swift in Sources */,
 				07BE855FF6DC83A07129C654 /* SubscriptionDeepLink.swift in Sources */,
