@@ -1,0 +1,4 @@
+Build 2026071201 (1.3.2)
+
+• Brand-new app icon and refreshed in-app branding.
+• Share your servers as QR codes: Shadowsocks profiles export each server as a standard ss:// link, and URL subscriptions export their subscription URL — scan with any compatible client. Copy and share buttons are there too.
