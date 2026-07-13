@@ -23,9 +23,6 @@ REQUIREMENTS
 
 meow is a one-time purchase, with no in-app purchases and no subscription fees. "Subscription" here means a proxy configuration URL (a Clash-style config subscription) that you supply — not a paid subscription.
 
-PUBLIC BETA
-This release is a public beta. Some features are in active development. Please report issues on GitHub or via the in-app feedback link.
-
 OPEN SOURCE
 meow-ios is open source. Source, issue tracker, and release notes:
 https://github.com/madeye/meow-ios

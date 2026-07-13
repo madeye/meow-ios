@@ -1,0 +1,4 @@
+Build 2026071401 (1.4.0)
+
+• Marketing version bumped to 1.4.0 for the App Store submission.
+• Same features as build 2026071201: brand-new app icon and in-app branding, plus QR-code sharing — Shadowsocks servers export as standard ss:// links and URL subscriptions export their subscription URL.

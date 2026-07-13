@@ -23,9 +23,6 @@ Shadowsocks、Trojan、VLESS 出站协议（支持 TLS、WebSocket、gRPC、H2 �
 
 meow 为一次性买断的付费应用，不含任何内购或订阅收费。本页所述"订阅"指你自行提供的代理配置链接（Clash 风格配置订阅），并非付费订阅。
 
-公开测试版
-本次为公开测试版本。部分功能仍在开发中。请通过 GitHub 或 App 内的反馈链接报告问题。
-
 开源
 meow-ios 是开源软件。源代码、问题追踪与发布说明：
 https://github.com/madeye/meow-ios
