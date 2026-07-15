@@ -89,6 +89,15 @@ final class VpnManager {
         }
 
         lastError = nil
+        // Refresh the CN-bypass artifact BEFORE the extension starts and reads
+        // it: a functional GEOIP,CN→DIRECT rule probe plus the CN CIDR dump,
+        // run app-side so the extension's jetsam budget never pays for the
+        // config load + Country.mmdb walk. Off-main — it blocks for the load.
+        // Failures are non-fatal: the extension hash-gates the artifact and
+        // falls back to full-tunnel routing.
+        await Task.detached(priority: .userInitiated) {
+            CnBypassProber.probe()
+        }.value
         // Always reload the manager from preferences before connecting, not
         // just when it's nil. When another VPN app becomes active, iOS disables
         // our saved configuration, and the manager object we cached at launch

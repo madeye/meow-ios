@@ -164,6 +164,13 @@ targets:
       - path: MeowIntegrationTests
         excludes:
           - "README.md"
+      # Production CN-bypass sources compiled directly into the test bundle:
+      # app extensions are bundled binaries, not linkable libraries, so this
+      # is the standard pattern for exercising extension code from unit tests
+      # (see TunnelSettingsLANExclusionTests). Both files are deliberately
+      # free of engine/FFI dependencies so this stays link-safe.
+      - path: PacketTunnel/Sources/MWCnBypass.m
+      - path: PacketTunnel/Sources/MWTunnelSettings.m
     dependencies:
       - target: meow-ios
       - package: MeowShared
@@ -175,9 +182,12 @@ targets:
         BUNDLE_LOADER: $(TEST_HOST)
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/meow-ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/meow-ios
         GENERATE_INFOPLIST_FILE: YES
-        SWIFT_OBJC_BRIDGING_HEADER: App/Sources/BridgingHeader.h
+        # Superset of the app's bridging header: adds the PacketTunnel ObjC
+        # classes compiled into this bundle (MWCnBypass, MWTunnelSettings).
+        SWIFT_OBJC_BRIDGING_HEADER: MeowIntegrationTests/BridgingHeader.h
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)/MeowCore/include
+          - $(SRCROOT)/PacketTunnel/Sources
 
   PacketTunnel:
     type: app-extension

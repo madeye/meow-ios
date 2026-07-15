@@ -61,6 +61,14 @@ base64 = "0.22"
 url = "2"
 urlencoding = "2"
 
+# CN-bypass probe (cn_bypass.rs): walks Country.mmdb via meow-rules'
+# CountryIndex to dump the merged CN CIDR set, and fingerprints the raw
+# config with SHA-256 so the extension can detect a stale artifact. All
+# three are already in the dependency graph (maxminddb/sha2 transitively,
+# meow-rules through meow-config) — declaring them direct adds no weight.
+maxminddb = "0.27"
+sha2 = "0.10"
+
 # tun2socks
 lwip = "0.3"
 
@@ -95,18 +103,16 @@ meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "498967eed34647
 meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291", default-features = false, features = ["listener-mixed"] }
 meow-api = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
 meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
+meow-rules = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
 
 [build-dependencies]
 cbindgen = "0.28"
 
 [dev-dependencies]
 # `xdg_home_dir_tests` probes the env-var wire-up via meow-config's GeoIP
-# load path. No FFI-side GeoIP / CN-range table is loaded at runtime any
-# longer — meow's resolver owns the GEOIP rule path — but the test keeps
-# `maxminddb` (dev-only, zero shipping impact) so it can also open the
-# fixture MMDB directly and prove the env-derived path resolves correctly.
+# load path; it opens the fixture MMDB directly via `maxminddb`, which is
+# now a regular dependency (cn_bypass.rs walks Country.mmdb at runtime).
 tempfile = "3"
-maxminddb = "0.27"
 # `test-util` enables `#[tokio::test(start_paused = true)]`, which gives
 # the dial-watchdog regression tests virtual time. Without it the tests
 # would either block on real wall-clock sleeps (slow CI) or shrink their

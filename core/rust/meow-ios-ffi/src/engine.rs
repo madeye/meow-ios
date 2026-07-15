@@ -59,7 +59,7 @@ fn slot() -> &'static Mutex<Option<EngineState>> {
     S.get_or_init(|| Mutex::new(None))
 }
 
-fn install_tls_provider() {
+pub(crate) fn install_tls_provider() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
@@ -118,7 +118,7 @@ impl Drop for TempFileGuard {
 /// keeps rule-provider cache files in the AppGroup container. Using
 /// `load_config_from_str` or `std::env::temp_dir()` would silently
 /// disable that caching.
-fn load_stripped_config(config_path: &str) -> Result<Config> {
+pub(crate) fn load_stripped_config(config_path: &str) -> Result<Config> {
     let original = std::fs::read_to_string(config_path)
         .with_context(|| format!("reading config from {config_path}"))?;
     let stripped = prepare_ios_config(&original)?;

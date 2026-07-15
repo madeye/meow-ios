@@ -31,6 +31,10 @@ NSString *const MWAppGroupIdentifier = @"group.com.tangzixiang.meow";
     return [[self containerURL] URLByAppendingPathComponent:@"traffic.json"];
 }
 
++ (NSURL *)cnBypassURL {
+    return [[self containerURL] URLByAppendingPathComponent:@"cn-bypass.txt"];
+}
+
 + (NSUserDefaults *)defaults {
     NSUserDefaults *d = [[NSUserDefaults alloc] initWithSuiteName:MWAppGroupIdentifier];
     NSAssert(d, @"Shared UserDefaults unavailable for suite '%@'", MWAppGroupIdentifier);
