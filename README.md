@@ -12,15 +12,18 @@ Public beta is open on TestFlight: <https://testflight.apple.com/join/HSptQN3h>.
 Requires iOS 17 or later (iPhone and iPad). Bring your own Mihomo / Clash
 subscription — meow does not provide proxy servers.
 
-Latest release: [**v1.3.0**](https://github.com/madeye/meow-ios/releases/tag/v1.3.0)
-— RSS reductions targeting the NetworkExtension jetsam cap (peak FFI RSS
-−76% in stress tests), runtime-tunable TCP accept cap, hermetic stress
-test harness. See the [release notes](https://github.com/madeye/meow-ios/releases)
-for the full per-version changelog.
+Latest version: **v1.4.0** (July 2026) — dark mode across the app, QR-code
+export for `ss://` profiles and subscription URLs, and a refreshed cat
+branding. Since then, `main` also gained automatic CN-route tunnel bypass:
+when your config rules `GEOIP,CN` to `DIRECT`, the CN CIDR set is excluded
+from the tunnel and that traffic stays on the physical interface. See the
+[release notes](https://github.com/madeye/meow-ios/releases) for earlier
+per-version changelogs.
 
 ## Status
 
-Public beta. See [`docs/PRD.md`](docs/PRD.md) and
+Public beta on TestFlight; the first App Store release (v1.4.0) is in
+review. See [`docs/PRD.md`](docs/PRD.md) and
 [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for the product spec and task
 breakdown.
 

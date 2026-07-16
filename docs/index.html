@@ -6,7 +6,7 @@
     <title>meow — iOS proxy client (meow-rs) (public beta)</title>
     <meta
       name="description"
-      content="meow is a native iOS proxy client (meow-rs) for iOS 17+: Clash-style YAML subscriptions, rule-based routing, DNS over HTTPS, and a SwiftUI material design. Public beta on TestFlight."
+      content="meow is a native iOS proxy client (meow-rs) for iOS 17+: Clash-style YAML subscriptions, rule-based routing, DNS over HTTPS, QR-code profile sharing, and a SwiftUI material design in light and dark. Public beta on TestFlight."
     />
     <meta name="theme-color" content="#E8843A" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#FFA458" media="(prefers-color-scheme: dark)" />
@@ -16,7 +16,7 @@
     <meta property="og:title" content="meow — iOS proxy client (meow-rs)" />
     <meta
       property="og:description"
-      content="Native iOS proxy client (meow-rs) for iOS 17+. Clash-style YAML subscriptions, rule-based routing, DNS over HTTPS, and a SwiftUI material design. Public beta on TestFlight."
+      content="Native iOS proxy client (meow-rs) for iOS 17+. Clash-style YAML subscriptions, rule-based routing, DNS over HTTPS, QR-code profile sharing, and a SwiftUI material design in light and dark. Public beta on TestFlight."
     />
     <meta property="og:url" content="https://madeye.github.io/meow-ios/" />
     <meta property="og:type" content="website" />
@@ -24,7 +24,7 @@
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1024" />
     <meta property="og:image:height" content="1024" />
-    <meta property="og:image:alt" content="meow app icon — an orange tabby cat with a blue scarf leaping over brick blocks on a blue background" />
+    <meta property="og:image:alt" content="meow app icon — an orange tabby cat peeking over a white ledge with its paws draped over the edge, on a blue background" />
     <meta property="og:video" content="https://media.githubusercontent.com/media/madeye/meow-ios/main/docs/meow-intro.mp4" />
     <meta property="og:video:type" content="video/mp4" />
     <meta property="og:video:width" content="1920" />
@@ -35,10 +35,10 @@
     <meta name="twitter:title" content="meow — iOS proxy client (meow-rs)" />
     <meta
       name="twitter:description"
-      content="Native iOS proxy client (meow-rs) for iOS 17+. Clash-style YAML subscriptions, rule-based routing, DoH, and a SwiftUI material design. Public beta on TestFlight."
+      content="Native iOS proxy client (meow-rs) for iOS 17+. Clash-style YAML subscriptions, rule-based routing, DoH, QR-code profile sharing, and a SwiftUI material design in light and dark. Public beta on TestFlight."
     />
     <meta name="twitter:image" content="https://madeye.github.io/meow-ios/appicon.png" />
-    <meta name="twitter:image:alt" content="meow app icon — an orange tabby cat with a blue scarf leaping over brick blocks on a blue background" />
+    <meta name="twitter:image:alt" content="meow app icon — an orange tabby cat peeking over a white ledge with its paws draped over the edge, on a blue background" />
 
     <link rel="icon" type="image/png" href="appicon.png" />
     <link rel="apple-touch-icon" href="appicon.png" />
@@ -447,7 +447,8 @@
           <h1>meow</h1>
           <p class="tagline">
             A native iOS proxy client (meow-rs). Clash-style YAML subscriptions,
-            rule-based routing, DNS over HTTPS, and a SwiftUI material design.
+            rule-based routing, DNS over HTTPS, and a SwiftUI material design —
+            in light and dark.
           </p>
         </header>
 
@@ -527,8 +528,10 @@
             </div>
             <h3>Smart split routing</h3>
             <p>
-              Built-in CN-IP TCP bypass plus rule-based routing on domain, IP,
-              GeoIP and GeoSITE — automatic, zero rule maintenance.
+              Rule-based routing on domain, IP, GeoIP and GeoSITE. When a
+              config sends GEOIP,CN to DIRECT, those routes are excluded from
+              the tunnel entirely — direct traffic stays on the physical
+              interface.
             </p>
           </div>
           <div class="feature f-cyan">
@@ -539,6 +542,26 @@
             <p>
               Live throughput, per-day usage chart, and per-app proxy groups
               with latency tests and one-tap selector switching.
+            </p>
+          </div>
+          <div class="feature">
+            <div class="glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M15 15h2v2h-2z"/><path d="M21 15v2"/><path d="M15 21h2"/><path d="M21 21h.01"/></svg>
+            </div>
+            <h3>Share by QR code</h3>
+            <p>
+              Export any ss:// profile or subscription URL as a QR code — move
+              a config between devices with a camera scan, no copy-paste.
+            </p>
+          </div>
+          <div class="feature f-purple">
+            <div class="glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+            </div>
+            <h3>Light &amp; dark</h3>
+            <p>
+              The whole app — proxy groups, connections, charts — adapts to
+              the system appearance with adaptive material styling.
             </p>
           </div>
         </div>
