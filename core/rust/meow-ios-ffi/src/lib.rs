@@ -746,13 +746,17 @@ pub unsafe extern "C" fn meow_patch_config(
     // target, so a poisoned plaintext answer would become the address we
     // actually connect (or CN-bypass around the TUN) to — encrypt the
     // upstream instead. IP-literal entries need no bootstrap nameserver, and
-    // rustls validates Cloudflare's IP-SAN certificate directly. 1.1.1.1
-    // only: its anycast twin 1.0.0.1 is unreachable on :853 from the
-    // networks this app targets (verified 2026-07-17), and a dead pool
-    // entry just adds a doomed dial per query.
+    // rustls validates Cloudflare's IP-SAN certificate directly. Both halves
+    // of Cloudflare's official anycast pair: the resolver queries the pool
+    // in parallel and takes the first success, so a twin that's unreachable
+    // on some networks (1.0.0.1:853 times out on some CN paths) costs only
+    // a doomed dial there while providing redundancy elsewhere.
     dns.insert(
         serde_yaml::Value::String("nameserver".into()),
-        serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("tls://1.1.1.1".into())]),
+        serde_yaml::Value::Sequence(vec![
+            serde_yaml::Value::String("tls://1.1.1.1".into()),
+            serde_yaml::Value::String("tls://1.0.0.1".into()),
+        ]),
     );
     root.insert(
         serde_yaml::Value::String("dns".into()),
@@ -1185,7 +1189,7 @@ rules:
         assert!(patched.contains("enhanced-mode: redir-host"));
         assert!(!patched.contains("fake-ip-range"));
         assert!(patched.contains("tls://1.1.1.1"));
-        assert!(!patched.contains("tls://1.0.0.1"));
+        assert!(patched.contains("tls://1.0.0.1"));
         assert!(!patched.contains("119.29.29.29"));
         assert!(!patched.contains("subscriptions:"));
     }
