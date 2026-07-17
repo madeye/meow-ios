@@ -53,7 +53,7 @@ fn test_lock() -> &'static Mutex<()> {
 }
 
 /// Hand-built minimal IPv4 + UDP packet bound for 172.19.0.2:53 (the
-/// fake-IP pool's DNS server address). The intercept path in `tun2socks.rs`
+/// TUN-subnet DNS server address). The intercept path in `tun2socks.rs`
 /// matches on `dst_port == 53` regardless of dst_ip, so this is enough to
 /// exercise the spawn-per-DNS-query branch without a real engine: the
 /// spawned task short-circuits on `engine::tunnel() == None` and unwinds.

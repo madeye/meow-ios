@@ -363,7 +363,7 @@ int meow_tun_tcp_idle_ttl_ms(void);
  * outbound UDP datagrams to destination port 443 (QUIC's transport) and
  * answers SVCB (64) / HTTPS (65) DNS queries NOERROR-empty from the
  * intercept itself (no h3/SvcParams advertisement), forcing clients onto
- * the A / fake-IPv4 + TCP path.
+ * the A + TCP path.
  *
  * At the FFI layer the new value applies immediately to subsequent UDP
  * datagrams and DNS queries (the backing flag is a plain atomic). The

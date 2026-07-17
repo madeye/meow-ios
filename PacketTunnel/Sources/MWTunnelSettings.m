@@ -21,10 +21,10 @@
     // CN bypass (when the app's pre-connect probe verified the config routes
     // GEOIP,CN → DIRECT): keep mainland-China destinations on the physical
     // interface instead of relaying them through the netstack just for the
-    // engine to DIRECT-dial them again. With meow-dns in fake-IP mode this
-    // covers literal-IP flows (apps dialing real IPs, app-side DoH results,
-    // IP-based CDNs/gaming); domain flows enter via fake IPs and keep the
-    // engine's full rule treatment either way.
+    // engine to DIRECT-dial them again. With meow-dns in redir-host mode
+    // every destination is a real IP, so this covers domain flows (resolved
+    // through the in-TUN resolver) as well as literal-IP flows (apps dialing
+    // real IPs, app-side DoH results, IP-based CDNs/gaming).
     NSArray<NEIPv4Route *> *v4Excluded = [self ipv4LanExcludedRoutes];
     if (cnBypass) {
         v4Excluded = [v4Excluded arrayByAddingObjectsFromArray:cnBypass.ipv4Routes];

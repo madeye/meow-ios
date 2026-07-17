@@ -5,7 +5,8 @@ import Yams
 /// actually loads. Mirrors the Android `MeowInstance.start` pipeline:
 ///
 ///   1. Remove user-managed `dns:` and `subscriptions:` blocks — the extension
-///      owns DNS (fake-ip + local listener) and the app owns subscription fetching.
+///      owns DNS (redir-host + local listener) and the app owns subscription
+///      fetching.
 ///   2. Override `secret:` with the random bearer token minted for this install.
 ///   3. Pin `mixed-port` (defaults to 7890), `allow-lan`, `bind-address`, and
 ///      a DNS listener so tun2socks and LAN clients can use meow's listeners.
@@ -79,11 +80,13 @@ public enum EffectiveConfigWriter {
         root["dns"] = [
             "enable": true,
             "listen": "\(bindAddress):\(defaultDNSPort)",
-            "enhanced-mode": "fake-ip",
-            "fake-ip-range": "28.0.0.0/8",
+            "enhanced-mode": "redir-host",
+            // DNS-over-TLS only — mirrors meow_patch_config: redir-host makes
+            // every resolver answer a real dial target, so plaintext upstreams
+            // would let a poisoned answer become the connect address.
             "nameserver": [
-                "119.29.29.29",
-                "223.5.5.5",
+                "tls://1.1.1.1",
+                "tls://1.0.0.1",
             ],
         ]
         root["external-controller"] = "127.0.0.1:\(apiCredentials.port)"
