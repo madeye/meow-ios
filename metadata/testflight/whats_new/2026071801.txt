@@ -1,0 +1,5 @@
+Build 2026071801 (1.4.0)
+
+• DNS resolution rolled back to the proven fake-IP setup with plain CN resolvers — fixes name-resolution issues some testers hit on recent builds.
+• CN route bypass removed: all traffic goes through the tunnel again and follows your config rules, matching pre-July-15 behavior.
+• No other feature changes from build 2026071401.
