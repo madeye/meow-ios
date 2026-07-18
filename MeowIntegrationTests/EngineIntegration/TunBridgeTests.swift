@@ -164,7 +164,8 @@ private struct EngineFixture {
         dns:
           enable: true
           listen: 127.0.0.1:57954
-          enhanced-mode: redir-host
+          enhanced-mode: fake-ip
+          fake-ip-range: 28.0.0.0/8
           nameserver:
             - 119.29.29.29
         mode: rule

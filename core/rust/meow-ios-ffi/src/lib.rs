@@ -13,11 +13,11 @@
 //! The staticlib owns separate tokio runtimes for the packet/netstack driver
 //! and for meow engine work so lwIP backpressure cannot starve the
 //! REST/API/proxy workers. DNS is delegated to a local meow-dns UDP listener
-//! running in redir-host (Mapping) mode: the tun2socks UDP/53 path still
-//! answers IPv6-disabled AAAA and HTTP/3-blocked HTTPS/SVCB queries
-//! NOERROR-empty itself, then sends other DNS queries to the listener. The FFI
-//! no longer carries its own DNS cache, china-DNS split-horizon, CN-IP table,
-//! DoH cache, or in-FFI TCP-DNS client.
+//! running in fake-IP mode: the tun2socks UDP/53 path still answers
+//! IPv6-disabled AAAA and HTTP/3-blocked HTTPS/SVCB queries NOERROR-empty
+//! itself, then sends other DNS queries to the listener. The FFI no longer
+//! carries its own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH
+//! cache, or in-FFI TCP-DNS client.
 
 mod cn_bypass;
 mod diagnostics;
@@ -693,11 +693,10 @@ pub unsafe extern "C" fn meow_patch_config(
         return -1;
     };
 
-    // Strip `dns` (iOS pins its own resolver block — see below: redir-host
-    // mode, so meow-dns returns real upstream IPs and keeps the IP → host
-    // reverse cache that `pre_handle_metadata` uses for domain-rule matching)
-    // and `subscriptions` (handled app-side). `secret` is intentionally NOT
-    // stripped here — we
+    // Strip `dns` (iOS pins its own resolver block — see below: fake-IP mode
+    // with the FFI's chosen `28.0.0.0/8` range, so meow-dns owns synthesis and
+    // fake-IP reverse mapping for domain-rule matching) and `subscriptions`
+    // (handled app-side). `secret` is intentionally NOT stripped here — we
     // overwrite it below with a per-install random token so the REST API on
     // loopback is authenticated rather than open.
     for key in ["dns", "subscriptions"] {
@@ -735,24 +734,19 @@ pub unsafe extern "C" fn meow_patch_config(
             "listen",
             serde_yaml::Value::String(format!("{bind_addr}:{dns_port}")),
         ),
+        ("enhanced-mode", serde_yaml::Value::String("fake-ip".into())),
         (
-            "enhanced-mode",
-            serde_yaml::Value::String("redir-host".into()),
+            "fake-ip-range",
+            serde_yaml::Value::String("28.0.0.0/8".into()),
         ),
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
     }
-    // DNS-over-TLS only. redir-host makes every resolver answer a real dial
-    // target, so a poisoned plaintext answer would become the address we
-    // actually connect (or CN-bypass around the TUN) to — encrypt the
-    // upstream instead. IP-literal entries need no bootstrap nameserver, and
-    // rustls validates Cloudflare's IP-SAN certificate directly. 1.0.0.1 is
-    // the same anycast service, kept for redundancy.
     dns.insert(
         serde_yaml::Value::String("nameserver".into()),
         serde_yaml::Value::Sequence(vec![
-            serde_yaml::Value::String("tls://1.1.1.1".into()),
-            serde_yaml::Value::String("tls://1.0.0.1".into()),
+            serde_yaml::Value::String("119.29.29.29".into()),
+            serde_yaml::Value::String("223.5.5.5".into()),
         ]),
     );
     root.insert(
@@ -1065,7 +1059,7 @@ pub extern "C" fn meow_tun_tcp_idle_ttl_ms() -> c_int {
 /// outbound UDP datagrams to destination port 443 (QUIC's transport) and
 /// answers SVCB (64) / HTTPS (65) DNS queries NOERROR-empty from the
 /// intercept itself (no h3/SvcParams advertisement), forcing clients onto
-/// the A + TCP path.
+/// the A / fake-IPv4 + TCP path.
 ///
 /// At the FFI layer the new value applies immediately to subsequent UDP
 /// datagrams and DNS queries (the backing flag is a plain atomic). The
@@ -1183,11 +1177,8 @@ rules:
         assert!(patched.contains("allow-lan: true"));
         assert!(patched.contains("bind-address: 0.0.0.0"));
         assert!(patched.contains("listen: 0.0.0.0:1054"));
-        assert!(patched.contains("enhanced-mode: redir-host"));
-        assert!(!patched.contains("fake-ip-range"));
-        assert!(patched.contains("tls://1.1.1.1"));
-        assert!(patched.contains("tls://1.0.0.1"));
-        assert!(!patched.contains("119.29.29.29"));
+        assert!(patched.contains("enhanced-mode: fake-ip"));
+        assert!(patched.contains("fake-ip-range: 28.0.0.0/8"));
         assert!(!patched.contains("subscriptions:"));
     }
 

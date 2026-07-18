@@ -172,17 +172,41 @@ fn terminal_is_direct(cfg: &Config, name: &str, metadata: &Metadata) -> bool {
     false
 }
 
+/// The fake-IP pool `meow_patch_config` pins (`dns.fake-ip-range`). Every
+/// fake-IP destination must keep routing INTO the tunnel, so a CN CIDR that
+/// overlaps this pool (possible after a Country.mmdb update — 28/8 is
+/// unallocated today) must never reach the excluded-route set: excluding it
+/// would black-hole all fake-IP'd traffic for those addresses.
+const FAKE_IP_POOL_START: u32 = 28 << 24; // 28.0.0.0
+const FAKE_IP_POOL_END: u32 = (29 << 24) - 1; // 28.255.255.255
+
 /// Enumerate the CN v4/v6 CIDRs from the MMDB, merged/simplified by
-/// `CountryIndex` — the exact set a `GEOIP,CN` rule matches against. With
-/// meow-dns in redir-host mode every destination is a real IP, so the full
-/// set is safe to exclude from the TUN (no fake-IP pool to protect).
+/// `CountryIndex` — the exact set a `GEOIP,CN` rule matches against — minus
+/// anything overlapping the fake-IP pool.
 fn cn_ranges(mmdb_path: &Path) -> Result<(Vec<String>, Vec<String>)> {
     let reader = maxminddb::Reader::open_readfile(mmdb_path)
         .with_context(|| format!("opening GeoIP MMDB at {}", mmdb_path.display()))?;
     let allowed: HashSet<String> = std::iter::once("CN".to_string()).collect();
     let index = CountryIndex::build(&reader, &allowed).map_err(|e| anyhow!(e))?;
     let ranges = index.ranges_for("CN");
-    let v4 = ranges.v4.iter().map(|net| net.to_string()).collect();
+    let mut skipped = 0usize;
+    let v4 = ranges
+        .v4
+        .iter()
+        .filter(|net| {
+            let start = u32::from(net.network());
+            let end = u32::from(net.broadcast());
+            let overlaps_pool = start <= FAKE_IP_POOL_END && end >= FAKE_IP_POOL_START;
+            skipped += usize::from(overlaps_pool);
+            !overlaps_pool
+        })
+        .map(|net| net.to_string())
+        .collect();
+    if skipped > 0 {
+        tracing::warn!(
+            "cn-bypass: dropped {skipped} CN range(s) overlapping the fake-IP pool 28.0.0.0/8"
+        );
+    }
     let v6 = ranges.v6.iter().map(|net| net.to_string()).collect();
     Ok((v4, v6))
 }

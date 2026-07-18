@@ -41,7 +41,7 @@ struct EffectiveConfigWriterTests {
         let parsed = try Yams.load(yaml: out) as? [String: Any]
         let dns = parsed?["dns"] as? [String: Any]
         #expect(dns?["listen"] as? String == "127.0.0.1:1053")
-        #expect((dns?["nameserver"] as? [String]) == ["tls://1.1.1.1", "tls://1.0.0.1"])
+        #expect((dns?["nameserver"] as? [String]) == ["119.29.29.29", "223.5.5.5"])
     }
 
     @Test
