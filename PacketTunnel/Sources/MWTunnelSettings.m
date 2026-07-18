@@ -4,12 +4,6 @@
 
 + (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress
                                              ipv6Enabled:(BOOL)ipv6Enabled {
-    return [self makeWithServerAddress:serverAddress ipv6Enabled:ipv6Enabled cnBypass:nil];
-}
-
-+ (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress
-                                             ipv6Enabled:(BOOL)ipv6Enabled
-                                                cnBypass:(nullable MWCnBypassRoutes *)cnBypass {
     NEPacketTunnelNetworkSettings *settings =
         [[NEPacketTunnelNetworkSettings alloc] initWithTunnelRemoteAddress:serverAddress];
 
@@ -18,18 +12,7 @@
         initWithAddresses:@[@"172.19.0.1"]
               subnetMasks:@[@"255.255.255.252"]];
     ipv4.includedRoutes = @[[NEIPv4Route defaultRoute]];
-    // CN bypass (when the app's pre-connect probe verified the config routes
-    // GEOIP,CN → DIRECT): keep mainland-China destinations on the physical
-    // interface instead of relaying them through the netstack just for the
-    // engine to DIRECT-dial them again. With meow-dns in fake-IP mode this
-    // covers literal-IP flows (apps dialing real IPs, app-side DoH results,
-    // IP-based CDNs/gaming); domain flows enter via fake IPs and keep the
-    // engine's full rule treatment either way.
-    NSArray<NEIPv4Route *> *v4Excluded = [self ipv4LanExcludedRoutes];
-    if (cnBypass) {
-        v4Excluded = [v4Excluded arrayByAddingObjectsFromArray:cnBypass.ipv4Routes];
-    }
-    ipv4.excludedRoutes = v4Excluded;
+    ipv4.excludedRoutes = [self ipv4LanExcludedRoutes];
     settings.IPv4Settings = ipv4;
 
     // IPv6 — configured only when the user enables IPv6 in app settings. When
@@ -55,11 +38,7 @@
             initWithAddresses:@[@"fd6d:6577::1"]
             networkPrefixLengths:@[@64]];
         ipv6.includedRoutes = @[[NEIPv6Route defaultRoute]];
-        NSArray<NEIPv6Route *> *v6Excluded = [self ipv6LanExcludedRoutes];
-        if (cnBypass) {
-            v6Excluded = [v6Excluded arrayByAddingObjectsFromArray:cnBypass.ipv6Routes];
-        }
-        ipv6.excludedRoutes = v6Excluded;
+        ipv6.excludedRoutes = [self ipv6LanExcludedRoutes];
         settings.IPv6Settings = ipv6;
     }
 

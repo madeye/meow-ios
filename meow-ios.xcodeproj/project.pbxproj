@@ -22,7 +22,6 @@
 		1413B423DEE5A4AE17B4F677 /* DiagnosticsLabelParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51C2BC68B7800884B68643F /* DiagnosticsLabelParserTests.swift */; };
 		16FA48C705C2691763DE4187 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 8895187DE158A91BFC1775BE /* Localizable.strings */; };
 		1705DA22AD7A785A8E0A5DF5 /* MeowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 332AEAFC0EED0EC4C05576EC /* MeowApp.swift */; };
-		1B038F4215C100D9B9A41A33 /* CnBypassProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E3021B9E49712484A5F929 /* CnBypassProber.swift */; };
 		1C4A14F944F334280633F3C1 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6DE9E643D70646873B923B /* ConnectionsView.swift */; };
 		1DC1B422EB6A35C59910D0E5 /* UtilityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB85D08A244615CFA035C0B3 /* UtilityView.swift */; };
 		1DEF3FB14FBD667C00541BFF /* IdentifierSlugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B54369F081E1B728712CC9 /* IdentifierSlugTests.swift */; };
@@ -45,16 +44,13 @@
 		34358821D3A262F7D08C62D9 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = 0CA41BA11AE3954D104A7AB8 /* MeowIPC */; };
 		34B4F8F808C424CBAF8E7EA9 /* MWSharedStore.m in Sources */ = {isa = PBXBuildFile; fileRef = AB83B7A37D165EF0E16A47BA /* MWSharedStore.m */; };
 		3BAE21D06E5B9935E58FDF1B /* MeowAPITypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A693FE7115671D717A87F1DB /* MeowAPITypes.swift */; };
-		3D9A7CFC6EEF6CFB212F26F4 /* MWCnBypass.m in Sources */ = {isa = PBXBuildFile; fileRef = 2903BFF5B811E364F2413414 /* MWCnBypass.m */; };
 		43CC40E5E8E7DEEB9E61CEB8 /* ShadowsocksConfigBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */; };
 		45310440BCC0654BDE996BA2 /* SubscriptionParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B0AD4D11A4D395987DD843B /* SubscriptionParserTests.swift */; };
 		458E58A53D18E7E14542FAB8 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC4AC97B3877B1A566FBFF6 /* Profile.swift */; };
 		4660565BBEE9CDFD88BD62AF /* SharedStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08020B398C102C110F6A8567 /* SharedStoreTests.swift */; };
 		4702884A9BD243CD419172C4 /* ProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B0CE1B314060B8B82956086 /* ProvidersView.swift */; };
 		478984A879E2B44990BF3A87 /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = 08F8D6F37F44DDC126510FF4 /* MeowModels */; };
-		480AE8EC72D63256C5FBCF74 /* MWCnBypass.m in Sources */ = {isa = PBXBuildFile; fileRef = 2903BFF5B811E364F2413414 /* MWCnBypass.m */; };
 		49DF75906671CC1725B8FBB2 /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D7D7768D31382CD90DFEBA6 /* ErrorBanner.swift */; };
-		4A5098C36ACA302E44205CEB /* CnBypassArtifactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82020ED07222E1B88D01F120 /* CnBypassArtifactTests.swift */; };
 		4A6D4B20B4094E334F26892F /* TunBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC654683AAE620AA9C1DCEBF /* TunBridgeTests.swift */; };
 		4AFF0859870D8941AC3CE716 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = BE92B6925662A398B4A18E9C /* MeowIPC */; };
 		4C1FB9714B9308B7577B9622 /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = 564BE37A8BC742522CCABC5E /* MeowModels */; };
@@ -118,7 +114,6 @@
 		ACB0FE6DC7CD1D5E824CCB35 /* EngineBootTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1046B4656B3C3717791D82D4 /* EngineBootTests.swift */; };
 		ADBD29F9A34A3AF34057D104 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1880D3F09797DFE2718AFC /* AppModel.swift */; };
 		AFFFD00A574AA3A9C3D33248 /* DailyTrafficAccumulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664BEEB7B966973C3D0A5074 /* DailyTrafficAccumulator.swift */; };
-		B0EC60DAF54802F1874D159F /* MWTunnelSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = E8B56935362D1576450CB4A3 /* MWTunnelSettings.m */; };
 		B2761759D155051F32B46F2D /* AppModelContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40EEE34003CA284E6D9754E0 /* AppModelContainer.swift */; };
 		B4CDE0AC50BC13DB22E90569 /* VpnManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930ED8C12FBC2859BCDC56E4 /* VpnManager.swift */; };
 		B59F7F4EA30A8A841D561C2F /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = DE2BFC92947DFA842E612CB7 /* MeowModels */; };
@@ -127,7 +122,6 @@
 		B92365F2ACFA408CA226CA7F /* RulesEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8D42838BD27620D7F278DE /* RulesEditorView.swift */; };
 		BA6EC811EDC00657072F8372 /* ClashConfigLinter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */; };
 		BA844D3302038958647DC227 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D5CF6C1DB2C326705BE75B5 /* SystemConfiguration.framework */; };
-		BAD167609B5EFC63D4BF3BD0 /* CnBypassProberTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1424D8346D3EF860DF5202 /* CnBypassProberTests.swift */; };
 		C05561AA0530BFF897CDEB8F /* MeowAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E114A82C37433E90AFEAD0E /* MeowAPI.swift */; };
 		C0EE6EDCE210308C46DE6856 /* RuleEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1711243E170547D1DA68FCD6 /* RuleEditorSheet.swift */; };
 		C1187CD2F55A4E1F99C1FB54 /* GeoAssetStager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */; };
@@ -234,7 +228,6 @@
 		257652A3B2BA6B1E11BA6252 /* QRExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRExportSheet.swift; sourceTree = "<group>"; };
 		2583E90C66D44FFDC834DAB9 /* DeepLinkImportConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkImportConfirmation.swift; sourceTree = "<group>"; };
 		2646E6E7241DEDBA8C6127C6 /* ShadowsocksConfigBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowsocksConfigBuilder.swift; sourceTree = "<group>"; };
-		2903BFF5B811E364F2413414 /* MWCnBypass.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWCnBypass.m; sourceTree = "<group>"; };
 		2D7D7768D31382CD90DFEBA6 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		2E2B37B72F11B1B2B1118221 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		A11C0DE00001A2B3C4D5E601 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
@@ -275,7 +268,6 @@
 		6B7B8DF88EDD0D51301DD316 /* SwiftDataTestContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataTestContainer.swift; sourceTree = "<group>"; };
 		6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIPCBridge.swift; sourceTree = "<group>"; };
 		6E01FEA2CE383A66686EDD16 /* v2rayn_ss_pair.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = v2rayn_ss_pair.txt; sourceTree = "<group>"; };
-		6F1424D8346D3EF860DF5202 /* CnBypassProberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CnBypassProberTests.swift; sourceTree = "<group>"; };
 		703008DEDF15E37B8C951A9A /* TunnelSettingsLANExclusionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelSettingsLANExclusionTests.swift; sourceTree = "<group>"; };
 		711184DB8878CD1F212CEEA3 /* DnsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DnsView.swift; sourceTree = "<group>"; };
 		71FF15AE48B5E9FFE60B4051 /* PacketTunnelProvider.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PacketTunnelProvider.m; sourceTree = "<group>"; };
@@ -284,9 +276,7 @@
 		7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoAssetStagerTests.swift; sourceTree = "<group>"; };
 		7D936CF5D2CCA1B2D180C2D6 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellTests.swift; sourceTree = "<group>"; };
 		819D62E17DBC5BC82869FA81 /* URLProtocolStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolStub.swift; sourceTree = "<group>"; };
-		82020ED07222E1B88D01F120 /* CnBypassArtifactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CnBypassArtifactTests.swift; sourceTree = "<group>"; };
 		86AFFBA5F04A152705EE60CA /* AccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityTests.swift; sourceTree = "<group>"; };
-		86E3021B9E49712484A5F929 /* CnBypassProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CnBypassProber.swift; sourceTree = "<group>"; };
 		8A1CBAFD55A777C3B13296E2 /* RulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesView.swift; sourceTree = "<group>"; };
 		8B8C6076C2AFE3F87452DDEF /* DeepLinkImportConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkImportConfirmationTests.swift; sourceTree = "<group>"; };
 		8BEF2D3A91176265B1C32542 /* .swiftformat */ = {isa = PBXFileReference; path = .swiftformat; sourceTree = "<group>"; };
@@ -309,12 +299,10 @@
 		A25A3F873FAAA2334188818B /* DailyTraffic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTraffic.swift; sourceTree = "<group>"; };
 		A2E8157E43AE62A3A59DDD5C /* DnsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DnsTests.swift; sourceTree = "<group>"; };
 		A43280DA576025F244CD1432 /* SubscriptionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionServiceTests.swift; sourceTree = "<group>"; };
-		A5539512B91B4F1BBFC6222F /* MWCnBypass.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWCnBypass.h; sourceTree = "<group>"; };
 		A693FE7115671D717A87F1DB /* MeowAPITypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowAPITypes.swift; sourceTree = "<group>"; };
 		A7002E0BC1FFE0A41FEBE8F6 /* LocalizableParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizableParityTests.swift; sourceTree = "<group>"; };
 		AB83B7A37D165EF0E16A47BA /* MWSharedStore.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWSharedStore.m; sourceTree = "<group>"; };
 		AC946E90DE239C2BD7D48DC0 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
-		ACD17D4590EB72DF2955A809 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		AEF2A63A9C65B92F9DC00AA1 /* FakeWebSocketTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeWebSocketTransport.swift; sourceTree = "<group>"; };
 		AEF41AF44DDC9B81E01AF637 /* GlobalVpnSwitchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalVpnSwitchBar.swift; sourceTree = "<group>"; };
 		AF51AD7DD7946AB70970C9A8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -518,7 +506,6 @@
 		546289FB1F7F3C7197D240BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				6F1424D8346D3EF860DF5202 /* CnBypassProberTests.swift */,
 				8B8C6076C2AFE3F87452DDEF /* DeepLinkImportConfirmationTests.swift */,
 				7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */,
 				DF623F1E34B38A27E15C6B36 /* QRCodeRendererTests.swift */,
@@ -626,7 +613,6 @@
 			children = (
 				6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */,
 				F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */,
-				86E3021B9E49712484A5F929 /* CnBypassProber.swift */,
 				664BEEB7B966973C3D0A5074 /* DailyTrafficAccumulator.swift */,
 				2583E90C66D44FFDC834DAB9 /* DeepLinkImportConfirmation.swift */,
 				20AB821D2884D05E4EA7E831 /* GeoAssetStager.swift */,
@@ -735,7 +721,6 @@
 				D4720F8080288EE77EB7517A /* SwiftData */,
 				E77D5B4B9E095D58803CB423 /* VPNLifecycle */,
 				8BEF2D3A91176265B1C32542 /* .swiftformat */,
-				ACD17D4590EB72DF2955A809 /* BridgingHeader.h */,
 			);
 			path = MeowIntegrationTests;
 			sourceTree = "<group>";
@@ -804,7 +789,6 @@
 		E77D5B4B9E095D58803CB423 /* VPNLifecycle */ = {
 			isa = PBXGroup;
 			children = (
-				82020ED07222E1B88D01F120 /* CnBypassArtifactTests.swift */,
 				FB11E2BC5612E27CCE83B0DC /* TunnelLifecycleTests.swift */,
 				FE41537EBB7380469E247A65 /* TunnelSettings.swift */,
 				703008DEDF15E37B8C951A9A /* TunnelSettingsLANExclusionTests.swift */,
@@ -826,8 +810,6 @@
 				CDFB76E2466D24EF8DF96740 /* BridgingHeader.h */,
 				EE63F2C20D91AB9B68EB33C8 /* MWAppGroup.h */,
 				E605B002F990CE95032AA3A8 /* MWAppGroup.m */,
-				A5539512B91B4F1BBFC6222F /* MWCnBypass.h */,
-				2903BFF5B811E364F2413414 /* MWCnBypass.m */,
 				797EA53C272DDA3EC6E73E6F /* MWDarwinBridge.h */,
 				24F2E3A9014A186B34D8A465 /* MWDarwinBridge.m */,
 				C2BE1F013E2C0B2B1E591FEA /* MWDiagnosticsRunner.h */,
@@ -1127,13 +1109,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4A5098C36ACA302E44205CEB /* CnBypassArtifactTests.swift in Sources */,
 				8175E08BB80BF5BFE715A492 /* ConcurrentAccessTests.swift in Sources */,
 				F453433A7CD958D28F7693DA /* ConnectionsScreenTests.swift in Sources */,
 				ACB0FE6DC7CD1D5E824CCB35 /* EngineBootTests.swift in Sources */,
 				1DFB9CC9D7520C6342B580D2 /* IPCRoundTripTests.swift in Sources */,
-				480AE8EC72D63256C5FBCF74 /* MWCnBypass.m in Sources */,
-				B0EC60DAF54802F1874D159F /* MWTunnelSettings.m in Sources */,
 				4A6D4B20B4094E334F26892F /* TunBridgeTests.swift in Sources */,
 				0B13BCBE3F3A575D7E213399 /* TunnelLifecycleTests.swift in Sources */,
 				2E70DD05E62B166087AA7207 /* TunnelSettings.swift in Sources */,
@@ -1167,7 +1146,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				684752187B329EEE17E6EA1C /* MWAppGroup.m in Sources */,
-				3D9A7CFC6EEF6CFB212F26F4 /* MWCnBypass.m in Sources */,
 				9059DE28A7DEE52FCF194DC3 /* MWDarwinBridge.m in Sources */,
 				889A7F885031B01EE2D4ABCE /* MWDiagnosticsRunner.m in Sources */,
 				C58EE1AF7B24B7192EB4E258 /* MWEngineLog.m in Sources */,
@@ -1187,7 +1165,6 @@
 			files = (
 				A11C0DE00004A2B3C4D5E604 /* AppIconTests.swift in Sources */,
 				F3F6C8C58BB119BAA42C632B /* ChinaDirectKeywordsTests.swift in Sources */,
-				BAD167609B5EFC63D4BF3BD0 /* CnBypassProberTests.swift in Sources */,
 				A0ACD40A0E0CF4DFABDA8903 /* ConnectionsTests.swift in Sources */,
 				A80A176366D289562219D18D /* DarwinBridgeTests.swift in Sources */,
 				2AAC16E12E0060C437E70415 /* DeepLinkImportConfirmationTests.swift in Sources */,
@@ -1237,7 +1214,6 @@
 				A582A655A6EA5FF633395AD9 /* ChinaDirectKeywords.swift in Sources */,
 				BA6EC811EDC00657072F8372 /* ClashConfigLinter.swift in Sources */,
 				5633A6F5985AA9E9A03443B7 /* ClashYAMLTextView.swift in Sources */,
-				1B038F4215C100D9B9A41A33 /* CnBypassProber.swift in Sources */,
 				1C4A14F944F334280633F3C1 /* ConnectionsView.swift in Sources */,
 				8743C9ECD8EE078FA44E6545 /* ContentView.swift in Sources */,
 				53CECD909096DFDB00109EC4 /* DailyTraffic.swift in Sources */,
@@ -1518,7 +1494,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/MeowCore/include",
-					"$(SRCROOT)/PacketTunnel/Sources",
 				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1527,7 +1502,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowIntegrationTests;
 				SDKROOT = iphoneos;
-				SWIFT_OBJC_BRIDGING_HEADER = MeowIntegrationTests/BridgingHeader.h;
+				SWIFT_OBJC_BRIDGING_HEADER = App/Sources/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/meow-ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/meow-ios";
 			};
@@ -1650,7 +1625,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/MeowCore/include",
-					"$(SRCROOT)/PacketTunnel/Sources",
 				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1659,7 +1633,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tangzixiang.meow.MeowIntegrationTests;
 				SDKROOT = iphoneos;
-				SWIFT_OBJC_BRIDGING_HEADER = MeowIntegrationTests/BridgingHeader.h;
+				SWIFT_OBJC_BRIDGING_HEADER = App/Sources/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/meow-ios.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/meow-ios";
 			};

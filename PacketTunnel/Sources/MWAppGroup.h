@@ -10,9 +10,5 @@ extern NSString *const MWAppGroupIdentifier;
 @property (class, nonatomic, readonly) NSURL *effectiveConfigURL;
 @property (class, nonatomic, readonly) NSURL *stateURL;
 @property (class, nonatomic, readonly) NSURL *trafficURL;
-/// CN-bypass artifact written by the app's pre-connect probe
-/// (meow_config_cn_bypass_probe); consumed at tunnel start to exclude CN
-/// routes from the TUN. Keep in sync with AppGroup.cnBypassURL (Swift).
-@property (class, nonatomic, readonly) NSURL *cnBypassURL;
 @property (class, nonatomic, readonly) NSUserDefaults *defaults;
 @end

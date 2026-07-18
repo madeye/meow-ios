@@ -190,37 +190,6 @@ int meow_patch_config(const char *source_yaml,
                       int out_cap);
 
 /**
- * Run the CN-bypass rule-matching probe against the Clash YAML at
- * `config_path` and atomically write the result artifact to `out_path`.
- *
- * The probe routes representative mainland-China IPs through the parsed
- * rule chain (same first-match semantics as the live engine) and reports
- * CN-direct only when every probe IP hits a `GEOIP,CN` rule whose target
- * resolves — through selector / url-test / fallback group chains — to a
- * Direct terminal adapter. When CN-direct, the artifact carries the merged
- * CN IPv4+IPv6 CIDR set from the same Country.mmdb the rule matches
- * against, for Swift to exclude from the TUN's routes at the next tunnel
- * start; CN traffic then bypasses the NetworkExtension entirely instead of
- * being relayed through the netstack just to be DIRECT-dialed again.
- *
- * The artifact is plain text: a version header, `config-sha256 <hex>` of
- * the raw config bytes (the extension re-hashes config.yaml at start and
- * ignores a stale artifact), `cn-direct <0|1>`, then one CIDR per line.
- *
- * Call from the APP process before `startVPNTunnel` — the config load +
- * MMDB walk is a transient multi-MB allocation the NE jetsam budget should
- * not pay. Requires `meow_core_set_home_dir` first (Country.mmdb path).
- *
- * Returns 1 when the bypass is engaged (artifact contains routes), 0 when
- * CN traffic stays inside the tunnel (artifact written with `cn-direct 0`),
- * -1 on error (artifact untouched; inspect `meow_core_last_error`).
- *
- * # Safety
- * `config_path` and `out_path` must be NUL-terminated UTF-8 C strings.
- */
-int meow_config_cn_bypass_probe(const char *config_path, const char *out_path);
-
-/**
  * Start tun2socks with a Swift-owned egress callback. The ingest side is
  * driven by `meow_tun_ingest`; the tunnel uses an internal mpsc queue so
  * there's no file descriptor between Swift and Rust.

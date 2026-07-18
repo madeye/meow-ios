@@ -1,7 +1,6 @@
 #import "PacketTunnelProvider.h"
 #import "MWTunnelEngine.h"
 #import "MWTunnelSettings.h"
-#import "MWCnBypass.h"
 #import "MWAppGroup.h"
 #import "MWPreferences.h"
 #import "MWIPCListener.h"
@@ -106,18 +105,8 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
     // (set from the same pref in MWTunnelEngine). Read it here so the TUN claims
     // a v6 address + ::/0 route only when the user enabled IPv6.
     BOOL ipv6Enabled = [[MWAppGroup defaults] boolForKey:MWPrefKeyIPv6Enabled];
-    // CN bypass: apply the app's pre-connect GEOIP,CN→DIRECT probe verdict.
-    // MWCnBypass returns nil (full-tunnel routing) unless the artifact is
-    // valid, engaged, AND probed from the exact config bytes about to run.
-    MWCnBypassRoutes *cnBypass = [MWCnBypass loadFromURL:[MWAppGroup cnBypassURL]
-                                       matchingConfigURL:[MWAppGroup configURL]];
-    if (cnBypass) {
-        MWEngineLogf(MWLogInfo, @"NE: CN bypass engaged — excluding %lu v4 + %lu v6 CN routes",
-                     (unsigned long)cnBypass.ipv4Routes.count,
-                     (unsigned long)cnBypass.ipv6Routes.count);
-    }
     NEPacketTunnelNetworkSettings *settings =
-        [MWTunnelSettings makeWithServerAddress:server ipv6Enabled:ipv6Enabled cnBypass:cnBypass];
+        [MWTunnelSettings makeWithServerAddress:server ipv6Enabled:ipv6Enabled];
 
     __weak __typeof__(self) weak = self;
     [self setTunnelNetworkSettings:settings completionHandler:^(NSError *settingsErr) {

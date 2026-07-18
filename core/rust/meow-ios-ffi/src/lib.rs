@@ -19,7 +19,6 @@
 //! carries its own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH
 //! cache, or in-FFI TCP-DNS client.
 
-mod cn_bypass;
 mod diagnostics;
 mod engine;
 mod file_log;
@@ -805,57 +804,6 @@ pub unsafe extern "C" fn meow_patch_config(
         Ok(s) => write_out(s.as_bytes(), out, out_cap),
         Err(e) => {
             set_error(format!("yaml serialize error: {e}"));
-            -1
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// CN-bypass probe (route exclusion for GEOIP,CN → DIRECT configs)
-// ---------------------------------------------------------------------------
-
-/// Run the CN-bypass rule-matching probe against the Clash YAML at
-/// `config_path` and atomically write the result artifact to `out_path`.
-///
-/// The probe routes representative mainland-China IPs through the parsed
-/// rule chain (same first-match semantics as the live engine) and reports
-/// CN-direct only when every probe IP hits a `GEOIP,CN` rule whose target
-/// resolves — through selector / url-test / fallback group chains — to a
-/// Direct terminal adapter. When CN-direct, the artifact carries the merged
-/// CN IPv4+IPv6 CIDR set from the same Country.mmdb the rule matches
-/// against, for Swift to exclude from the TUN's routes at the next tunnel
-/// start; CN traffic then bypasses the NetworkExtension entirely instead of
-/// being relayed through the netstack just to be DIRECT-dialed again.
-///
-/// The artifact is plain text: a version header, `config-sha256 <hex>` of
-/// the raw config bytes (the extension re-hashes config.yaml at start and
-/// ignores a stale artifact), `cn-direct <0|1>`, then one CIDR per line.
-///
-/// Call from the APP process before `startVPNTunnel` — the config load +
-/// MMDB walk is a transient multi-MB allocation the NE jetsam budget should
-/// not pay. Requires `meow_core_set_home_dir` first (Country.mmdb path).
-///
-/// Returns 1 when the bypass is engaged (artifact contains routes), 0 when
-/// CN traffic stays inside the tunnel (artifact written with `cn-direct 0`),
-/// -1 on error (artifact untouched; inspect `meow_core_last_error`).
-///
-/// # Safety
-/// `config_path` and `out_path` must be NUL-terminated UTF-8 C strings.
-#[no_mangle]
-pub unsafe extern "C" fn meow_config_cn_bypass_probe(
-    config_path: *const c_char,
-    out_path: *const c_char,
-) -> c_int {
-    let (Some(config_path), Some(out_path)) = (cstr_to_str(config_path), cstr_to_str(out_path))
-    else {
-        set_error("config_path/out_path is null or not utf-8".into());
-        return -1;
-    };
-    match cn_bypass::probe_and_write(config_path, out_path) {
-        Ok(true) => 1,
-        Ok(false) => 0,
-        Err(e) => {
-            set_error(format!("cn-bypass probe failed: {e:#}"));
             -1
         }
     }
