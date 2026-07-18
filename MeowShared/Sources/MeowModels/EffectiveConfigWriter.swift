@@ -83,12 +83,11 @@ public enum EffectiveConfigWriter {
             "enhanced-mode": "redir-host",
             // DNS-over-TLS only — mirrors meow_patch_config: redir-host makes
             // every resolver answer a real dial target, so plaintext upstreams
-            // would let a poisoned answer become the connect address. Both
-            // halves of Cloudflare's official anycast pair; the pool is
-            // queried in parallel, first success wins.
+            // would let a poisoned answer become the connect address. 1.1.1.1
+            // only; 1.0.0.1:853 is unreachable from the networks this app
+            // targets.
             "nameserver": [
                 "tls://1.1.1.1",
-                "tls://1.0.0.1",
             ],
         ]
         root["external-controller"] = "127.0.0.1:\(apiCredentials.port)"
