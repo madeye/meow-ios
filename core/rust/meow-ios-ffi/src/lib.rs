@@ -884,6 +884,51 @@ pub extern "C" fn meow_tun_stop_blocking() {
     tun2socks::stop_blocking();
 }
 
+/// Active end-to-end data-path health probe. Injects a synthetic in-TUN DNS
+/// query (IPv4/UDP from `src_ip`:53535 to `dns_ip`:53 — the same shape as a
+/// real resolver query) through the full pipeline: ingress channel → lwip
+/// stack driver → UDP accept → DNS dispatch → meow-dns listener → reply
+/// writer → lwip egress. The reply frame is intercepted before the egress
+/// callback, so Swift never sees probe traffic.
+///
+/// Pass the TUN's own IPv4 address as `src_ip` and the advertised in-TUN DNS
+/// server as `dns_ip` (the `NEPacketTunnelNetworkSettings` values). In
+/// fake-IP mode the answer is synthesised locally, so a healthy verdict does
+/// not depend on upstream reachability — safe to run while the physical
+/// interface is still coming up after a wake.
+///
+/// Returns 0 when a reply came back (path is live), -1 when tun2socks is not
+/// running, -2 when no reply arrived within `timeout_ms` (path or engine DNS
+/// listener wedged — restart the engine), -3 on invalid arguments.
+///
+/// BLOCKS up to `timeout_ms`; call from a NON-runtime thread (the Swift
+/// tunnel control queue), never from an engine callback. Callers must
+/// serialize probes.
+///
+/// # Safety
+/// `src_ip` and `dns_ip` must be NUL-terminated C strings.
+#[no_mangle]
+pub unsafe extern "C" fn meow_tun_health_probe(
+    src_ip: *const c_char,
+    dns_ip: *const c_char,
+    timeout_ms: c_int,
+) -> c_int {
+    let (Some(src), Some(dns)) = (cstr_to_str(src_ip), cstr_to_str(dns_ip)) else {
+        set_error("src_ip/dns_ip is null or not utf-8".into());
+        return -3;
+    };
+    let (Ok(src), Ok(dns)) = (
+        src.parse::<std::net::Ipv4Addr>(),
+        dns.parse::<std::net::Ipv4Addr>(),
+    ) else {
+        set_error(format!("invalid probe addresses: {src} / {dns}"));
+        return -3;
+    };
+    let rc = tun2socks::health_probe(src, dns, timeout_ms.max(1) as u64);
+    logging::bridge_log(&format!("meow_tun_health_probe -> {rc}"));
+    rc as c_int
+}
+
 /// Abort every in-flight TCP flow tracked by tun2socks. This is an
 /// emergency diagnostic/teardown hook for dropping stale flows without
 /// tearing down the engine or the TUN itself.

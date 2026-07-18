@@ -1,5 +1,8 @@
 #import "MWTunnelSettings.h"
 
+NSString *const MWTunnelClientIPv4Address    = @"172.19.0.1";
+NSString *const MWTunnelDNSServerIPv4Address = @"172.19.0.2";
+
 @implementation MWTunnelSettings
 
 + (NEPacketTunnelNetworkSettings *)makeWithServerAddress:(NSString *)serverAddress
@@ -9,7 +12,7 @@
 
     // IPv4
     NEIPv4Settings *ipv4 = [[NEIPv4Settings alloc]
-        initWithAddresses:@[@"172.19.0.1"]
+        initWithAddresses:@[MWTunnelClientIPv4Address]
               subnetMasks:@[@"255.255.255.252"]];
     ipv4.includedRoutes = @[[NEIPv4Route defaultRoute]];
     ipv4.excludedRoutes = [self ipv4LanExcludedRoutes];
@@ -43,7 +46,8 @@
     }
 
     // DNS
-    NEDNSSettings *dns = [[NEDNSSettings alloc] initWithServers:@[@"172.19.0.2"]];
+    NEDNSSettings *dns =
+        [[NEDNSSettings alloc] initWithServers:@[MWTunnelDNSServerIPv4Address]];
     settings.DNSSettings = dns;
 
     // Conservative MSS clamp for PMTU black-holes on the upstream side.

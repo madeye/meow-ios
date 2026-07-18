@@ -184,6 +184,25 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
 - (void)wake {
     os_log_info(gLog, "wake: tun remained active");
     MWEngineLog(MWLogInfo, @"NE: wake — tun remained active");
+    // Sleep invalidated any pending engine restart, and the path monitor only
+    // fires on deltas — a delta consumed during a darkwake (whose restart the
+    // re-sleep then canceled) never re-fires at the final wake. So don't trust
+    // path state: verify the data path actually moves packets. The probe is an
+    // in-process DNS round-trip through the whole ingress→lwip→meow-dns→egress
+    // pipeline (~ms when healthy, no upstream network needed in fake-IP mode).
+    // Only a failed probe schedules the (debounced, re-probed) restart, so a
+    // healthy wake no longer pays the restart's DNS blackout.
+    dispatch_async(_engineControlQueue, ^{
+        MWTunnelEngine *engine = self->_engine;
+        if (!engine) return;
+        if ([engine isDataPathHealthyWithTimeoutMs:2000]) {
+            os_log_info(gLog, "wake: data path healthy, no restart needed");
+            return;
+        }
+        os_log_error(gLog, "wake: data path unresponsive, scheduling engine restart");
+        MWEngineLog(MWLogError, @"NE: wake — data path unresponsive, scheduling engine restart");
+        [self scheduleEngineRestartForReason:@"wake-health"];
+    });
 }
 
 - (void)scheduleEngineRestartForReason:(NSString *)reason {
@@ -219,6 +238,31 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
             os_log_info(gLog, "%{public}@ restart: no engine running, skipping", reason);
             return;
         }
+
+        // A path event proves the physical network changed shape, not that the
+        // tunnel broke. Everything the engine dials is per-flow/per-query, so a
+        // live data path self-heals on the new network — while a restart is a
+        // guaranteed multi-second DNS blackout (listener down, fake-IP pool
+        // wiped, every flow dropped) right when the user starts using the
+        // device. Probe end-to-end first and keep a healthy engine running.
+        if ([engine isDataPathHealthyWithTimeoutMs:1500]) {
+            os_log_info(gLog, "%{public}@ restart: data path healthy, skipping restart",
+                        reason);
+            MWEngineLogf(MWLogInfo, @"NE: %@ restart — data path healthy, skipping", reason);
+            return;
+        }
+        // The probe blocked this queue for up to its timeout; a newer path
+        // event may have superseded this restart meanwhile. Let the newest
+        // generation own recovery instead of restarting twice back-to-back.
+        if (atomic_load_explicit(&self->_restartGeneration, memory_order_relaxed) != gen) {
+            os_log_info(gLog, "%{public}@ restart: superseded during health probe, skipping",
+                        reason);
+            return;
+        }
+        os_log_error(gLog, "%{public}@ restart: data path unresponsive, restarting engine",
+                     reason);
+        MWEngineLogf(MWLogError, @"NE: %@ restart — data path unresponsive, restarting",
+                     reason);
 
         NSError *startErr = nil;
         if (![engine restartWithError:&startErr]) {

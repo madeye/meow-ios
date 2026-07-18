@@ -5,6 +5,7 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWEngineLog.h"
+#import "MWTunnelSettings.h"
 #import "meow_core.h"
 #import <stdatomic.h>
 #import <os/log.h>
@@ -223,6 +224,14 @@ static const int kLocalDNSPort                 = 1053;
 
 - (BOOL)isEngineRunning {
     return meow_engine_is_running() != 0;
+}
+
+- (BOOL)isDataPathHealthyWithTimeoutMs:(int32_t)timeoutMs {
+    if (!_started || !_tunStarted) return NO;
+    int rc = meow_tun_health_probe(MWTunnelClientIPv4Address.UTF8String,
+                                   MWTunnelDNSServerIPv4Address.UTF8String,
+                                   timeoutMs);
+    return rc == 0;
 }
 
 @synthesize tunStarted = _tunStarted;

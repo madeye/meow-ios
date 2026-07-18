@@ -47,7 +47,7 @@ use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::sync::{mpsc, Notify, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{mpsc, oneshot, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio_util::task::TaskTracker;
 use tracing::{info, trace, warn};
 
@@ -518,18 +518,34 @@ pub fn start(ctx: *mut c_void, cb: WritePacketFn) -> Result<(), String> {
 
     let rt = crate::get_tun2socks_runtime();
     let handle = rt.spawn(async move {
-        if let Some(prev) = prev {
+        if let Some(mut prev) = prev {
             // `stop()` is fire-and-forget: the previous run task may still
             // be draining its channel or running its teardown. lwip's
             // global state (OUTPUT_CB_PTR, netif hooks, pcb lists) assumes
             // exactly one live NetStack, so wait for the old instance to
             // finish before building a new one. Packets that arrive meanwhile
             // buffer (then drop) in the ingress channel, which beats
-            // corrupting the stack.
-            if let Err(e) = prev.await {
-                logging::bridge_log(&format!(
-                    "tun2socks: previous instance stopped with join error: {e}"
-                ));
+            // corrupting the stack. The wait is deliberately unbounded —
+            // overlapping stacks is the worse failure — but logged every 5 s
+            // so a wedged predecessor is visible in the engine log instead of
+            // presenting as a silent packet blackout.
+            let mut waited_s = 0u64;
+            loop {
+                match tokio::time::timeout(std::time::Duration::from_secs(5), &mut prev).await {
+                    Ok(Ok(())) => break,
+                    Ok(Err(e)) => {
+                        logging::bridge_log(&format!(
+                            "tun2socks: previous instance stopped with join error: {e}"
+                        ));
+                        break;
+                    }
+                    Err(_) => {
+                        waited_s += 5;
+                        logging::bridge_log(&format!(
+                            "tun2socks: gen {my_gen} still waiting for previous instance teardown ({waited_s}s)"
+                        ));
+                    }
+                }
             }
         }
         if let Err(e) = run_tun2socks(ingress_rx, emitter).await {
@@ -580,27 +596,46 @@ pub fn stop() {
 /// pathological teardown hang can't freeze iOS's `stopTunnel` grace window;
 /// if the bound trips we log and return anyway (a hung teardown is a separate
 /// failure, and freezing shutdown is worse than a vanishingly-rare late
-/// callback). Idempotent.
+/// callback) — but the un-joined handle is restored into `run_handle_slot`
+/// so a subsequent `start()` still serializes against the old generation
+/// instead of overlapping its lwip teardown. Idempotent.
 pub fn stop_blocking() {
     stop();
-    let Some(handle) = run_handle_slot().lock().take() else {
+    let Some(mut handle) = run_handle_slot().lock().take() else {
         return;
     };
     const JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-    crate::get_tun2socks_runtime().block_on(async move {
-        match tokio::time::timeout(JOIN_TIMEOUT, handle).await {
-            Ok(Ok(())) => {}
+    let joined = crate::get_tun2socks_runtime().block_on(async {
+        match tokio::time::timeout(JOIN_TIMEOUT, &mut handle).await {
+            Ok(Ok(())) => true,
             Ok(Err(e)) => {
                 logging::bridge_log(&format!("tun2socks: stop_blocking join error: {e}"));
+                true
             }
             Err(_) => {
                 warn!(
                     "tun2socks: stop_blocking timed out after {:?}; run task still draining, releasing ctx anyway",
                     JOIN_TIMEOUT
                 );
+                false
             }
         }
     });
+    if !joined {
+        // The old run task outlived the join bound. Put its handle BACK so the
+        // next `start()` serializes against the still-draining generation.
+        // Dropping the handle here (the old behavior) detached the task: the
+        // next `start()` then found no predecessor and built a fresh lwip
+        // NetStack overlapping the old instance's teardown — the exact
+        // two-live-stacks overlap `run_handle_slot` exists to prevent, and the
+        // post-wake-restart window where teardown is slowest is precisely when
+        // the 5 s bound trips. Only restore into an empty slot: a concurrent
+        // `start()` (nothing serializes FFI callers) may already own it.
+        let mut slot = run_handle_slot().lock();
+        if slot.is_none() {
+            *slot = Some(handle);
+        }
+    }
 }
 
 /// Push a raw IP packet produced by `NEPacketTunnelFlow.readPackets` into the
@@ -619,6 +654,189 @@ pub fn ingest(packet: &[u8]) -> i32 {
             0
         }
         Err(mpsc::error::TrySendError::Closed(_)) => -1,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Data-path health probe
+//
+// An end-to-end liveness check for the packet path: build a synthetic in-TUN
+// DNS query (IPv4/UDP, dst port 53), push it through the SAME pipeline a real
+// query from mDNSResponder takes — ingress channel → stack driver → lwip →
+// UDP accept → dispatch_dns_udp → meow-dns listener → reply writer → lwip
+// egress — and wait for the reply frame to come back out. A reply proves every
+// stage is live; silence within the deadline means the path is wedged (or the
+// engine is down), which is exactly the condition the wake-path restart
+// exists to clear. In fake-IP mode the answer is synthesised locally, so the
+// probe needs no upstream network and is safe to run while the physical
+// interface is still reassociating after a wake.
+// ---------------------------------------------------------------------------
+
+/// Fixed client port for probe queries. Replies are matched on (dst port,
+/// DNS ID) while a probe is armed; a stray real flow on this port would need
+/// a colliding 16-bit ID during the probe window to be swallowed, and the
+/// client would simply retry that one reply.
+const PROBE_SRC_PORT: u16 = 53535;
+
+/// Probe qname. Any name works — fake-IP synthesises an answer for every
+/// non-filtered name — but a reserved-TLD name keeps the probe out of real
+/// caches if the resolver is ever switched to redir-host mode (where this
+/// query goes to the configured upstreams and the probe additionally checks
+/// upstream reachability).
+const PROBE_QNAME: &str = "probe.meow-ios.internal";
+
+/// Interval between probe re-sends while waiting for a reply. Ingest is
+/// drop-on-full, so a probe frame can be lost to a saturated ingress queue
+/// (post-wake replay burst) or to the DNS burst cap; re-sending rides that
+/// out instead of misreporting a busy-but-live path as wedged.
+const PROBE_RESEND_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
+
+static PROBE_ARMED: AtomicBool = AtomicBool::new(false);
+static PROBE_ID_SEQ: AtomicU64 = AtomicU64::new(1);
+
+struct ProbeWatch {
+    dns_id: u16,
+    tx: oneshot::Sender<()>,
+}
+
+fn probe_watch_slot() -> &'static Mutex<Option<ProbeWatch>> {
+    static S: OnceLock<Mutex<Option<ProbeWatch>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(None))
+}
+
+/// Minimal DNS query payload for the probe: header (RD set) + one A/IN
+/// question for [`PROBE_QNAME`]. No EDNS, no compression.
+fn build_probe_dns_query(id: u16) -> Vec<u8> {
+    let mut q = Vec::with_capacity(12 + PROBE_QNAME.len() + 6);
+    q.extend_from_slice(&id.to_be_bytes());
+    q.extend_from_slice(&[0x01, 0x00]); // standard query, RD
+    q.extend_from_slice(&[0x00, 0x01]); // QDCOUNT = 1
+    q.extend_from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]); // AN/NS/AR = 0
+    for label in PROBE_QNAME.split('.') {
+        q.push(label.len() as u8);
+        q.extend_from_slice(label.as_bytes());
+    }
+    q.push(0);
+    q.extend_from_slice(&[0x00, 0x01]); // QTYPE = A
+    q.extend_from_slice(&[0x00, 0x01]); // QCLASS = IN
+    q
+}
+
+/// Build the probe as a raw IPv4/UDP frame from `src_ip`:[`PROBE_SRC_PORT`]
+/// to `dns_ip`:53 — the same shape as a real resolver query arriving on the
+/// TUN. UDP checksum 0 (legal for IPv4 per RFC 768).
+fn build_probe_packet(src_ip: std::net::Ipv4Addr, dns_ip: std::net::Ipv4Addr, id: u16) -> Vec<u8> {
+    let payload = build_probe_dns_query(id);
+    let total_len = (20 + 8 + payload.len()) as u16;
+    let udp_len = (8 + payload.len()) as u16;
+
+    let mut pkt = Vec::with_capacity(usize::from(total_len));
+    pkt.push(0x45); // version=4, IHL=5
+    pkt.push(0x00); // DSCP/ECN
+    pkt.extend_from_slice(&total_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]); // identification
+    pkt.extend_from_slice(&[0x40, 0x00]); // flags=DF, offset=0
+    pkt.push(64); // TTL
+    pkt.push(17); // protocol = UDP
+    pkt.extend_from_slice(&[0, 0]); // header checksum placeholder
+    pkt.extend_from_slice(&src_ip.octets());
+    pkt.extend_from_slice(&dns_ip.octets());
+    let cksum = ipv4_header_checksum(&pkt[0..20]);
+    pkt[10..12].copy_from_slice(&cksum.to_be_bytes());
+
+    pkt.extend_from_slice(&PROBE_SRC_PORT.to_be_bytes());
+    pkt.extend_from_slice(&53u16.to_be_bytes());
+    pkt.extend_from_slice(&udp_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]); // UDP checksum = 0
+    pkt.extend_from_slice(&payload);
+    pkt
+}
+
+/// Called by the egress task on every outbound frame while a probe is armed.
+/// Returns `true` when `pkt` is the armed probe's DNS reply, in which case it
+/// has been consumed (the waiter signalled) and must NOT be emitted to Swift
+/// — the synthetic client doesn't exist, and handing iOS a datagram for its
+/// own TUN address would be noise at best.
+fn probe_reply_intercept(pkt: &[u8]) -> bool {
+    if !PROBE_ARMED.load(Ordering::Relaxed) {
+        return false;
+    }
+    let Some(udp) = parse_udp_packet(pkt) else {
+        return false;
+    };
+    if udp.src_port != 53 || udp.dst_port != PROBE_SRC_PORT || udp.payload.len() < 2 {
+        return false;
+    }
+    let reply_id = u16::from_be_bytes([udp.payload[0], udp.payload[1]]);
+    let mut slot = probe_watch_slot().lock();
+    let matched = slot.as_ref().is_some_and(|w| w.dns_id == reply_id);
+    if !matched {
+        return false;
+    }
+    let watch = slot.take();
+    drop(slot);
+    PROBE_ARMED.store(false, Ordering::Relaxed);
+    if let Some(w) = watch {
+        let _ = w.tx.send(());
+    }
+    true
+}
+
+/// Run one end-to-end data-path health probe. Returns:
+///
+/// * `0`  — a probe reply came back through the full pipeline: path is live.
+/// * `-1` — tun2socks is not running.
+/// * `-2` — no reply within `timeout_ms`: the data path (or the engine's DNS
+///   listener) is not serving. The caller should restart the engine.
+///
+/// MUST be called from a NON-runtime thread (the Swift engine-control queue):
+/// it `block_on`s the tun2socks runtime, like [`stop_blocking`]. Callers must
+/// serialize probes; concurrent calls steal each other's watch slot and the
+/// loser reports unhealthy.
+pub fn health_probe(
+    src_ip: std::net::Ipv4Addr,
+    dns_ip: std::net::Ipv4Addr,
+    timeout_ms: u64,
+) -> i32 {
+    if !TUN2SOCKS_RUNNING.load(Ordering::SeqCst) {
+        return -1;
+    }
+    // u16 IDs wrap; skip 0 so a zeroed payload can't match a live watch.
+    let id = loop {
+        let raw = PROBE_ID_SEQ.fetch_add(1, Ordering::Relaxed) as u16;
+        if raw != 0 {
+            break raw;
+        }
+    };
+    let (tx, mut rx) = oneshot::channel::<()>();
+    *probe_watch_slot().lock() = Some(ProbeWatch { dns_id: id, tx });
+    PROBE_ARMED.store(true, Ordering::SeqCst);
+
+    let pkt = build_probe_packet(src_ip, dns_ip, id);
+    let deadline = std::time::Duration::from_millis(timeout_ms.max(1));
+    let healthy = crate::get_tun2socks_runtime().block_on(async {
+        tokio::time::timeout(deadline, async {
+            loop {
+                let _ = ingest(&pkt);
+                match tokio::time::timeout(PROBE_RESEND_INTERVAL, &mut rx).await {
+                    Ok(Ok(())) => return true,
+                    // Sender dropped without firing: watch slot was stolen or
+                    // torn down — report unhealthy rather than spin.
+                    Ok(Err(_)) => return false,
+                    Err(_) => continue, // re-send and keep waiting
+                }
+            }
+        })
+        .await
+        .unwrap_or(false)
+    });
+
+    PROBE_ARMED.store(false, Ordering::SeqCst);
+    probe_watch_slot().lock().take();
+    if healthy {
+        0
+    } else {
+        -2
     }
 }
 
@@ -761,6 +979,12 @@ async fn run_tun2socks(
 
     let egress_handle = tokio::spawn(async move {
         while let Some(pkt) = egress_rx.recv().await {
+            // Health-probe replies are consumed here instead of being handed
+            // to Swift: the probe's synthetic client doesn't exist on the
+            // device side. Single atomic load when no probe is armed.
+            if probe_reply_intercept(&pkt) {
+                continue;
+            }
             emitter.emit(&pkt);
         }
     });
@@ -1728,7 +1952,6 @@ fn build_udp_reply(orig_ip_data: &[u8], reply_payload: &[u8]) -> Option<Vec<u8>>
 
 /// One's-complement sum over a 20-byte IPv4 header. Caller has already
 /// zeroed the checksum field at bytes 10..12.
-#[cfg(test)]
 fn ipv4_header_checksum(header: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     for chunk in header.chunks_exact(2) {
@@ -1745,11 +1968,9 @@ fn ipv4_header_checksum(header: &[u8]) -> u16 {
 /// avoid the positional-tuple footgun that hid the `from_ne_bytes` bug in
 /// FI-1: the UDP/53 intercept only consumed `dst_port`, so an endian flip in
 /// the IP fields wasn't visible at the call site.
-#[cfg(test)]
 struct ParsedUdp<'a> {
     #[allow(dead_code)] // reserved for future callers (NAT-style src logging)
     src_ip: u32,
-    #[allow(dead_code)]
     src_port: u16,
     #[allow(dead_code)]
     dst_ip: u32,
@@ -1757,7 +1978,6 @@ struct ParsedUdp<'a> {
     payload: &'a [u8],
 }
 
-#[cfg(test)]
 fn parse_udp_packet(ip_data: &[u8]) -> Option<ParsedUdp<'_>> {
     if ip_data.len() < 28 {
         return None;
@@ -2518,5 +2738,177 @@ mod tests {
 
         // Idempotent: a second call with nothing to join is a no-op.
         stop_blocking();
+    }
+
+    /// Serializes tests that mutate the process-global probe state
+    /// (`PROBE_ARMED`, `probe_watch_slot`).
+    fn probe_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static GUARD: StdMutex<()> = StdMutex::new(());
+        GUARD.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn probe_packet_round_trips_as_dns_a_query() {
+        let src = Ipv4Addr::new(172, 19, 0, 1);
+        let dns = Ipv4Addr::new(172, 19, 0, 2);
+        let pkt = build_probe_packet(src, dns, 0xBEEF);
+
+        let udp = parse_udp_packet(&pkt).expect("probe packet must parse as IPv4/UDP");
+        assert_eq!(udp.src_ip, u32::from(src));
+        assert_eq!(udp.dst_ip, u32::from(dns));
+        assert_eq!(udp.src_port, PROBE_SRC_PORT);
+        assert_eq!(udp.dst_port, 53);
+        assert_eq!(
+            u16::from_be_bytes([udp.payload[0], udp.payload[1]]),
+            0xBEEF,
+            "DNS ID must round-trip"
+        );
+        assert_eq!(
+            parse_dns_qtype(udp.payload),
+            Some(1),
+            "probe queries qtype A"
+        );
+
+        // Header checksum must validate (recomputing over the header with the
+        // checksum field in place sums to zero → stored value was correct).
+        let mut hdr = pkt[0..20].to_vec();
+        hdr[10] = 0;
+        hdr[11] = 0;
+        assert_eq!(
+            ipv4_header_checksum(&hdr).to_be_bytes(),
+            [pkt[10], pkt[11]],
+            "IPv4 header checksum must be valid"
+        );
+    }
+
+    #[test]
+    fn probe_reply_intercept_matches_and_swallows_only_armed_probe() {
+        let _guard = probe_test_guard();
+
+        let src = Ipv4Addr::new(172, 19, 0, 1);
+        let dns = Ipv4Addr::new(172, 19, 0, 2);
+        let query_pkt = build_probe_packet(src, dns, 0x1234);
+        // A reply frame: build_udp_reply swaps src/dst, so the frame looks
+        // exactly like what lwip emits for the DNS answer (src :53 → dst
+        // :PROBE_SRC_PORT) with the DNS ID leading the payload.
+        let reply_payload = [0x12u8, 0x34, 0x81, 0x80, 0, 1, 0, 0, 0, 0, 0, 0];
+        let reply_pkt = build_udp_reply(&query_pkt, &reply_payload).expect("reply builds");
+
+        // Disarmed: nothing is swallowed even for a matching frame.
+        PROBE_ARMED.store(false, Ordering::SeqCst);
+        probe_watch_slot().lock().take();
+        assert!(
+            !probe_reply_intercept(&reply_pkt),
+            "disarmed → pass through"
+        );
+
+        // Armed with a DIFFERENT ID: frame passes through, watch stays armed.
+        let (tx, mut rx) = oneshot::channel::<()>();
+        *probe_watch_slot().lock() = Some(ProbeWatch { dns_id: 0x9999, tx });
+        PROBE_ARMED.store(true, Ordering::SeqCst);
+        assert!(
+            !probe_reply_intercept(&reply_pkt),
+            "ID mismatch → pass through"
+        );
+        assert!(
+            probe_watch_slot().lock().is_some(),
+            "mismatch must not consume the watch"
+        );
+        assert!(rx.try_recv().is_err(), "waiter must not be signalled");
+
+        // Armed with the matching ID: swallowed, waiter signalled, disarmed.
+        let (tx, mut rx) = oneshot::channel::<()>();
+        *probe_watch_slot().lock() = Some(ProbeWatch { dns_id: 0x1234, tx });
+        assert!(probe_reply_intercept(&reply_pkt), "match → swallowed");
+        assert!(rx.try_recv().is_ok(), "waiter signalled on match");
+        assert!(
+            probe_watch_slot().lock().is_none(),
+            "watch consumed on match"
+        );
+        assert!(
+            !PROBE_ARMED.load(Ordering::SeqCst),
+            "probe disarmed on match"
+        );
+
+        // Non-probe traffic (a real DNS reply to an ephemeral port) is never
+        // matched even while armed.
+        let (tx, _rx) = oneshot::channel::<()>();
+        *probe_watch_slot().lock() = Some(ProbeWatch { dns_id: 0x1234, tx });
+        PROBE_ARMED.store(true, Ordering::SeqCst);
+        let other_query = synthetic_dns_query_packet(); // src port 54321, not the probe port
+        let other_reply = build_udp_reply(&other_query, &reply_payload).expect("reply builds");
+        assert!(
+            !probe_reply_intercept(&other_reply),
+            "reply to a non-probe port must pass through"
+        );
+        PROBE_ARMED.store(false, Ordering::SeqCst);
+        probe_watch_slot().lock().take();
+    }
+
+    /// The probe's failure contract: -1 when tun2socks isn't running at all,
+    /// -2 when the stack is up but no reply arrives (here: no engine DNS
+    /// listener behind the intercept, so queries are dropped) — the caller's
+    /// signal to restart. Uses a short deadline; the re-send loop must not
+    /// spin past it.
+    #[test]
+    fn health_probe_reports_not_running_then_unhealthy() {
+        let _lifecycle = lifecycle_test_guard();
+        let _probe = probe_test_guard();
+
+        let src = Ipv4Addr::new(172, 19, 0, 1);
+        let dns = Ipv4Addr::new(172, 19, 0, 2);
+
+        assert_eq!(
+            health_probe(src, dns, 200),
+            -1,
+            "probe must fail fast when tun2socks is down"
+        );
+
+        unsafe extern "C" fn noop_write(
+            _ctx: *mut std::os::raw::c_void,
+            _data: *const u8,
+            _len: usize,
+        ) {
+        }
+        start(std::ptr::null_mut(), noop_write).expect("start");
+
+        assert_eq!(
+            health_probe(src, dns, 700),
+            -2,
+            "no DNS listener behind the stack → probe must time out unhealthy"
+        );
+        assert!(
+            !PROBE_ARMED.load(Ordering::SeqCst),
+            "probe must disarm after timing out"
+        );
+        assert!(
+            probe_watch_slot().lock().is_none(),
+            "watch slot must be cleared after timing out"
+        );
+
+        stop_blocking();
+    }
+
+    /// When the run task outlives `stop_blocking`'s join bound, the handle
+    /// must be restored into `run_handle_slot` so the next `start()`
+    /// serializes against the still-draining generation — dropping it (the
+    /// old behavior) detached the task and let a new lwip NetStack overlap
+    /// the old teardown. Simulated with a never-completing task standing in
+    /// for a wedged teardown; costs one JOIN_TIMEOUT (5 s) of wall clock.
+    #[test]
+    fn stop_blocking_restores_handle_when_join_times_out() {
+        let _guard = lifecycle_test_guard();
+
+        let wedged = crate::get_tun2socks_runtime().spawn(std::future::pending::<()>());
+        *run_handle_slot().lock() = Some(wedged);
+
+        stop_blocking();
+
+        let restored = run_handle_slot().lock().take();
+        assert!(
+            restored.is_some(),
+            "timed-out join must put the handle back for the next start()"
+        );
+        restored.expect("checked above").abort();
     }
 }
