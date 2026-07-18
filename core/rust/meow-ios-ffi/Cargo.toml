@@ -68,20 +68,19 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# HEAD: 498967e (meow-rs 0.16.0) — DelayHistory `time` now serializes as an
-# RFC 3339 string (meow-rs#290): the previous serde-default SystemTime object
-# made GET /proxies undecodable for the app once any probe recorded history
-# (issue #255, no latency shown in proxy groups). Also picks up tproxy fixes
-# meow-rs#267–#269 (Linux/macOS CLI only). Previous pin 6f080ec added
-# GET /dns/results (meow-rs#253), consumed by the app's DNS panel, the
-# vendored meow-anytls fork (#265) and quinn-proto/memmap2 RUSTSEC bumps
-# (#263). meow-dns still
-# runs in normal/Mapping (redir-host) mode: the resolver returns real
-# upstream IPs and keeps an IP → host reverse cache (decoupled from the DNS
-# TTL via REVERSE_TTL_FLOOR, meow-rs#240) so `pre_handle_metadata` recovers
-# the hostname for domain-rule matching. The FFI config parser pins
-# `enhanced-mode: redir-host` (no fake-ip-range); fake-IP is no longer used.
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
+# HEAD: 74e8083a (meow-rs 0.18.0) — picks up the rule-IR compilation series
+# (meow-rs#285/#291/#295–#297), lazy metadata enrichment (#292), the VMess
+# AEAD wire-format interop fix (#320), VLESS/Snell UDP-over-TCP read/write
+# fairness (#319), relay-direction fairness per buffer cycle (#347), atomic
+# traffic-snapshot publishing (#339/#341), RouteTable behind RwLock instead
+# of arc-swap (#335), DNS LRU tables no longer preallocated at capacity
+# (#337), and mihomo compat improvements (#313/#333). Windows/OpenWrt/CLI
+# work in 0.17–0.18 doesn't affect this crate. Previous pin 498967e
+# (0.16.0) made DelayHistory `time` serialize as RFC 3339 (meow-rs#290,
+# issue #255). meow-dns runs in fake-ip mode: the FFI config parser pins
+# `enhanced-mode: fake-ip` with `fake-ip-range: 28.0.0.0/8` (the 2026-07-17
+# redir-host/DoT switch was reverted in PR #321).
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -89,12 +88,12 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "498967eed34647
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
-meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291", default-features = false, features = ["listener-mixed"] }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "498967eed346477cf1d70760aa0b696c8b026291" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a", default-features = false, features = ["listener-mixed"] }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 
 [build-dependencies]
 cbindgen = "0.28"

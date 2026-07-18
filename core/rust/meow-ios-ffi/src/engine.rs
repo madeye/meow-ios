@@ -722,6 +722,9 @@ mod config_parse_tests {
         // Fixture has 141 ss proxies + 22 groups. Expected runtime totals:
         //   leaves = 141 ss + 3 built-ins (DIRECT, REJECT, REJECT-DROP) = 144
         //   groups = 22 user-defined (Proxies, 20 categories, Direct, Final)
+        //            + the injected mihomo-compat GLOBAL selector (meow-rs
+        //            0.18, #313) = 23. The app hides GLOBAL in
+        //            ProxyGroupModel, so it never reaches the UI.
         assert_eq!(
             leaves.len(),
             144,
@@ -729,6 +732,10 @@ mod config_parse_tests {
              meow-config was built without the `ss` feature — see commit \
              enabling default features on the meow-config dep",
         );
-        assert_eq!(groups.len(), 22, "all 22 user-defined groups must resolve");
+        assert_eq!(
+            groups.len(),
+            23,
+            "all 22 user-defined groups plus injected GLOBAL must resolve",
+        );
     }
 }
