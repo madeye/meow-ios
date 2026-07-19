@@ -1,0 +1,5 @@
+Build 2026072001 (1.4.0)
+
+• Keeps fake-IP DNS mappings across engine restarts, so destinations cached before sleep still resolve correctly after wake recovery.
+• Force-enables TLS SNI inspection on HTTPS ports for more reliable domain-rule matching while preserving the DNS-recovered hostname as the connection target.
+• Please test repeated lock/unlock cycles, then reopen sites or apps that were active before sleep. DNS and routing should recover without toggling the VPN.
