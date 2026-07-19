@@ -14,9 +14,10 @@ subscription — meow does not provide proxy servers.
 
 Latest version: **v1.4.0** (July 2026) — dark mode across the app, QR-code
 export for `ss://` profiles and subscription URLs, and a refreshed cat
-branding. Since then, `main` also gained automatic CN-route tunnel bypass:
-when your config rules `GEOIP,CN` to `DIRECT`, the CN CIDR set is excluded
-from the tunnel and that traffic stays on the physical interface. See the
+branding. Since then, `main` also picked up a wake-from-idle reliability
+fix — after sleep/wake the tunnel probes its data path and only restarts
+when the probe fails — plus a meow-rs engine bump to 0.18.0 and a leading
+swipe menu for refreshing individual subscriptions. See the
 [release notes](https://github.com/madeye/meow-ios/releases) for earlier
 per-version changelogs.
 
