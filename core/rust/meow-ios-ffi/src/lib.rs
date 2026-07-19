@@ -692,13 +692,12 @@ pub unsafe extern "C" fn meow_patch_config(
         return -1;
     };
 
-    // Strip `dns` (iOS pins its own resolver block — see below: fake-IP mode
-    // with the FFI's chosen `28.0.0.0/8` range, so meow-dns owns synthesis and
-    // fake-IP reverse mapping for domain-rule matching) and `subscriptions`
-    // (handled app-side). `secret` is intentionally NOT stripped here — we
-    // overwrite it below with a per-install random token so the REST API on
-    // loopback is authenticated rather than open.
-    for key in ["dns", "subscriptions"] {
+    // Strip `dns` and `sniffer` because iOS pins both blocks below: persistent
+    // fake-IP mapping plus TLS SNI inspection on the mixed listener. Strip
+    // `subscriptions` as well (handled app-side). `secret` is intentionally NOT
+    // stripped here — we overwrite it below with a per-install random token so
+    // the REST API on loopback is authenticated rather than open.
+    for key in ["dns", "sniffer", "subscriptions"] {
         root.remove(serde_yaml::Value::String(key.to_string()));
     }
 
@@ -734,6 +733,7 @@ pub unsafe extern "C" fn meow_patch_config(
             serde_yaml::Value::String(format!("{bind_addr}:{dns_port}")),
         ),
         ("enhanced-mode", serde_yaml::Value::String("fake-ip".into())),
+        ("store-fake-ip", serde_yaml::Value::Bool(true)),
         (
             "fake-ip-range",
             serde_yaml::Value::String("28.0.0.0/8".into()),
@@ -751,6 +751,37 @@ pub unsafe extern "C" fn meow_patch_config(
     root.insert(
         serde_yaml::Value::String("dns".into()),
         serde_yaml::Value::Mapping(dns),
+    );
+
+    // Always inspect TLS ClientHello SNI on the ports used by HTTPS. The
+    // sniffer writes `metadata.sniff_host`, which domain rules prefer, while
+    // `override-destination: false` deliberately preserves the hostname that
+    // fake-IP reverse mapping recovered as the actual dial target.
+    let mut tls = serde_yaml::Mapping::new();
+    tls.insert(
+        serde_yaml::Value::String("ports".into()),
+        serde_yaml::Value::Sequence(vec![
+            serde_yaml::Value::Number(443.into()),
+            serde_yaml::Value::Number(8443.into()),
+        ]),
+    );
+    let mut sniff = serde_yaml::Mapping::new();
+    sniff.insert(
+        serde_yaml::Value::String("TLS".into()),
+        serde_yaml::Value::Mapping(tls),
+    );
+    let mut sniffer = serde_yaml::Mapping::new();
+    for (key, value) in [
+        ("enable", serde_yaml::Value::Bool(true)),
+        ("parse-pure-ip", serde_yaml::Value::Bool(true)),
+        ("override-destination", serde_yaml::Value::Bool(false)),
+        ("sniff", serde_yaml::Value::Mapping(sniff)),
+    ] {
+        sniffer.insert(serde_yaml::Value::String(key.into()), value);
+    }
+    root.insert(
+        serde_yaml::Value::String("sniffer".into()),
+        serde_yaml::Value::Mapping(sniffer),
     );
 
     // Harden the meow external-controller. It binds on loopback, but iOS
@@ -1157,6 +1188,11 @@ allow-lan: false
 bind-address: 127.0.0.1
 dns:
   enable: false
+sniffer:
+  enable: false
+  sniff:
+    HTTP:
+      ports: [80]
 subscriptions:
   old: {}
 rules:
@@ -1173,6 +1209,104 @@ rules:
         assert!(patched.contains("enhanced-mode: fake-ip"));
         assert!(patched.contains("fake-ip-range: 28.0.0.0/8"));
         assert!(!patched.contains("subscriptions:"));
+
+        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+        let root = doc.as_mapping().expect("mapping root");
+        let dns = root
+            .get("dns")
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("forced dns mapping");
+        assert_eq!(
+            dns.get("store-fake-ip")
+                .and_then(serde_yaml::Value::as_bool),
+            Some(true)
+        );
+        let sniffer = root
+            .get("sniffer")
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("forced sniffer mapping");
+        assert_eq!(
+            sniffer.get("enable").and_then(serde_yaml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            sniffer
+                .get("parse-pure-ip")
+                .and_then(serde_yaml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            sniffer
+                .get("override-destination")
+                .and_then(serde_yaml::Value::as_bool),
+            Some(false)
+        );
+        let sniff = sniffer
+            .get("sniff")
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("forced protocol map");
+        let ports: Vec<u64> = sniff
+            .get("TLS")
+            .and_then(serde_yaml::Value::as_mapping)
+            .and_then(|tls| tls.get("ports"))
+            .and_then(serde_yaml::Value::as_sequence)
+            .expect("forced TLS ports")
+            .iter()
+            .map(|value| value.as_u64().expect("numeric TLS port"))
+            .collect();
+        assert_eq!(ports, vec![443, 8443]);
+        assert!(
+            sniff.get("HTTP").is_none(),
+            "user HTTP sniffer was replaced"
+        );
+    }
+
+    #[test]
+    fn patched_fake_ip_mapping_survives_config_reload() {
+        let tmp = tempfile::tempdir().expect("temp config dir");
+        let config_path = tmp.path().join("effective-config.yaml");
+        let patched = patch_config(
+            r#"
+proxies:
+  - name: DIRECT
+    type: direct
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        std::fs::write(&config_path, patched).expect("write effective config");
+        let config_path = config_path.to_str().expect("utf-8 config path");
+
+        let first = crate::get_engine_runtime()
+            .block_on(meow_config::load_config(config_path))
+            .expect("load first config generation");
+        assert!(first.sniffer.enable);
+        assert_eq!(first.sniffer.tls_ports, vec![443, 8443]);
+        let fake_ip = crate::get_engine_runtime()
+            .block_on(first.dns.resolver.lookup_ipv4("wake.example"))
+            .expect("fake IP allocation");
+        assert_eq!(
+            first.dns.resolver.reverse_lookup(fake_ip).as_deref(),
+            Some("wake.example")
+        );
+        drop(first);
+
+        let second = crate::get_engine_runtime()
+            .block_on(meow_config::load_config(config_path))
+            .expect("reload config after engine restart");
+        assert!(second.dns.resolver.is_fake_ip(fake_ip));
+        assert_eq!(
+            second.dns.resolver.reverse_lookup(fake_ip).as_deref(),
+            Some("wake.example"),
+            "the reverse map used by stale post-wake destinations must survive restart"
+        );
+        let same_ip = crate::get_engine_runtime()
+            .block_on(second.dns.resolver.lookup_ipv4("wake.example"))
+            .expect("reloaded fake IP allocation");
+        assert_eq!(same_ip, fake_ip);
     }
 
     #[test]

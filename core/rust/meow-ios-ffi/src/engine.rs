@@ -77,22 +77,7 @@ fn install_tls_provider() {
 fn prepare_ios_config(yaml: &str) -> Result<String> {
     let mut doc: serde_yaml::Value = serde_yaml::from_str(yaml).context("parsing config YAML")?;
     if let serde_yaml::Value::Mapping(m) = &mut doc {
-        for key in [
-            "port",
-            "socks-port",
-            "tproxy-port",
-            "listeners",
-            // Drop the entire `sniffer:` block. meow's
-            // `pre_handle_metadata` reverses each fake-IP destination back
-            // to the qname recorded by the resolver before rule matching,
-            // so SNI/ALPN sniffing is redundant — and when enabled it would
-            // overwrite the resolver-derived hostname based on whatever the
-            // sniffer parses out of the first TLS / HTTP record, which is a
-            // regression versus the authoritative qname captured at DNS
-            // resolution time. Strip at the FFI boundary so user
-            // subscriptions can't re-enable it.
-            "sniffer",
-        ] {
+        for key in ["port", "socks-port", "tproxy-port", "listeners"] {
             m.remove(serde_yaml::Value::String(key.to_string()));
         }
     }
@@ -482,12 +467,17 @@ log-level: info
         let out = prepare_ios_config(yaml).expect("strip ok");
         let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
         let m = doc.as_mapping().unwrap();
-        for k in ["port", "socks-port", "tproxy-port", "listeners", "sniffer"] {
+        for k in ["port", "socks-port", "tproxy-port", "listeners"] {
             assert!(
                 !m.contains_key(serde_yaml::Value::String(k.into())),
                 "{k} should have been stripped",
             );
         }
+        let sniffer = m
+            .get(serde_yaml::Value::String("sniffer".into()))
+            .and_then(|v| v.as_mapping())
+            .expect("sniffer should survive runtime preparation");
+        assert_eq!(sniffer.get("enable").and_then(|v| v.as_bool()), Some(true));
         assert_eq!(m.get("mixed-port").and_then(|v| v.as_i64()), Some(7892));
         assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
         assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
@@ -536,8 +526,16 @@ dns:
   listen: 0.0.0.0:1053
   enhanced-mode: fake-ip
   fake-ip-range: 28.0.0.0/8
+  store-fake-ip: true
   nameserver:
     - 119.29.29.29
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  override-destination: false
+  sniff:
+    TLS:
+      ports: [443, 8443]
 rules:
   - MATCH,DIRECT
 "#;
@@ -555,6 +553,11 @@ rules:
             cfg.dns.listen_addr,
             Some("0.0.0.0:1053".parse::<SocketAddr>().unwrap())
         );
+        assert!(cfg.sniffer.enable);
+        assert!(cfg.sniffer.parse_pure_ip);
+        assert!(!cfg.sniffer.override_destination);
+        assert_eq!(cfg.sniffer.tls_ports, vec![443, 8443]);
+        assert!(cfg.sniffer.http_ports.is_empty());
     }
 
     #[test]
