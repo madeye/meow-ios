@@ -1,0 +1,5 @@
+Build 2026071901 (1.4.0)
+
+• Fixes DNS failures after the device wakes from a long idle: the tunnel no longer restarts itself on every wake — it now verifies its own data path first and restarts only when actually needed, so DNS keeps working the moment you unlock.
+• New wake-time watchdog: if the tunnel ever stops passing traffic after sleep/wake, it is detected and repaired automatically instead of staying stuck until you reopen the app.
+• No other feature changes from build 2026071801.
