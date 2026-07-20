@@ -81,13 +81,14 @@ public enum EffectiveConfigWriter {
             "enable": true,
             "listen": "\(bindAddress):\(defaultDNSPort)",
             "enhanced-mode": "redir-host",
-            // DNS-over-TLS only — mirrors meow_patch_config: redir-host makes
-            // every resolver answer a real dial target, so plaintext upstreams
-            // would let a poisoned answer become the connect address. 1.1.1.1
-            // only; 1.0.0.1:853 is unreachable from the networks this app
-            // targets.
+            // Plain UDP upstreams — mirrors meow_patch_config: DoT to
+            // 1.1.1.1:853 proved unusable from the networks this app
+            // targets, so the poisoned-answer exposure of plaintext DNS in
+            // redir-host mode is an accepted trade-off (user decision
+            // 2026-07-20).
             "nameserver": [
-                "tls://1.1.1.1",
+                "119.29.29.29",
+                "223.5.5.5",
             ],
         ]
         // Mirror of meow_patch_config's probe pin: keeps the wake-path health

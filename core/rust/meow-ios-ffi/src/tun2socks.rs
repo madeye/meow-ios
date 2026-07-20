@@ -682,8 +682,8 @@ const PROBE_SRC_PORT: u16 = 53535;
 /// the effective config's `hosts:` block, so the resolver answers it locally
 /// (hosts entries short-circuit before any upstream dial) and the probe never
 /// depends on upstream reachability — redir-host mode would otherwise forward
-/// an unknown name to the DoT upstream. The reserved TLD keeps it out of real
-/// caches.
+/// an unknown name to the configured upstreams. The reserved TLD keeps it out
+/// of real caches.
 pub(crate) const PROBE_QNAME: &str = "probe.meow-ios.internal";
 
 /// The address [`PROBE_QNAME`] resolves to via the pinned `hosts:` entry.

@@ -42,7 +42,7 @@ struct EffectiveConfigWriterTests {
         let dns = parsed?["dns"] as? [String: Any]
         #expect(dns?["listen"] as? String == "127.0.0.1:1053")
         #expect(dns?["enhanced-mode"] as? String == "redir-host")
-        #expect((dns?["nameserver"] as? [String]) == ["tls://1.1.1.1"])
+        #expect((dns?["nameserver"] as? [String]) == ["119.29.29.29", "223.5.5.5"])
         let hosts = parsed?["hosts"] as? [String: Any]
         #expect(hosts?["probe.meow-ios.internal"] as? String == "203.0.113.53")
     }

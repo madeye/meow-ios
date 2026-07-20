@@ -693,7 +693,7 @@ pub unsafe extern "C" fn meow_patch_config(
     };
 
     // Strip `dns` and `sniffer` because iOS pins both blocks below: redir-host
-    // resolution over DoT (meow-dns returns real upstream IPs and keeps the
+    // resolution (meow-dns returns real upstream IPs and keeps the
     // IP → host reverse cache that `pre_handle_metadata` uses for domain-rule
     // matching) plus TLS SNI inspection on the mixed listener. Strip
     // `subscriptions` as well (handled app-side). `secret` is intentionally NOT
@@ -741,16 +741,19 @@ pub unsafe extern "C" fn meow_patch_config(
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
     }
-    // DNS-over-TLS only. redir-host makes every resolver answer a real dial
-    // target, so a poisoned plaintext answer would become the address we
-    // actually connect to — encrypt the upstream instead. IP-literal entries
-    // need no bootstrap nameserver, and rustls validates Cloudflare's IP-SAN
-    // certificate directly. 1.1.1.1 only: its anycast twin 1.0.0.1 is
-    // unreachable on :853 from the networks this app targets (verified
-    // 2026-07-17), and a dead pool entry just adds a doomed dial per query.
+    // Plain UDP upstreams (user decision 2026-07-20, replacing the DoT-only
+    // pool): tls://1.1.1.1:853 proved unusable from the networks this app
+    // targets, and a resolver with no reachable upstream is a full DNS
+    // outage. Accepted trade-off: in redir-host mode every resolver answer
+    // is a real dial target, so a poisoned plaintext answer becomes the
+    // connect address — rule matching still has the SNI sniffer as a
+    // hostname backstop, but the dial itself trusts these answers.
     dns.insert(
         serde_yaml::Value::String("nameserver".into()),
-        serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("tls://1.1.1.1".into())]),
+        serde_yaml::Value::Sequence(vec![
+            serde_yaml::Value::String("119.29.29.29".into()),
+            serde_yaml::Value::String("223.5.5.5".into()),
+        ]),
     );
     root.insert(
         serde_yaml::Value::String("dns".into()),
@@ -759,7 +762,7 @@ pub unsafe extern "C" fn meow_patch_config(
 
     // Keep the wake-path health probe (`meow_tun_health_probe`) answerable
     // without upstream network: in redir-host mode meow-dns forwards unknown
-    // names to the DoT upstream, so a post-wake probe would stall while the
+    // names to the upstream pool, so a post-wake probe would stall while the
     // physical interface is still reassociating and misread a live packet
     // path as wedged. A `hosts:` entry is answered locally by the resolver
     // before any upstream dial. The address is TEST-NET-3 documentation
@@ -1241,9 +1244,9 @@ rules:
         assert!(patched.contains("enhanced-mode: redir-host"));
         assert!(!patched.contains("fake-ip-range"));
         assert!(!patched.contains("store-fake-ip"));
-        assert!(patched.contains("tls://1.1.1.1"));
-        assert!(!patched.contains("tls://1.0.0.1"));
-        assert!(!patched.contains("119.29.29.29"));
+        assert!(patched.contains("119.29.29.29"));
+        assert!(patched.contains("223.5.5.5"));
+        assert!(!patched.contains("tls://"));
         assert!(!patched.contains("subscriptions:"));
 
         let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
