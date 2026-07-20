@@ -653,6 +653,64 @@ fn random_port() -> u16 {
 // Config patching (replaces the Swift/Yams EffectiveConfigWriter)
 // ---------------------------------------------------------------------------
 
+/// Choose the proxy adapter that should carry gfw-listed DNS lookups for the
+/// pinned `nameserver-policy`: the target of the final `MATCH,` rule when it
+/// names a proxy or group defined in this config, else the first
+/// proxy-group, else the first proxy. Built-in policies (DIRECT/REJECT/…)
+/// never qualify — tunnelling the trusted resolver through them would be a
+/// no-op or a black hole. `None` → the caller omits the policy.
+fn gfw_dns_proxy(root: &serde_yaml::Mapping) -> Option<String> {
+    fn names_of(root: &serde_yaml::Mapping, key: &str) -> Vec<String> {
+        root.get(key)
+            .and_then(serde_yaml::Value::as_sequence)
+            .map(|seq| {
+                seq.iter()
+                    .filter_map(|item| item.as_mapping()?.get("name")?.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    const BUILTINS: [&str; 7] = [
+        "DIRECT",
+        "REJECT",
+        "REJECT-DROP",
+        "PASS",
+        "COMPATIBLE",
+        "GLOBAL",
+        "BLOCK",
+    ];
+    let groups = names_of(root, "proxy-groups");
+    let proxies = names_of(root, "proxies");
+    let usable = |name: &str| {
+        !BUILTINS.contains(&name.to_ascii_uppercase().as_str())
+            && (groups.iter().any(|n| n == name) || proxies.iter().any(|n| n == name))
+    };
+
+    let match_target = root
+        .get("rules")
+        .and_then(serde_yaml::Value::as_sequence)
+        .and_then(|rules| {
+            rules.iter().rev().find_map(|rule| {
+                let rule = rule.as_str()?;
+                let mut parts = rule.split(',').map(str::trim);
+                if !parts.next()?.eq_ignore_ascii_case("MATCH") {
+                    return None;
+                }
+                parts.next().map(str::to_string)
+            })
+        });
+    if let Some(target) = match_target {
+        if usable(&target) {
+            return Some(target);
+        }
+    }
+    groups
+        .iter()
+        .find(|n| usable(n))
+        .or_else(|| proxies.iter().find(|n| usable(n)))
+        .cloned()
+}
+
 /// Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
 /// socket; injects a hardened `external-controller` (random loopback port)
@@ -755,6 +813,29 @@ pub unsafe extern "C" fn meow_patch_config(
             serde_yaml::Value::String("223.5.5.5".into()),
         ]),
     );
+    // ChinaDNS-style trusted path for GFW-listed names: resolve any hostname
+    // matching geosite:gfw through TCP/53 upstreams tunnelled over the
+    // config's own proxy (the `#<name>` fragment), so a censor on the direct
+    // path can neither poison nor observe those lookups — closing the main
+    // plaintext-upstream hole for exactly the names it targets. Everything
+    // else keeps the fast plain-UDP pool above. Degrades gracefully: with no
+    // usable proxy/group in the config the policy is omitted, and before
+    // geosite.dat has downloaded meow-rs skips the entry with a warning
+    // (both fall back to the plain pool for gfw names too).
+    if let Some(proxy) = gfw_dns_proxy(root) {
+        let mut policy = serde_yaml::Mapping::new();
+        policy.insert(
+            serde_yaml::Value::String("geosite:gfw".into()),
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String(format!("tcp://8.8.8.8#{proxy}")),
+                serde_yaml::Value::String(format!("tcp://1.1.1.1#{proxy}")),
+            ]),
+        );
+        dns.insert(
+            serde_yaml::Value::String("nameserver-policy".into()),
+            serde_yaml::Value::Mapping(policy),
+        );
+    }
     root.insert(
         serde_yaml::Value::String("dns".into()),
         serde_yaml::Value::Mapping(dns),
@@ -1248,6 +1329,10 @@ rules:
         assert!(patched.contains("223.5.5.5"));
         assert!(!patched.contains("tls://"));
         assert!(!patched.contains("subscriptions:"));
+        // No proxy or group defined (MATCH targets built-in DIRECT), so the
+        // gfw nameserver-policy must be omitted rather than reference a
+        // non-existent adapter.
+        assert!(!patched.contains("nameserver-policy"));
 
         let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
         let root = doc.as_mapping().expect("mapping root");
@@ -1307,6 +1392,114 @@ rules:
             sniff.get("HTTP").is_none(),
             "user HTTP sniffer was replaced"
         );
+    }
+
+    #[test]
+    fn patch_config_pins_gfw_policy_on_final_match_target() {
+        let patched = patch_config(
+            r#"
+proxies:
+  - name: sg
+    type: ss
+    server: 192.0.2.10
+    port: 8388
+    cipher: aes-256-gcm
+    password: pw
+proxy-groups:
+  - name: Auto
+    type: select
+    proxies: [sg]
+rules:
+  - DOMAIN-SUFFIX,example.com,DIRECT
+  - MATCH,Auto
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+        let policy = doc
+            .get("dns")
+            .and_then(|d| d.get("nameserver-policy"))
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("gfw nameserver-policy pinned");
+        let upstreams: Vec<&str> = policy
+            .get("geosite:gfw")
+            .and_then(serde_yaml::Value::as_sequence)
+            .expect("geosite:gfw entry")
+            .iter()
+            .filter_map(serde_yaml::Value::as_str)
+            .collect();
+        assert_eq!(
+            upstreams,
+            vec!["tcp://8.8.8.8#Auto", "tcp://1.1.1.1#Auto"],
+            "policy upstreams tunnel through the final MATCH target"
+        );
+    }
+
+    #[test]
+    fn patch_config_gfw_policy_falls_back_to_first_group() {
+        // MATCH targets an undefined name — derivation must fall back to the
+        // first defined proxy-group instead of pinning a dangling adapter.
+        let patched = patch_config(
+            r#"
+proxies:
+  - name: sg
+    type: ss
+    server: 192.0.2.10
+    port: 8388
+    cipher: aes-256-gcm
+    password: pw
+proxy-groups:
+  - name: Select
+    type: select
+    proxies: [sg]
+rules:
+  - MATCH,Ghost
+"#,
+            7890,
+            0,
+            1053,
+        );
+        assert!(patched.contains("tcp://8.8.8.8#Select"));
+    }
+
+    #[test]
+    fn patched_config_with_gfw_policy_loads() {
+        // The pinned policy must never break config load (Class A error in
+        // meow-rs when a policy entry ends up with zero valid upstreams —
+        // exactly what happened before meow-rs supported #PROXY fragments on
+        // policy entries). Offline: load builds adapters, dials nothing.
+        let tmp = tempfile::tempdir().expect("temp config dir");
+        let config_path = tmp.path().join("effective-config.yaml");
+        let patched = patch_config(
+            r#"
+proxies:
+  - name: sg
+    type: ss
+    server: 192.0.2.10
+    port: 8388
+    cipher: aes-256-gcm
+    password: pw
+proxy-groups:
+  - name: Auto
+    type: select
+    proxies: [sg]
+rules:
+  - MATCH,Auto
+"#,
+            7890,
+            0,
+            1053,
+        );
+        assert!(patched.contains("tcp://8.8.8.8#Auto"));
+        std::fs::write(&config_path, patched).expect("write effective config");
+        let config_path = config_path.to_str().expect("utf-8 config path");
+
+        let cfg = crate::get_engine_runtime()
+            .block_on(meow_config::load_config(config_path))
+            .expect("config with pinned gfw policy loads");
+        assert!(cfg.sniffer.enable);
     }
 
     #[test]

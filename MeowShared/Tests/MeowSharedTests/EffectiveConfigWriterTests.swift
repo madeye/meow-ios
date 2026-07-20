@@ -43,8 +43,39 @@ struct EffectiveConfigWriterTests {
         #expect(dns?["listen"] as? String == "127.0.0.1:1053")
         #expect(dns?["enhanced-mode"] as? String == "redir-host")
         #expect((dns?["nameserver"] as? [String]) == ["119.29.29.29", "223.5.5.5"])
+        // No groups and no MATCH rule here — derivation falls back to the
+        // fixture's only proxy (n1) for the gfw policy.
+        let policy = dns?["nameserver-policy"] as? [String: Any]
+        #expect((policy?["geosite:gfw"] as? [String]) == ["tcp://8.8.8.8#n1", "tcp://1.1.1.1#n1"])
         let hosts = parsed?["hosts"] as? [String: Any]
         #expect(hosts?["probe.meow-ios.internal"] as? String == "203.0.113.53")
+    }
+
+    @Test
+    func `pins gfw nameserver-policy through final MATCH target`() throws {
+        let source = """
+        proxies:
+          - name: sg
+            type: ss
+            server: 192.0.2.10
+            port: 8388
+            cipher: aes-256-gcm
+            password: pw
+        proxy-groups:
+          - name: Auto
+            type: select
+            proxies: [sg]
+        rules:
+          - DOMAIN-SUFFIX,example.com,DIRECT
+          - MATCH,Auto
+        """
+        let out = try patch(source)
+        let parsed = try Yams.load(yaml: out) as? [String: Any]
+        let dns = parsed?["dns"] as? [String: Any]
+        let policy = dns?["nameserver-policy"] as? [String: Any]
+        #expect(
+            (policy?["geosite:gfw"] as? [String]) == ["tcp://8.8.8.8#Auto", "tcp://1.1.1.1#Auto"],
+        )
     }
 
     @Test
