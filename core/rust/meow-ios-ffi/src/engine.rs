@@ -2,10 +2,10 @@
 //! DNS listeners that `tun2socks` dials through loopback.
 //!
 //! DNS is delegated end-to-end to meow's resolver. The pinned `dns:` block from
-//! `meow_patch_config` puts the resolver in fake-IP mode with the FFI's chosen
-//! CIDR (`28.0.0.0/8`) and a local DNS listen socket. The tun2socks UDP/53
-//! path sends non-blocked DNS queries to that listener, so synthesis and
-//! fake-IP reverse mapping stay owned by meow-dns.
+//! `meow_patch_config` puts the resolver in redir-host (Mapping) mode with a
+//! local DNS listen socket. The tun2socks UDP/53 path sends non-blocked DNS
+//! queries to that listener, so upstream resolution and the IP → host reverse
+//! cache stay owned by meow-dns.
 //!
 //! Lifecycle: `start(config_path)` spawns the REST API on the meow-engine
 //! tokio runtime and keeps its `JoinHandle` in `EngineState`. `stop()` aborts
@@ -233,10 +233,9 @@ pub fn start(config_path: &str) -> Result<()> {
     // 2-worker engine runtime (data path + REST API both freeze). The meow-dns
     // resolver resolves async, coalesces concurrent lookups, and caches —
     // collapsing the burst to one lookup. `resolve_ip` returns real addresses
-    // (fake-IP synthesis lives only in the DNS-server `lookup_ipv4/6` path), so
-    // the upstream never resolves to a 28.x fake IP. Android installs the same
-    // hook plus a `SocketProtector` via its JNI bridge; iOS needs only the hook
-    // (the NE process's own sockets already bypass its tunnel).
+    // (redir-host mode never synthesises fake IPs anywhere). Android installs
+    // the same hook plus a `SocketProtector` via its JNI bridge; iOS needs
+    // only the hook (the NE process's own sockets already bypass its tunnel).
     meow_common::set_host_resolver(Arc::new(meow_dns::ResolverHostHook::new(resolver.clone())));
 
     let tunnel = Tunnel::new(resolver.clone());
@@ -336,9 +335,9 @@ pub fn start(config_path: &str) -> Result<()> {
     let listeners = cfg.listeners.named.clone();
     let log_tx = log_broadcast_tx().clone();
 
-    // No FFI-side fake-IP pool, no FFI-side CN-IP table, no resolver hand-off:
-    // meow's own fake-IP pool owns synthesis + reverse mapping behind the DNS
-    // listener that tun2socks dials.
+    // No FFI-side DNS cache, no FFI-side CN-IP table, no resolver hand-off:
+    // meow's own resolver owns upstream resolution + the IP → host reverse
+    // cache behind the DNS listener that tun2socks dials.
 
     let api_task = cfg.api.external_controller.map(|addr| {
         let api_server = ApiServer::new(
@@ -524,9 +523,7 @@ bind-address: 0.0.0.0
 dns:
   enable: true
   listen: 0.0.0.0:1053
-  enhanced-mode: fake-ip
-  fake-ip-range: 28.0.0.0/8
-  store-fake-ip: true
+  enhanced-mode: redir-host
   nameserver:
     - 119.29.29.29
 sniffer:

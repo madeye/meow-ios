@@ -7,31 +7,31 @@
 //! callback registered in [`start`]. No file descriptors cross the FFI.
 //!
 //! DNS: A (1), TXT (16), MX (15), PTR (12), and other non-blocked queries are
-//! sent as raw UDP packets to the local meow-dns listener. A gets fake-IP
-//! synthesis there; generic qtypes get meow-dns's upstream-forward behavior.
-//! AAAA (28) queries are answered NOERROR-empty by the FFI itself when IPv6 is
-//! disabled in app settings (the default) — the fake-IP pool is v4-only, so
-//! stripping AAAA forces every client onto it instead of leaking (or
-//! black-holing) connections over v6. When IPv6 is enabled, AAAA queries are
-//! forwarded to meow-dns like A queries — with a v4-only fake-IP pool the
-//! resolver itself suppresses AAAA for fake-IP'd domains, so clients still land
-//! on the v4 fake path; the Swift TUN advertises an IPv6 address + default
-//! route so v6-literal destinations enter the netstack. When "block HTTP/3" is
-//! enabled, HTTPS/SVCB (65/64) queries also get NOERROR-empty so clients cannot
-//! discover QUIC hints.
+//! sent as raw UDP packets to the local meow-dns listener, which resolves
+//! upstream and answers with real IPs (redir-host mode). AAAA (28) queries are
+//! answered NOERROR-empty by the FFI itself when IPv6 is disabled in app
+//! settings (the default) — the tunnel is v4-only then, so stripping AAAA
+//! forces every client onto the v4 path instead of leaking (or black-holing)
+//! connections over v6. When IPv6 is enabled, AAAA queries are forwarded to
+//! meow-dns like A queries (the resolver returns real upstream IPv6
+//! addresses); the Swift TUN advertises an IPv6 address + default route so v6
+//! destinations enter the netstack. When "block HTTP/3" is enabled, HTTPS/SVCB
+//! (65/64) queries also get NOERROR-empty so clients cannot discover QUIC
+//! hints.
 //!
 //! NEDNSSettings advertises a TUN-subnet address as the system resolver, so
 //! every UDP DNS query arrives as an in-TUN IP packet. netstack turns that into
 //! a UDP payload, the FFI branches on qtype, and non-blocked queries go to the
 //! local DNS listener with the reply injected back through netstack. The
-//! resolver owns fake-IP synthesis, reverse mapping, hosts / NXDOMAIN
-//! semantics, and TTL handling; the FFI owns only the qtype peek plus the
-//! blocked-query short-circuit.
+//! resolver owns upstream resolution, the IP → host reverse cache, hosts /
+//! NXDOMAIN semantics, and TTL handling; the FFI owns only the qtype peek plus
+//! the blocked-query short-circuit.
 //!
-//! TCP/UDP destination IPs come back as fake-IPs from meow's resolver pool.
-//! `dispatch_tcp` and `dispatch_udp` pass the literal destination to the
-//! mixed listener via SOCKS5; meow's normal inbound path reverses fake-IPs back
-//! to the original qname before rule matching.
+//! TCP/UDP destination IPs are the real addresses meow's resolver answered
+//! with. `dispatch_tcp` and `dispatch_udp` pass the literal destination to the
+//! mixed listener via SOCKS5; meow's normal inbound path folds the original
+//! qname back in from the resolver's reverse cache (with the TLS SNI sniffer
+//! as backstop) before rule matching.
 
 use crate::logging;
 use futures::{SinkExt, StreamExt};
@@ -185,8 +185,7 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
 //      handshake that still attempts a connection.
 //   2. SVCB (64) / HTTPS (65) DNS queries are answered NOERROR-empty by the
 //      intercept itself instead of being forwarded to meow-dns, so the client
-//      never learns the HTTP/3 `alpn`/SvcParams and falls back to A / fake-IPv4
-//      over TCP.
+//      never learns the HTTP/3 `alpn`/SvcParams and falls back to A over TCP.
 //
 // Both prongs are wired to this single flag. Stored Relaxed — the toggle has no
 // ordering relationship with other state; a stale read for one datagram is
@@ -667,9 +666,10 @@ pub fn ingest(packet: &[u8]) -> i32 {
 // egress — and wait for the reply frame to come back out. A reply proves every
 // stage is live; silence within the deadline means the path is wedged (or the
 // engine is down), which is exactly the condition the wake-path restart
-// exists to clear. In fake-IP mode the answer is synthesised locally, so the
-// probe needs no upstream network and is safe to run while the physical
-// interface is still reassociating after a wake.
+// exists to clear. The probe qname is pinned in the effective config's
+// `hosts:` block (see `meow_patch_config`), so meow-dns answers it locally
+// even in redir-host mode — the probe needs no upstream network and is safe
+// to run while the physical interface is still reassociating after a wake.
 // ---------------------------------------------------------------------------
 
 /// Fixed client port for probe queries. Replies are matched on (dst port,
@@ -678,12 +678,18 @@ pub fn ingest(packet: &[u8]) -> i32 {
 /// client would simply retry that one reply.
 const PROBE_SRC_PORT: u16 = 53535;
 
-/// Probe qname. Any name works — fake-IP synthesises an answer for every
-/// non-filtered name — but a reserved-TLD name keeps the probe out of real
-/// caches if the resolver is ever switched to redir-host mode (where this
-/// query goes to the configured upstreams and the probe additionally checks
-/// upstream reachability).
-const PROBE_QNAME: &str = "probe.meow-ios.internal";
+/// Probe qname. `meow_patch_config` pins this name to [`PROBE_HOSTS_IP`] in
+/// the effective config's `hosts:` block, so the resolver answers it locally
+/// (hosts entries short-circuit before any upstream dial) and the probe never
+/// depends on upstream reachability — redir-host mode would otherwise forward
+/// an unknown name to the DoT upstream. The reserved TLD keeps it out of real
+/// caches.
+pub(crate) const PROBE_QNAME: &str = "probe.meow-ios.internal";
+
+/// The address [`PROBE_QNAME`] resolves to via the pinned `hosts:` entry.
+/// TEST-NET-3 documentation space: probe replies are intercepted at the
+/// egress by [`probe_reply_intercept`], so nothing ever dials it.
+pub(crate) const PROBE_HOSTS_IP: &str = "203.0.113.53";
 
 /// Interval between probe re-sends while waiting for a reply. Ingest is
 /// drop-on-full, so a probe frame can be lost to a saturated ingress queue
@@ -928,13 +934,13 @@ async fn run_tun2socks(
     let engine_handle_for_tcp = crate::get_engine_runtime().handle().clone();
     let tcp_accept_handle = tokio::spawn(async move {
         while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
-            // Fake-IP mode: TCP DNS (rare, but RFC 1035 § 4.2.2 allows it
-            // when a UDP reply was truncated) inside the TUN is
-            // intentionally unsupported — iOS's stub resolver only falls
-            // back to TCP/53 for very large replies, and our fake-IP A/AAAA
-            // responses are tiny. Drop the stream so the kernel sees the
-            // TCP session close; the client retries on UDP, which the
-            // ingress loop intercepts.
+            // TCP DNS (rare, but RFC 1035 § 4.2.2 allows it when a UDP
+            // reply was truncated) inside the TUN is intentionally
+            // unsupported — iOS's stub resolver only falls back to TCP/53
+            // for very large replies, and the A/AAAA answers meow-dns
+            // returns stay well under the UDP limit. Drop the stream so the
+            // kernel sees the TCP session close; the client retries on UDP,
+            // which the ingress loop intercepts.
             if remote_addr.port() == 53 {
                 trace!(
                     "tun2socks: dropping in-TUN TCP/53 flow {} -> {} (UDP/53 intercept handles DNS)",

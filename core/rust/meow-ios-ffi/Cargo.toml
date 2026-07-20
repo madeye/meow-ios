@@ -77,9 +77,10 @@ lwip = "0.3"
 # (#337), and mihomo compat improvements (#313/#333). Windows/OpenWrt/CLI
 # work in 0.17–0.18 doesn't affect this crate. Previous pin 498967e
 # (0.16.0) made DelayHistory `time` serialize as RFC 3339 (meow-rs#290,
-# issue #255). meow-dns runs in fake-ip mode: the FFI config parser pins
-# `enhanced-mode: fake-ip` with `fake-ip-range: 28.0.0.0/8` (the 2026-07-17
-# redir-host/DoT switch was reverted in PR #321).
+# issue #255). meow-dns runs in redir-host (Mapping) mode: the FFI config
+# parser pins `enhanced-mode: redir-host` with a DoT-only upstream
+# (`tls://1.1.1.1`) — re-applied 2026-07-20 after the PR #321 revert, now
+# with the TLS SNI sniffer kept enabled as the reverse-cache backstop.
 meow-common = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
