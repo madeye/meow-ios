@@ -14,11 +14,19 @@
 //!   * `Plain = 0`  → skipped         (substring match — trie has no equivalent)
 //!   * `Regex = 1`  → skipped         (regex — trie has no equivalent)
 //!
+//! The `gfw` category is additionally UNIONed with the canonical gfwlist
+//! (<https://github.com/gfwlist/gfwlist>) so the app's ChinaDNS-style
+//! `geosite:gfw` DNS policy resolves the full censored set through the
+//! tunnel — MetaCubeX's `gfw` category alone is a curated subset. See
+//! [`parse_gfwlist`] for the AutoProxy→domain conversion.
+//!
 //! Default invocation writes to `App/Resources/GeoData/geosite.mrs` relative
 //! to the repo root (assumes the binary is run from `core/rust/`).
 
 use anyhow::{anyhow, bail, Context, Result};
+use base64::Engine;
 use meow_rules::mrs_parser::{write_geosite_mrs, GeositePayload};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io::Read;
@@ -26,6 +34,12 @@ use std::path::PathBuf;
 
 const SOURCE_URL: &str =
     "https://github.com/MetaCubeX/meta-rules-dat/releases/latest/download/geosite.dat";
+
+/// Canonical gfwlist (base64 AutoProxy list). Merged into the `gfw` category.
+const GFWLIST_URL: &str = "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt";
+
+/// The geosite category the app's DNS `nameserver-policy` keys on.
+const GFW_CATEGORY: &str = "gfw";
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -39,12 +53,26 @@ fn main() -> Result<()> {
     eprintln!("    {} bytes", dat.len());
 
     eprintln!("==> parsing V2Ray geosite.dat");
-    let payload = parse_v2ray_geosite(&dat).context("parsing geosite.dat")?;
+    let mut payload = parse_v2ray_geosite(&dat).context("parsing geosite.dat")?;
     let total_domains: usize = payload.categories.iter().map(|(_, d)| d.len()).sum();
     eprintln!(
         "    {} categories, {} domains (after Plain/Regex skip)",
         payload.categories.len(),
         total_domains,
+    );
+
+    eprintln!("==> fetching {GFWLIST_URL}");
+    let gfwlist_raw = fetch(GFWLIST_URL).context("downloading gfwlist.txt")?;
+    let (gfw_domains, gfw_whitelist) =
+        parse_gfwlist(&gfwlist_raw).context("parsing gfwlist.txt")?;
+    eprintln!(
+        "    {} block domains, {} whitelist exceptions",
+        gfw_domains.len(),
+        gfw_whitelist.len(),
+    );
+    let added = merge_into_gfw(&mut payload, &gfw_domains, &gfw_whitelist);
+    eprintln!(
+        "==> merged gfwlist into '{GFW_CATEGORY}': +{added} net-new domains (union, whitelist-excluded)"
     );
 
     eprintln!("==> encoding meow-rs geosite.mrs");
@@ -267,8 +295,249 @@ fn parse_domain(
     })
 }
 
+// --- gfwlist (AutoProxy) parsing -----------------------------------------
+//
+// gfwlist.txt is a base64-encoded AutoProxy/PAC list. We only extract host
+// names for a DNS-domain trie; path/keyword/regex semantics have no trie
+// equivalent and are dropped (same principle as V2Ray Plain/Regex above).
+//
+// Rule forms (after base64 decode), by observed frequency:
+//   * `||host`            domain + subdomains  -> `+.host`
+//   * `|http://host/...`  URL prefix           -> host of the URL
+//   * `.host`             domain suffix        -> `+.host`
+//   * `host` (bare)       AutoProxy keyword    -> kept only if it parses as a
+//                                                 dotted hostname (no path)
+//   * `@@<rule>`          whitelist exception  -> host collected into the
+//                                                 exclusion set (accessed
+//                                                 directly, never proxied)
+//   * `/regex/`, `!comment`, `[AutoProxy…]`    dropped
+
+/// Decode + parse gfwlist.txt into `(block_domains, whitelist)`. Both are
+/// bare hostnames (no `+.` prefix yet); `block_domains` is de-duplicated and
+/// sorted for a stable `.mrs` output.
+fn parse_gfwlist(raw: &[u8]) -> Result<(Vec<String>, HashSet<String>)> {
+    // The published file is base64 with embedded newlines; strip whitespace
+    // before decoding.
+    let compact: String = std::str::from_utf8(raw)
+        .context("gfwlist utf8")?
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect();
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(compact.as_bytes())
+        .context("gfwlist base64 decode")?;
+    let text = String::from_utf8(decoded).context("gfwlist decoded utf8")?;
+
+    let mut block: HashSet<String> = HashSet::new();
+    let mut whitelist: HashSet<String> = HashSet::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('!') || line.starts_with('[') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("@@") {
+            if let Some(host) = extract_autoproxy_host(rest) {
+                whitelist.insert(host);
+            }
+        } else if let Some(host) = extract_autoproxy_host(line) {
+            block.insert(host);
+        }
+    }
+
+    let mut block: Vec<String> = block.into_iter().collect();
+    block.sort();
+    Ok((block, whitelist))
+}
+
+/// Extract a dotted hostname from a single AutoProxy rule body, or `None` for
+/// regex / keyword / IP-literal / malformed rules that have no DNS-domain
+/// meaning.
+fn extract_autoproxy_host(rule: &str) -> Option<String> {
+    let mut s = rule.trim();
+    if s.is_empty() || s.starts_with('/') {
+        return None; // regex rule — no trie equivalent
+    }
+    // Leading anchors: `||` (domain) or `|` (URL start).
+    if let Some(r) = s.strip_prefix("||") {
+        s = r;
+    } else if let Some(r) = s.strip_prefix('|') {
+        s = r;
+    }
+    // Scheme, if any (`http://`, `https://`).
+    if let Some(idx) = s.find("://") {
+        s = &s[idx + 3..];
+    }
+    // Optional userinfo (`user@host`) — rare, but keep the host half.
+    if let Some(idx) = s.rfind('@') {
+        s = &s[idx + 1..];
+    }
+    // `.host` suffix anchor.
+    s = s.trim_start_matches('.');
+    // Host runs until the first path / port / query / AutoProxy separator.
+    let host: String = s
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-' || *c == '_')
+        .collect();
+    let host = host.trim_matches('.').to_ascii_lowercase();
+
+    if host.len() < 3 || !host.contains('.') {
+        return None;
+    }
+    // Drop IPv4 literals — a DNS query never asks for one, and excluding them
+    // keeps the trie to real hostnames.
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() == 4 && labels.iter().all(|l| l.parse::<u8>().is_ok()) {
+        return None;
+    }
+    // A trailing single-char / all-numeric TLD is malformed for our purposes.
+    if labels
+        .last()
+        .is_none_or(|tld| tld.len() < 2 || tld.parse::<u32>().is_ok())
+    {
+        return None;
+    }
+    Some(host)
+}
+
+/// Union the gfwlist block domains (minus the whitelist) into the `gfw`
+/// category. Each host is emitted in BOTH forms the trie needs to honour the
+/// AutoProxy `||host` = "apex + all subdomains" semantics:
+///
+/// * `host`   — exact leaf, so a bare-apex query (`anthropic.com`) matches;
+/// * `+.host` — subdomain wildcard (`www.anthropic.com`).
+///
+/// The MetaCubeX `gfw` category ships only the `+.` form (V2Ray `Domain`),
+/// so merging adds the exact-apex leaf even for hosts already present as
+/// wildcards — closing the apex-match gap for the censored set. Returns the
+/// count of net-new trie entries added. Creates the category if MetaCubeX
+/// ever drops it.
+fn merge_into_gfw(
+    payload: &mut GeositePayload,
+    block_domains: &[String],
+    whitelist: &HashSet<String>,
+) -> usize {
+    let gfw = match payload
+        .categories
+        .iter_mut()
+        .find(|(name, _)| name == GFW_CATEGORY)
+    {
+        Some((_, domains)) => domains,
+        None => {
+            payload
+                .categories
+                .push((GFW_CATEGORY.to_string(), Vec::new()));
+            &mut payload.categories.last_mut().unwrap().1
+        }
+    };
+
+    let mut existing: HashSet<String> = gfw.iter().cloned().collect();
+    let mut added = 0usize;
+    for host in block_domains {
+        if whitelist.contains(host) {
+            continue;
+        }
+        for entry in [host.clone(), format!("+.{host}")] {
+            if existing.insert(entry.clone()) {
+                gfw.push(entry);
+                added += 1;
+            }
+        }
+    }
+    added
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use base64::Engine;
+
+    fn encode(s: &str) -> Vec<u8> {
+        base64::engine::general_purpose::STANDARD
+            .encode(s)
+            .into_bytes()
+    }
+
+    #[test]
+    fn extract_host_handles_common_forms() {
+        assert_eq!(
+            extract_autoproxy_host("||example.com"),
+            Some("example.com".into())
+        );
+        assert_eq!(
+            extract_autoproxy_host("|http://sub.example.com/path?q=1"),
+            Some("sub.example.com".into())
+        );
+        assert_eq!(
+            extract_autoproxy_host(".example.com"),
+            Some("example.com".into())
+        );
+        assert_eq!(
+            extract_autoproxy_host("||example.com^"),
+            Some("example.com".into())
+        );
+        assert_eq!(
+            extract_autoproxy_host("||www.google.com/ncr"),
+            Some("www.google.com".into())
+        );
+    }
+
+    #[test]
+    fn extract_host_rejects_non_domains() {
+        assert_eq!(extract_autoproxy_host("/^https?:\\/\\/.*blogspot/"), None);
+        assert_eq!(extract_autoproxy_host("|http://85.17.73.31/"), None); // IPv4
+        assert_eq!(extract_autoproxy_host("localhost"), None); // no dot
+        assert_eq!(extract_autoproxy_host(""), None);
+        assert_eq!(extract_autoproxy_host("keyword*wild"), None); // wildcard splits host
+    }
+
+    #[test]
+    fn parse_gfwlist_splits_block_and_whitelist() {
+        let list = "[AutoProxy 0.2.9]\n\
+             ! comment\n\
+             ||blocked.example\n\
+             ||also.blocked.example\n\
+             |http://path.blocked.example/x\n\
+             @@||white.example\n\
+             /regexrule/\n";
+        let (block, white) = parse_gfwlist(&encode(list)).unwrap();
+        assert!(block.contains(&"blocked.example".to_string()));
+        assert!(block.contains(&"also.blocked.example".to_string()));
+        assert!(block.contains(&"path.blocked.example".to_string()));
+        assert!(white.contains("white.example"));
+        // sorted + deduped
+        assert!(block.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn merge_unions_and_excludes_whitelist() {
+        let mut payload = GeositePayload {
+            categories: vec![
+                ("gfw".to_string(), vec!["+.already.example".to_string()]),
+                ("cn".to_string(), vec!["+.baidu.com".to_string()]),
+            ],
+        };
+        let block = vec![
+            "already.example".to_string(), // +.already.example exists; apex leaf is new
+            "fresh.example".to_string(),
+            "white.example".to_string(), // excluded by whitelist
+        ];
+        let white: HashSet<String> = ["white.example".to_string()].into_iter().collect();
+        let added = merge_into_gfw(&mut payload, &block, &white);
+        // already.example → +1 exact leaf (wildcard already present);
+        // fresh.example → +2 (exact + wildcard); white.example → 0.
+        assert_eq!(added, 3);
+        let gfw = &payload
+            .categories
+            .iter()
+            .find(|(n, _)| n == "gfw")
+            .unwrap()
+            .1;
+        assert!(gfw.contains(&"already.example".to_string()));
+        assert!(gfw.contains(&"fresh.example".to_string()));
+        assert!(gfw.contains(&"+.fresh.example".to_string()));
+        assert!(!gfw.iter().any(|d| d.contains("white.example")));
+    }
+
     #[test]
     fn loads_back_via_geosite_db() {
         let bytes = std::fs::read("../../../App/Resources/GeoData/geosite.mrs").expect("read mrs");
