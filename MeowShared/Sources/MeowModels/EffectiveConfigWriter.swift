@@ -5,8 +5,7 @@ import Yams
 /// actually loads. Mirrors the Android `MeowInstance.start` pipeline:
 ///
 ///   1. Remove user-managed `dns:` and `subscriptions:` blocks — the extension
-///      owns DNS (redir-host + local listener) and the app owns subscription
-///      fetching.
+///      owns DNS (fake-ip + local listener) and the app owns subscription fetching.
 ///   2. Override `secret:` with the random bearer token minted for this install.
 ///   3. Pin `mixed-port` (defaults to 7890), `allow-lan`, `bind-address`, and
 ///      a DNS listener so tun2socks and LAN clients can use meow's listeners.
@@ -77,37 +76,16 @@ public enum EffectiveConfigWriter {
         root["mixed-port"] = mixedPort
         root["allow-lan"] = prefs.allowLan
         root["bind-address"] = bindAddress
-        var dns: [String: Any] = [
+        root["dns"] = [
             "enable": true,
             "listen": "\(bindAddress):\(defaultDNSPort)",
-            "enhanced-mode": "redir-host",
-            // Plain UDP upstreams — mirrors meow_patch_config: DoT to
-            // 1.1.1.1:853 proved unusable from the networks this app
-            // targets, so the poisoned-answer exposure of plaintext DNS in
-            // redir-host mode is an accepted trade-off (user decision
-            // 2026-07-20).
+            "enhanced-mode": "fake-ip",
+            "fake-ip-range": "28.0.0.0/8",
             "nameserver": [
                 "119.29.29.29",
                 "223.5.5.5",
             ],
         ]
-        // Mirror of meow_patch_config's ChinaDNS-style pin: gfw-listed names
-        // resolve via TCP/53 tunnelled through the config's own proxy so the
-        // direct-path censor can't poison them.
-        if let proxy = Self.gfwDNSProxy(root) {
-            dns["nameserver-policy"] = [
-                "geosite:gfw": [
-                    "tcp://8.8.8.8#\(proxy)",
-                    "tcp://1.1.1.1#\(proxy)",
-                ],
-            ]
-        }
-        root["dns"] = dns
-        // Mirror of meow_patch_config's probe pin: keeps the wake-path health
-        // probe answerable without upstream network in redir-host mode.
-        var hosts = root["hosts"] as? [String: Any] ?? [:]
-        hosts["probe.meow-ios.internal"] = "203.0.113.53"
-        root["hosts"] = hosts
         root["external-controller"] = "127.0.0.1:\(apiCredentials.port)"
         root["secret"] = apiCredentials.secret
 
@@ -118,33 +96,5 @@ public enum EffectiveConfigWriter {
         // Stable key ordering so the effective file diffs cleanly across
         // restarts, and meow-rs doesn't care about input key order.
         return try Yams.dump(object: root, sortKeys: true)
-    }
-
-    /// Mirror of the Rust `gfw_dns_proxy` derivation: the final `MATCH,`
-    /// rule's target when it names a proxy or group defined in this config,
-    /// else the first proxy-group, else the first proxy. Built-in policies
-    /// (DIRECT/REJECT/…) never qualify.
-    static func gfwDNSProxy(_ root: [String: Any]) -> String? {
-        let builtins: Set = [
-            "DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL", "BLOCK",
-        ]
-        func names(_ key: String) -> [String] {
-            ((root[key] as? [Any]) ?? []).compactMap { ($0 as? [String: Any])?["name"] as? String }
-        }
-        let groups = names("proxy-groups")
-        let proxies = names("proxies")
-        func usable(_ name: String) -> Bool {
-            !builtins.contains(name.uppercased()) && (groups.contains(name) || proxies.contains(name))
-        }
-
-        let rules = (root["rules"] as? [Any]) ?? []
-        for rule in rules.reversed() {
-            guard let rule = rule as? String else { continue }
-            let parts = rule.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            guard parts.count >= 2, parts[0].uppercased() == "MATCH" else { continue }
-            if usable(parts[1]) { return parts[1] }
-            break
-        }
-        return groups.first(where: usable) ?? proxies.first(where: usable)
     }
 }

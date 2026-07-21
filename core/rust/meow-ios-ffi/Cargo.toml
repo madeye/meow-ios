@@ -68,14 +68,7 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# HEAD: f36b74fd (0.18.0 + meow-rs#351) — redir-host answers carry the upstream's real TTL
-# (remaining cache lifetime) instead of a fixed 60s, and meow-dns exposes
-# reverse_cache_snapshot / restore_reverse_cache so `dns_cache_store` can
-# persist the IP → host table across engine restarts. Previous pin 88553178
-# (0.18.0 + meow-rs#350) added #PROXY-fragment support on nameserver-policy
-# entries, which the pinned ChinaDNS-style geosite:gfw
-# policy below relies on. Previous pin 74e8083a (meow-rs 0.18.0) picked up
-# the rule-IR compilation series
+# HEAD: 74e8083a (meow-rs 0.18.0) — picks up the rule-IR compilation series
 # (meow-rs#285/#291/#295–#297), lazy metadata enrichment (#292), the VMess
 # AEAD wire-format interop fix (#320), VLESS/Snell UDP-over-TCP read/write
 # fairness (#319), relay-direction fairness per buffer cycle (#347), atomic
@@ -84,12 +77,10 @@ lwip = "0.3"
 # (#337), and mihomo compat improvements (#313/#333). Windows/OpenWrt/CLI
 # work in 0.17–0.18 doesn't affect this crate. Previous pin 498967e
 # (0.16.0) made DelayHistory `time` serialize as RFC 3339 (meow-rs#290,
-# issue #255). meow-dns runs in redir-host (Mapping) mode: the FFI config
-# parser pins `enhanced-mode: redir-host` with plain UDP upstreams
-# (119.29.29.29 / 223.5.5.5) — re-applied 2026-07-20 after the PR #321
-# revert, TLS SNI sniffer kept enabled as the reverse-cache backstop; the
-# DoT-only pool was dropped same day (unreachable from target networks).
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e" }
+# issue #255). meow-dns runs in fake-ip mode: the FFI config parser pins
+# `enhanced-mode: fake-ip` with `fake-ip-range: 28.0.0.0/8` (the 2026-07-17
+# redir-host/DoT switch was reverted in PR #321).
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -97,12 +88,12 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e", features = ["boring-tls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e" }
-meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e", default-features = false, features = ["listener-mixed"] }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "f36b74fd70598f25bc7cabb5d7cbfa996d67c17e" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a", features = ["boring-tls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a", default-features = false, features = ["listener-mixed"] }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 
 [build-dependencies]
 cbindgen = "0.28"

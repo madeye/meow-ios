@@ -3,7 +3,7 @@
 //!
 //! Bridges the same C-ABI surface the iOS PacketTunnelProvider drives
 //! (`meow_core_*`, `meow_engine_*`, `meow_tun_*`) into a real macOS `utun`
-//! interface, so the engine + redir-host DNS + tun2socks
+//! interface, so the engine + fake-IP DNS + CN-bypass + tun2socks
 //! dispatch paths can be exercised with actual packets without an iPhone
 //! and without going through the iOS Simulator (which has no TUN host).
 //!
@@ -129,10 +129,9 @@ struct Args {
     /// into its NAT table per packet. Use a REAL, reachable dst that won't
     /// answer the chosen UDP port (e.g. `8.8.8.8:4433`): DIRECT dial succeeds
     /// (so the session is created), no reply ever arrives (so it goes idle),
-    /// and the egress goes out the default route — no DNS loop, no routing
-    /// loop. This is the deterministic way to drive the UDP NAT leak path;
-    /// `--udp-stress-target` (socket-based) needs the target routed into
-    /// the tun.
+    /// and the egress goes out the default route — no fake-IP, no DNS loop,
+    /// no routing loop. This is the deterministic way to drive the UDP NAT
+    /// leak path; `--udp-stress-target` (socket-based) needs fake-IP routing.
     /// dst port MUST NOT be 53 (that hits the DNS intercept, not the NAT).
     #[arg(long)]
     udp_inject_target: Option<String>,
@@ -598,7 +597,7 @@ fn udp_stress_loop(
         workers.push(thread::spawn(move || {
             // Folded into the payload so a DNS/echo responder sees varying
             // content (and, aimed at the engine DNS with distinct qnames,
-            // churns the resolver cache too).
+            // churns the fake-IP pool too).
             let mut seq = 0u64;
             while !SHUTDOWN.load(Ordering::Relaxed) {
                 if let Some(limit) = duration {
@@ -692,7 +691,7 @@ fn udp_stress_loop(
 /// bypassing the OS route table, system DNS, and the utun device. Each fresh
 /// source is a new NAT 5-tuple the engine inserts into `nat_table`; with a
 /// non-answering dst the session goes idle and the NAT sweeper must reap it.
-/// Deterministic, no network setup, no routing/DNS loop.
+/// Deterministic, no network setup, no fake-IP, no routing/DNS loop.
 fn udp_inject_loop(dst: std::net::SocketAddr, rate: u64, duration: Option<std::time::Duration>) {
     let dst_ip = match dst.ip() {
         std::net::IpAddr::V4(v4) => v4.octets(),

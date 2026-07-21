@@ -2,10 +2,10 @@
 //! DNS listeners that `tun2socks` dials through loopback.
 //!
 //! DNS is delegated end-to-end to meow's resolver. The pinned `dns:` block from
-//! `meow_patch_config` puts the resolver in redir-host (Mapping) mode with a
-//! local DNS listen socket. The tun2socks UDP/53 path sends non-blocked DNS
-//! queries to that listener, so upstream resolution and the IP → host reverse
-//! cache stay owned by meow-dns.
+//! `meow_patch_config` puts the resolver in fake-IP mode with the FFI's chosen
+//! CIDR (`28.0.0.0/8`) and a local DNS listen socket. The tun2socks UDP/53
+//! path sends non-blocked DNS queries to that listener, so synthesis and
+//! fake-IP reverse mapping stay owned by meow-dns.
 //!
 //! Lifecycle: `start(config_path)` spawns the REST API on the meow-engine
 //! tokio runtime and keeps its `JoinHandle` in `EngineState`. `stop()` aborts
@@ -48,9 +48,6 @@ fn bind_socket_addr(listen: &str, port: u16) -> Result<SocketAddr> {
 struct EngineState {
     stats: Arc<Statistics>,
     tunnel: Tunnel,
-    /// Kept so `stop()` can flush the redir-host reverse DNS table to disk
-    /// after the listener tasks are gone (see `dns_cache_store`).
-    resolver: Arc<meow_dns::Resolver>,
     mixed_dial_addr: Option<SocketAddr>,
     dns_dial_addr: Option<SocketAddr>,
     api_task: Option<JoinHandle<()>>,
@@ -229,15 +226,6 @@ pub fn start(config_path: &str) -> Result<()> {
 
     let resolver = cfg.dns.resolver.clone();
 
-    // Warm-start the redir-host reverse (IP → host) table from the previous
-    // engine's persisted snapshot, before any listener can serve traffic.
-    // Apps keep dialing IPs they resolved before a wake restart; without the
-    // reload those flows silently degrade to IP-only rule matching until
-    // their next DNS query.
-    if resolver.mode() == meow_common::DnsMode::Mapping {
-        crate::dns_cache_store::restore(&resolver);
-    }
-
     // Route proxy-upstream hostname resolution through meow-dns instead of
     // libc `getaddrinfo`. On the NE, `getaddrinfo` runs one blocking-pool
     // thread per lookup and re-resolves on every dial, so a wake-from-sleep
@@ -245,9 +233,10 @@ pub fn start(config_path: &str) -> Result<()> {
     // 2-worker engine runtime (data path + REST API both freeze). The meow-dns
     // resolver resolves async, coalesces concurrent lookups, and caches —
     // collapsing the burst to one lookup. `resolve_ip` returns real addresses
-    // (redir-host mode never synthesises fake IPs anywhere). Android installs
-    // the same hook plus a `SocketProtector` via its JNI bridge; iOS needs
-    // only the hook (the NE process's own sockets already bypass its tunnel).
+    // (fake-IP synthesis lives only in the DNS-server `lookup_ipv4/6` path), so
+    // the upstream never resolves to a 28.x fake IP. Android installs the same
+    // hook plus a `SocketProtector` via its JNI bridge; iOS needs only the hook
+    // (the NE process's own sockets already bypass its tunnel).
     meow_common::set_host_resolver(Arc::new(meow_dns::ResolverHostHook::new(resolver.clone())));
 
     let tunnel = Tunnel::new(resolver.clone());
@@ -308,30 +297,6 @@ pub fn start(config_path: &str) -> Result<()> {
         }));
     }
 
-    // Periodically persist the reverse table so a jetsam kill — which never
-    // reaches `stop()` — still leaves a warm snapshot on disk. The saver
-    // skips the write when the serialized table is unchanged, so an idle NE
-    // stays off disk entirely.
-    if resolver.mode() == meow_common::DnsMode::Mapping {
-        let saver_resolver = resolver.clone();
-        listener_tasks.push(crate::get_engine_runtime().spawn(async move {
-            let mut tick = tokio::time::interval(crate::dns_cache_store::SAVE_INTERVAL);
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            // interval()'s first tick completes immediately; consume it —
-            // start() just restored this exact state.
-            tick.tick().await;
-            loop {
-                tick.tick().await;
-                let r = saver_resolver.clone();
-                // File I/O via spawn_blocking: a stalled disk write must not
-                // be able to occupy an engine worker the data path needs.
-                let _ =
-                    tokio::task::spawn_blocking(move || crate::dns_cache_store::save(&r, false))
-                        .await;
-            }
-        }));
-    }
-
     let sniffer_runtime = Arc::new(SnifferRuntime::new(cfg.sniffer.clone()));
     let auth = cfg.auth.clone();
     for nl in &cfg.listeners.named {
@@ -371,9 +336,9 @@ pub fn start(config_path: &str) -> Result<()> {
     let listeners = cfg.listeners.named.clone();
     let log_tx = log_broadcast_tx().clone();
 
-    // No FFI-side DNS cache, no FFI-side CN-IP table, no resolver hand-off:
-    // meow's own resolver owns upstream resolution + the IP → host reverse
-    // cache behind the DNS listener that tun2socks dials.
+    // No FFI-side fake-IP pool, no FFI-side CN-IP table, no resolver hand-off:
+    // meow's own fake-IP pool owns synthesis + reverse mapping behind the DNS
+    // listener that tun2socks dials.
 
     let api_task = cfg.api.external_controller.map(|addr| {
         let api_server = ApiServer::new(
@@ -409,7 +374,6 @@ pub fn start(config_path: &str) -> Result<()> {
     *slot().lock() = Some(EngineState {
         stats,
         tunnel,
-        resolver,
         mixed_dial_addr,
         dns_dial_addr,
         api_task,
@@ -441,15 +405,6 @@ pub fn stop() {
         h.abort();
         let _ = runtime.block_on(h);
     }
-
-    // Final reverse-table flush, forced past the unchanged-skip: this is the
-    // snapshot the next start() warm-starts from. After the aborts above so
-    // no listener can grow the table behind the write. `stop()` runs outside
-    // the tokio runtime, so blocking file I/O is fine here.
-    if state.resolver.mode() == meow_common::DnsMode::Mapping {
-        crate::dns_cache_store::save(&state.resolver, true);
-    }
-
     info!("meow-rs engine stopped");
 }
 
@@ -569,7 +524,9 @@ bind-address: 0.0.0.0
 dns:
   enable: true
   listen: 0.0.0.0:1053
-  enhanced-mode: redir-host
+  enhanced-mode: fake-ip
+  fake-ip-range: 28.0.0.0/8
+  store-fake-ip: true
   nameserver:
     - 119.29.29.29
 sniffer:

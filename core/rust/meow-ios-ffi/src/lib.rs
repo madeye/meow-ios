@@ -13,14 +13,13 @@
 //! The staticlib owns separate tokio runtimes for the packet/netstack driver
 //! and for meow engine work so lwIP backpressure cannot starve the
 //! REST/API/proxy workers. DNS is delegated to a local meow-dns UDP listener
-//! running in redir-host (Mapping) mode: the tun2socks UDP/53 path still
-//! answers IPv6-disabled AAAA and HTTP/3-blocked HTTPS/SVCB queries
-//! NOERROR-empty itself, then sends other DNS queries to the listener. The FFI
-//! no longer carries its own DNS cache, china-DNS split-horizon, CN-IP table,
-//! DoH cache, or in-FFI TCP-DNS client.
+//! running in fake-IP mode: the tun2socks UDP/53 path still answers
+//! IPv6-disabled AAAA and HTTP/3-blocked HTTPS/SVCB queries NOERROR-empty
+//! itself, then sends other DNS queries to the listener. The FFI no longer
+//! carries its own fake-IP pool, china-DNS split-horizon, CN-IP table, DoH
+//! cache, or in-FFI TCP-DNS client.
 
 mod diagnostics;
-mod dns_cache_store;
 mod engine;
 mod file_log;
 mod logging;
@@ -654,64 +653,6 @@ fn random_port() -> u16 {
 // Config patching (replaces the Swift/Yams EffectiveConfigWriter)
 // ---------------------------------------------------------------------------
 
-/// Choose the proxy adapter that should carry gfw-listed DNS lookups for the
-/// pinned `nameserver-policy`: the target of the final `MATCH,` rule when it
-/// names a proxy or group defined in this config, else the first
-/// proxy-group, else the first proxy. Built-in policies (DIRECT/REJECT/…)
-/// never qualify — tunnelling the trusted resolver through them would be a
-/// no-op or a black hole. `None` → the caller omits the policy.
-fn gfw_dns_proxy(root: &serde_yaml::Mapping) -> Option<String> {
-    fn names_of(root: &serde_yaml::Mapping, key: &str) -> Vec<String> {
-        root.get(key)
-            .and_then(serde_yaml::Value::as_sequence)
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|item| item.as_mapping()?.get("name")?.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-    const BUILTINS: [&str; 7] = [
-        "DIRECT",
-        "REJECT",
-        "REJECT-DROP",
-        "PASS",
-        "COMPATIBLE",
-        "GLOBAL",
-        "BLOCK",
-    ];
-    let groups = names_of(root, "proxy-groups");
-    let proxies = names_of(root, "proxies");
-    let usable = |name: &str| {
-        !BUILTINS.contains(&name.to_ascii_uppercase().as_str())
-            && (groups.iter().any(|n| n == name) || proxies.iter().any(|n| n == name))
-    };
-
-    let match_target = root
-        .get("rules")
-        .and_then(serde_yaml::Value::as_sequence)
-        .and_then(|rules| {
-            rules.iter().rev().find_map(|rule| {
-                let rule = rule.as_str()?;
-                let mut parts = rule.split(',').map(str::trim);
-                if !parts.next()?.eq_ignore_ascii_case("MATCH") {
-                    return None;
-                }
-                parts.next().map(str::to_string)
-            })
-        });
-    if let Some(target) = match_target {
-        if usable(&target) {
-            return Some(target);
-        }
-    }
-    groups
-        .iter()
-        .find(|n| usable(n))
-        .or_else(|| proxies.iter().find(|n| usable(n)))
-        .cloned()
-}
-
 /// Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
 /// socket; injects a hardened `external-controller` (random loopback port)
@@ -751,10 +692,8 @@ pub unsafe extern "C" fn meow_patch_config(
         return -1;
     };
 
-    // Strip `dns` and `sniffer` because iOS pins both blocks below: redir-host
-    // resolution (meow-dns returns real upstream IPs and keeps the
-    // IP → host reverse cache that `pre_handle_metadata` uses for domain-rule
-    // matching) plus TLS SNI inspection on the mixed listener. Strip
+    // Strip `dns` and `sniffer` because iOS pins both blocks below: persistent
+    // fake-IP mapping plus TLS SNI inspection on the mixed listener. Strip
     // `subscriptions` as well (handled app-side). `secret` is intentionally NOT
     // stripped here — we overwrite it below with a per-install random token so
     // the REST API on loopback is authenticated rather than open.
@@ -793,20 +732,15 @@ pub unsafe extern "C" fn meow_patch_config(
             "listen",
             serde_yaml::Value::String(format!("{bind_addr}:{dns_port}")),
         ),
+        ("enhanced-mode", serde_yaml::Value::String("fake-ip".into())),
+        ("store-fake-ip", serde_yaml::Value::Bool(true)),
         (
-            "enhanced-mode",
-            serde_yaml::Value::String("redir-host".into()),
+            "fake-ip-range",
+            serde_yaml::Value::String("28.0.0.0/8".into()),
         ),
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
     }
-    // Plain UDP upstreams (user decision 2026-07-20, replacing the DoT-only
-    // pool): tls://1.1.1.1:853 proved unusable from the networks this app
-    // targets, and a resolver with no reachable upstream is a full DNS
-    // outage. Accepted trade-off: in redir-host mode every resolver answer
-    // is a real dial target, so a poisoned plaintext answer becomes the
-    // connect address — rule matching still has the SNI sniffer as a
-    // hostname backstop, but the dial itself trusts these answers.
     dns.insert(
         serde_yaml::Value::String("nameserver".into()),
         serde_yaml::Value::Sequence(vec![
@@ -814,62 +748,15 @@ pub unsafe extern "C" fn meow_patch_config(
             serde_yaml::Value::String("223.5.5.5".into()),
         ]),
     );
-    // ChinaDNS-style trusted path for GFW-listed names: resolve any hostname
-    // matching geosite:gfw through TCP/53 upstreams tunnelled over the
-    // config's own proxy (the `#<name>` fragment), so a censor on the direct
-    // path can neither poison nor observe those lookups — closing the main
-    // plaintext-upstream hole for exactly the names it targets. Everything
-    // else keeps the fast plain-UDP pool above. Degrades gracefully: with no
-    // usable proxy/group in the config the policy is omitted, and before
-    // geosite.dat has downloaded meow-rs skips the entry with a warning
-    // (both fall back to the plain pool for gfw names too).
-    if let Some(proxy) = gfw_dns_proxy(root) {
-        let mut policy = serde_yaml::Mapping::new();
-        policy.insert(
-            serde_yaml::Value::String("geosite:gfw".into()),
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String(format!("tcp://8.8.8.8#{proxy}")),
-                serde_yaml::Value::String(format!("tcp://1.1.1.1#{proxy}")),
-            ]),
-        );
-        dns.insert(
-            serde_yaml::Value::String("nameserver-policy".into()),
-            serde_yaml::Value::Mapping(policy),
-        );
-    }
     root.insert(
         serde_yaml::Value::String("dns".into()),
         serde_yaml::Value::Mapping(dns),
     );
 
-    // Keep the wake-path health probe (`meow_tun_health_probe`) answerable
-    // without upstream network: in redir-host mode meow-dns forwards unknown
-    // names to the upstream pool, so a post-wake probe would stall while the
-    // physical interface is still reassociating and misread a live packet
-    // path as wedged. A `hosts:` entry is answered locally by the resolver
-    // before any upstream dial. The address is TEST-NET-3 documentation
-    // space — the probe reply is intercepted at the FFI egress and nothing
-    // ever dials it. Merged into (not replacing) the user's own `hosts:`.
-    let hosts_key = serde_yaml::Value::String("hosts".into());
-    if !matches!(root.get(&hosts_key), Some(serde_yaml::Value::Mapping(_))) {
-        root.insert(
-            hosts_key.clone(),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-        );
-    }
-    if let Some(serde_yaml::Value::Mapping(hosts)) = root.get_mut(&hosts_key) {
-        hosts.insert(
-            serde_yaml::Value::String(tun2socks::PROBE_QNAME.into()),
-            serde_yaml::Value::String(tun2socks::PROBE_HOSTS_IP.into()),
-        );
-    }
-
     // Always inspect TLS ClientHello SNI on the ports used by HTTPS. The
-    // sniffer writes `metadata.sniff_host`, which domain rules prefer — in
-    // redir-host mode that recovers the hostname for flows whose IP → host
-    // reverse-cache entry expired or is shared across names — while
-    // `override-destination: false` deliberately keeps the resolver-answered
-    // real IP as the dial target.
+    // sniffer writes `metadata.sniff_host`, which domain rules prefer, while
+    // `override-destination: false` deliberately preserves the hostname that
+    // fake-IP reverse mapping recovered as the actual dial target.
     let mut tls = serde_yaml::Mapping::new();
     tls.insert(
         serde_yaml::Value::String("ports".into()),
@@ -1036,10 +923,9 @@ pub extern "C" fn meow_tun_stop_blocking() {
 /// callback, so Swift never sees probe traffic.
 ///
 /// Pass the TUN's own IPv4 address as `src_ip` and the advertised in-TUN DNS
-/// server as `dns_ip` (the `NEPacketTunnelNetworkSettings` values). The probe
-/// qname is pinned in the effective config's `hosts:` block, so meow-dns
-/// answers it locally even in redir-host mode and a healthy verdict does not
-/// depend on upstream reachability — safe to run while the physical
+/// server as `dns_ip` (the `NEPacketTunnelNetworkSettings` values). In
+/// fake-IP mode the answer is synthesised locally, so a healthy verdict does
+/// not depend on upstream reachability — safe to run while the physical
 /// interface is still coming up after a wake.
 ///
 /// Returns 0 when a reply came back (path is live), -1 when tun2socks is not
@@ -1197,7 +1083,7 @@ pub extern "C" fn meow_tun_tcp_idle_ttl_ms() -> c_int {
 /// outbound UDP datagrams to destination port 443 (QUIC's transport) and
 /// answers SVCB (64) / HTTPS (65) DNS queries NOERROR-empty from the
 /// intercept itself (no h3/SvcParams advertisement), forcing clients onto
-/// the A + TCP path.
+/// the A / fake-IPv4 + TCP path.
 ///
 /// At the FFI layer the new value applies immediately to subsequent UDP
 /// datagrams and DNS queries (the backing flag is a plain atomic). The
@@ -1258,7 +1144,6 @@ pub extern "C" fn meow_resident_bytes() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::meow_patch_config;
-    use crate::tun2socks;
     use std::ffi::CString;
 
     fn patch_config(yaml: &str, mixed_port: i32, allow_lan: i32, dns_port: i32) -> String {
@@ -1308,8 +1193,6 @@ sniffer:
   sniff:
     HTTP:
       ports: [80]
-hosts:
-  keep.example: 10.0.0.7
 subscriptions:
   old: {}
 rules:
@@ -1323,37 +1206,20 @@ rules:
         assert!(patched.contains("allow-lan: true"));
         assert!(patched.contains("bind-address: 0.0.0.0"));
         assert!(patched.contains("listen: 0.0.0.0:1054"));
-        assert!(patched.contains("enhanced-mode: redir-host"));
-        assert!(!patched.contains("fake-ip-range"));
-        assert!(!patched.contains("store-fake-ip"));
-        assert!(patched.contains("119.29.29.29"));
-        assert!(patched.contains("223.5.5.5"));
-        assert!(!patched.contains("tls://"));
+        assert!(patched.contains("enhanced-mode: fake-ip"));
+        assert!(patched.contains("fake-ip-range: 28.0.0.0/8"));
         assert!(!patched.contains("subscriptions:"));
-        // No proxy or group defined (MATCH targets built-in DIRECT), so the
-        // gfw nameserver-policy must be omitted rather than reference a
-        // non-existent adapter.
-        assert!(!patched.contains("nameserver-policy"));
 
         let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
         let root = doc.as_mapping().expect("mapping root");
-        let hosts = root
-            .get("hosts")
+        let dns = root
+            .get("dns")
             .and_then(serde_yaml::Value::as_mapping)
-            .expect("forced hosts mapping");
+            .expect("forced dns mapping");
         assert_eq!(
-            hosts
-                .get(tun2socks::PROBE_QNAME)
-                .and_then(serde_yaml::Value::as_str),
-            Some(tun2socks::PROBE_HOSTS_IP),
-            "probe qname must stay locally answerable in redir-host mode"
-        );
-        assert_eq!(
-            hosts
-                .get("keep.example")
-                .and_then(serde_yaml::Value::as_str),
-            Some("10.0.0.7"),
-            "user hosts entries survive the probe merge"
+            dns.get("store-fake-ip")
+                .and_then(serde_yaml::Value::as_bool),
+            Some(true)
         );
         let sniffer = root
             .get("sniffer")
@@ -1396,115 +1262,7 @@ rules:
     }
 
     #[test]
-    fn patch_config_pins_gfw_policy_on_final_match_target() {
-        let patched = patch_config(
-            r#"
-proxies:
-  - name: sg
-    type: ss
-    server: 192.0.2.10
-    port: 8388
-    cipher: aes-256-gcm
-    password: pw
-proxy-groups:
-  - name: Auto
-    type: select
-    proxies: [sg]
-rules:
-  - DOMAIN-SUFFIX,example.com,DIRECT
-  - MATCH,Auto
-"#,
-            7890,
-            0,
-            1053,
-        );
-        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
-        let policy = doc
-            .get("dns")
-            .and_then(|d| d.get("nameserver-policy"))
-            .and_then(serde_yaml::Value::as_mapping)
-            .expect("gfw nameserver-policy pinned");
-        let upstreams: Vec<&str> = policy
-            .get("geosite:gfw")
-            .and_then(serde_yaml::Value::as_sequence)
-            .expect("geosite:gfw entry")
-            .iter()
-            .filter_map(serde_yaml::Value::as_str)
-            .collect();
-        assert_eq!(
-            upstreams,
-            vec!["tcp://8.8.8.8#Auto", "tcp://1.1.1.1#Auto"],
-            "policy upstreams tunnel through the final MATCH target"
-        );
-    }
-
-    #[test]
-    fn patch_config_gfw_policy_falls_back_to_first_group() {
-        // MATCH targets an undefined name — derivation must fall back to the
-        // first defined proxy-group instead of pinning a dangling adapter.
-        let patched = patch_config(
-            r#"
-proxies:
-  - name: sg
-    type: ss
-    server: 192.0.2.10
-    port: 8388
-    cipher: aes-256-gcm
-    password: pw
-proxy-groups:
-  - name: Select
-    type: select
-    proxies: [sg]
-rules:
-  - MATCH,Ghost
-"#,
-            7890,
-            0,
-            1053,
-        );
-        assert!(patched.contains("tcp://8.8.8.8#Select"));
-    }
-
-    #[test]
-    fn patched_config_with_gfw_policy_loads() {
-        // The pinned policy must never break config load (Class A error in
-        // meow-rs when a policy entry ends up with zero valid upstreams —
-        // exactly what happened before meow-rs supported #PROXY fragments on
-        // policy entries). Offline: load builds adapters, dials nothing.
-        let tmp = tempfile::tempdir().expect("temp config dir");
-        let config_path = tmp.path().join("effective-config.yaml");
-        let patched = patch_config(
-            r#"
-proxies:
-  - name: sg
-    type: ss
-    server: 192.0.2.10
-    port: 8388
-    cipher: aes-256-gcm
-    password: pw
-proxy-groups:
-  - name: Auto
-    type: select
-    proxies: [sg]
-rules:
-  - MATCH,Auto
-"#,
-            7890,
-            0,
-            1053,
-        );
-        assert!(patched.contains("tcp://8.8.8.8#Auto"));
-        std::fs::write(&config_path, patched).expect("write effective config");
-        let config_path = config_path.to_str().expect("utf-8 config path");
-
-        let cfg = crate::get_engine_runtime()
-            .block_on(meow_config::load_config(config_path))
-            .expect("config with pinned gfw policy loads");
-        assert!(cfg.sniffer.enable);
-    }
-
-    #[test]
-    fn patched_config_answers_probe_qname_locally_in_redir_host() {
+    fn patched_fake_ip_mapping_survives_config_reload() {
         let tmp = tempfile::tempdir().expect("temp config dir");
         let config_path = tmp.path().join("effective-config.yaml");
         let patched = patch_config(
@@ -1522,25 +1280,33 @@ rules:
         std::fs::write(&config_path, patched).expect("write effective config");
         let config_path = config_path.to_str().expect("utf-8 config path");
 
-        let cfg = crate::get_engine_runtime()
+        let first = crate::get_engine_runtime()
             .block_on(meow_config::load_config(config_path))
-            .expect("load patched config");
-        assert!(cfg.sniffer.enable);
-        assert_eq!(cfg.sniffer.tls_ports, vec![443, 8443]);
-
-        // The hosts pin must answer the wake-probe qname without any upstream
-        // dial — this runs offline — and redir-host must never hand back a
-        // synthesised fake IP.
-        let probe_ip = crate::get_engine_runtime()
-            .block_on(cfg.dns.resolver.lookup_ipv4(tun2socks::PROBE_QNAME))
-            .expect("hosts-pinned probe answer");
+            .expect("load first config generation");
+        assert!(first.sniffer.enable);
+        assert_eq!(first.sniffer.tls_ports, vec![443, 8443]);
+        let fake_ip = crate::get_engine_runtime()
+            .block_on(first.dns.resolver.lookup_ipv4("wake.example"))
+            .expect("fake IP allocation");
         assert_eq!(
-            probe_ip,
-            tun2socks::PROBE_HOSTS_IP
-                .parse::<std::net::IpAddr>()
-                .expect("probe hosts ip")
+            first.dns.resolver.reverse_lookup(fake_ip).as_deref(),
+            Some("wake.example")
         );
-        assert!(!cfg.dns.resolver.is_fake_ip(probe_ip));
+        drop(first);
+
+        let second = crate::get_engine_runtime()
+            .block_on(meow_config::load_config(config_path))
+            .expect("reload config after engine restart");
+        assert!(second.dns.resolver.is_fake_ip(fake_ip));
+        assert_eq!(
+            second.dns.resolver.reverse_lookup(fake_ip).as_deref(),
+            Some("wake.example"),
+            "the reverse map used by stale post-wake destinations must survive restart"
+        );
+        let same_ip = crate::get_engine_runtime()
+            .block_on(second.dns.resolver.lookup_ipv4("wake.example"))
+            .expect("reloaded fake IP allocation");
+        assert_eq!(same_ip, fake_ip);
     }
 
     #[test]

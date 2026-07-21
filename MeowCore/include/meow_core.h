@@ -241,10 +241,9 @@ void meow_tun_stop_blocking(void);
  * callback, so Swift never sees probe traffic.
  *
  * Pass the TUN's own IPv4 address as `src_ip` and the advertised in-TUN DNS
- * server as `dns_ip` (the `NEPacketTunnelNetworkSettings` values). The probe
- * qname is pinned in the effective config's `hosts:` block, so meow-dns
- * answers it locally even in redir-host mode and a healthy verdict does not
- * depend on upstream reachability — safe to run while the physical
+ * server as `dns_ip` (the `NEPacketTunnelNetworkSettings` values). In
+ * fake-IP mode the answer is synthesised locally, so a healthy verdict does
+ * not depend on upstream reachability — safe to run while the physical
  * interface is still coming up after a wake.
  *
  * Returns 0 when a reply came back (path is live), -1 when tun2socks is not
@@ -360,7 +359,7 @@ int meow_tun_tcp_idle_ttl_ms(void);
  * outbound UDP datagrams to destination port 443 (QUIC's transport) and
  * answers SVCB (64) / HTTPS (65) DNS queries NOERROR-empty from the
  * intercept itself (no h3/SvcParams advertisement), forcing clients onto
- * the A + TCP path.
+ * the A / fake-IPv4 + TCP path.
  *
  * At the FFI layer the new value applies immediately to subsequent UDP
  * datagrams and DNS queries (the backing flag is a plain atomic). The
