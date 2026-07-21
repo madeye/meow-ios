@@ -1,0 +1,6 @@
+Build 2026072101 (1.4.0)
+
+• DNS answers now carry the real upstream TTL instead of a fixed 60-second value, so apps re-resolve on the server's schedule.
+• The IP-to-hostname DNS table is saved to disk and reloaded when the engine starts, keeping domain-based routing rules working for connections opened before a restart.
+• Removed all in-place engine restarts (wake, network change, address-family change) — restarts caused multi-second DNS blackouts; connections now recover on their own per flow.
+• Please test: lock/unlock cycles, Wi-Fi↔cellular switches, and long idle periods. The VPN should stay connected and traffic should recover without toggling it.
