@@ -1,0 +1,6 @@
+Build 2026072102 (1.4.0)
+
+• Restores the proven fake-IP DNS mode with persistent fake-IP mappings, replacing the recent redir-host path.
+• Returns DNS lookups to the stable plain CN resolver pool and removes the GFW-only tunneled resolver policy.
+• Keeps TLS SNI inspection and the no-in-place-restart behavior from the previous build.
+• Please test lock/unlock cycles, Wi-Fi↔cellular switches, and domains that resolved incorrectly in build 2026072101.
