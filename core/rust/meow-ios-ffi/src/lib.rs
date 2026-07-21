@@ -20,6 +20,7 @@
 //! DoH cache, or in-FFI TCP-DNS client.
 
 mod diagnostics;
+mod dns_cache_store;
 mod engine;
 mod file_log;
 mod logging;

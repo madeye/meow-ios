@@ -48,6 +48,9 @@ fn bind_socket_addr(listen: &str, port: u16) -> Result<SocketAddr> {
 struct EngineState {
     stats: Arc<Statistics>,
     tunnel: Tunnel,
+    /// Kept so `stop()` can flush the redir-host reverse DNS table to disk
+    /// after the listener tasks are gone (see `dns_cache_store`).
+    resolver: Arc<meow_dns::Resolver>,
     mixed_dial_addr: Option<SocketAddr>,
     dns_dial_addr: Option<SocketAddr>,
     api_task: Option<JoinHandle<()>>,
@@ -226,6 +229,15 @@ pub fn start(config_path: &str) -> Result<()> {
 
     let resolver = cfg.dns.resolver.clone();
 
+    // Warm-start the redir-host reverse (IP → host) table from the previous
+    // engine's persisted snapshot, before any listener can serve traffic.
+    // Apps keep dialing IPs they resolved before a wake restart; without the
+    // reload those flows silently degrade to IP-only rule matching until
+    // their next DNS query.
+    if resolver.mode() == meow_common::DnsMode::Mapping {
+        crate::dns_cache_store::restore(&resolver);
+    }
+
     // Route proxy-upstream hostname resolution through meow-dns instead of
     // libc `getaddrinfo`. On the NE, `getaddrinfo` runs one blocking-pool
     // thread per lookup and re-resolves on every dial, so a wake-from-sleep
@@ -292,6 +304,30 @@ pub fn start(config_path: &str) -> Result<()> {
         listener_tasks.push(crate::get_engine_runtime().spawn(async move {
             if let Err(e) = dns_server.run().await {
                 error!("DNS server error: {}", e);
+            }
+        }));
+    }
+
+    // Periodically persist the reverse table so a jetsam kill — which never
+    // reaches `stop()` — still leaves a warm snapshot on disk. The saver
+    // skips the write when the serialized table is unchanged, so an idle NE
+    // stays off disk entirely.
+    if resolver.mode() == meow_common::DnsMode::Mapping {
+        let saver_resolver = resolver.clone();
+        listener_tasks.push(crate::get_engine_runtime().spawn(async move {
+            let mut tick = tokio::time::interval(crate::dns_cache_store::SAVE_INTERVAL);
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            // interval()'s first tick completes immediately; consume it —
+            // start() just restored this exact state.
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                let r = saver_resolver.clone();
+                // File I/O via spawn_blocking: a stalled disk write must not
+                // be able to occupy an engine worker the data path needs.
+                let _ =
+                    tokio::task::spawn_blocking(move || crate::dns_cache_store::save(&r, false))
+                        .await;
             }
         }));
     }
@@ -373,6 +409,7 @@ pub fn start(config_path: &str) -> Result<()> {
     *slot().lock() = Some(EngineState {
         stats,
         tunnel,
+        resolver,
         mixed_dial_addr,
         dns_dial_addr,
         api_task,
@@ -404,6 +441,15 @@ pub fn stop() {
         h.abort();
         let _ = runtime.block_on(h);
     }
+
+    // Final reverse-table flush, forced past the unchanged-skip: this is the
+    // snapshot the next start() warm-starts from. After the aborts above so
+    // no listener can grow the table behind the write. `stop()` runs outside
+    // the tokio runtime, so blocking file I/O is fine here.
+    if state.resolver.mode() == meow_common::DnsMode::Mapping {
+        crate::dns_cache_store::save(&state.resolver, true);
+    }
+
     info!("meow-rs engine stopped");
 }
 
