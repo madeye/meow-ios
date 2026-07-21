@@ -34,8 +34,9 @@ NSString *const MWTunnelDNSServerIPv4Address = @"172.19.0.2";
     // the default route; only the explicitly excluded LAN/link-local ranges
     // bypass the tunnel, mirroring the IPv4 LAN-exclusion policy.
     //
-    // IPv4↔IPv6 path transitions are handled by the path monitor's
-    // address-family restart in PacketTunnelProvider.
+    // IPv4↔IPv6 path transitions need no special handling: the engine dials
+    // per-flow/per-query, so it picks up the current address families lazily
+    // on the next dial (in-place engine restarts were removed).
     if (ipv6Enabled) {
         NEIPv6Settings *ipv6 = [[NEIPv6Settings alloc]
             initWithAddresses:@[@"fd6d:6577::1"]

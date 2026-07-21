@@ -5,7 +5,6 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWEngineLog.h"
-#import "MWTunnelSettings.h"
 #import "meow_core.h"
 #import <stdatomic.h>
 #import <os/log.h>
@@ -47,8 +46,7 @@ static const int kLocalDNSPort                 = 1053;
     // Bumped on terminal stop. A readPackets completion handler captures the
     // epoch when it arms and drops itself if the epoch advanced in the meantime,
     // so an in-flight handler from a stopped generation cannot ingest stale
-    // packets or re-arm a second concurrent read chain. In-place wake restarts
-    // intentionally keep this read chain alive.
+    // packets or re-arm a second concurrent read chain.
     _Atomic uint64_t _ingressEpoch;
     _Atomic int64_t _ingressPackets;
     dispatch_source_t _trafficTimer;
@@ -162,40 +160,6 @@ static const int kLocalDNSPort                 = 1053;
     return YES;
 }
 
-// MARK: - Restart
-
-- (BOOL)restartWithError:(NSError **)error {
-    if (!_started) {
-        if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
-                                                code:3
-                                            userInfo:@{NSLocalizedDescriptionKey: @"engine not started"}];
-        return NO;
-    }
-
-    os_log_info(gLog, "engine: restart entry");
-
-    [self stopTrafficPump];
-    if (_tunStarted) {
-        meow_tun_stop_blocking();
-        _tunStarted = NO;
-    }
-    meow_engine_stop();
-
-    if (![self startRuntimeWithError:error]) {
-        atomic_store_explicit(&_ingressRunning, NO, memory_order_relaxed);
-        atomic_fetch_add_explicit(&_ingressEpoch, 1, memory_order_relaxed);
-        [self releaseWriterContext];
-        _started = NO;
-        return NO;
-    }
-
-    // Do not call startIngressLoop here. The original readPackets chain remains
-    // armed across the in-place restart; arming another read on the same
-    // NEPacketTunnelFlow can violate the one-read-at-a-time contract.
-    [self startTrafficPump];
-    return YES;
-}
-
 // MARK: - Stop
 
 - (void)stop {
@@ -224,14 +188,6 @@ static const int kLocalDNSPort                 = 1053;
 
 - (BOOL)isEngineRunning {
     return meow_engine_is_running() != 0;
-}
-
-- (BOOL)isDataPathHealthyWithTimeoutMs:(int32_t)timeoutMs {
-    if (!_started || !_tunStarted) return NO;
-    int rc = meow_tun_health_probe(MWTunnelClientIPv4Address.UTF8String,
-                                   MWTunnelDNSServerIPv4Address.UTF8String,
-                                   timeoutMs);
-    return rc == 0;
 }
 
 @synthesize tunStarted = _tunStarted;
@@ -366,7 +322,7 @@ static const int kLocalDNSPort                 = 1053;
     }
     _lastTcpConns = tcpConns;
 
-    [self maybeRestartForFootprint:footprintMB now:now];
+    [self maybeRelieveFootprintPressure:footprintMB now:now];
 
     NSTimeInterval epoch = now + NSTimeIntervalSince1970;
     NSDictionary *snapshot = @{
@@ -394,7 +350,7 @@ static const int kLocalDNSPort                 = 1053;
 
 // MARK: - Soft-cap watchdog
 
-- (void)maybeRestartForFootprint:(NSInteger)footprintMB now:(NSTimeInterval)now {
+- (void)maybeRelieveFootprintPressure:(NSInteger)footprintMB now:(NSTimeInterval)now {
     if (footprintMB < kSoftCapFootprintMB) return;
     if (_lastReliefAttempt > 0 && (now - _lastReliefAttempt) < kReliefCooldownS) {
         return;

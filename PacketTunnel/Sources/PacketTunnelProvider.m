@@ -12,8 +12,6 @@
 #import <os/log.h>
 #import <mach/mach.h>
 #import <malloc/malloc.h>
-#import <stdatomic.h>
-@import Network;
 
 // keep in sync with MeowShared/Sources/MeowIPC/DiagnosticsIPC.swift and
 // MeowShared/Sources/MeowIPC/ProxyControlIPC.swift tag values
@@ -27,48 +25,11 @@ static os_log_t gLog;
 @implementation PacketTunnelProvider {
     MWTunnelEngine     *_engine;
     MWIPCListener      *_ipcListener;
-    nw_path_monitor_t   _pathMonitor;
-    dispatch_queue_t    _pathQueue;
-    BOOL                _havePath;
-    BOOL                _lastSatisfied;
-    nw_interface_type_t _lastInterfaceType;
-    BOOL                _lastHasIPv4;
-    BOOL                _lastHasIPv6;
-    // Serializes blocking engine start/stop/restart work. NE lifecycle
-    // callbacks can arrive on different system queues; MWTunnelEngine owns
-    // non-atomic state and must not be driven concurrently.
+    // Serializes blocking engine start/stop work. NE lifecycle callbacks can
+    // arrive on different system queues; MWTunnelEngine owns non-atomic state
+    // and must not be driven concurrently.
     dispatch_queue_t    _engineControlQueue;
-    // Monotonic counter bumped by every restart source/invalidator. A debounced
-    // restart block captures the value at schedule time and only runs if it's
-    // still current when the debounce window elapses, so a burst of path
-    // changes collapses to a single restart after things settle.
-    _Atomic uint64_t    _restartGeneration;
-    // Bumped whenever a path monitor starts or stops. Path callbacks capture it
-    // so a canceled monitor cannot schedule a delayed restart for a later
-    // tunnel generation.
-    _Atomic uint64_t    _pathGeneration;
-    // CLOCK_MONOTONIC nanoseconds of the last successful engine start or
-    // restart (0 = never). Written on _engineControlQueue, read on _pathQueue,
-    // hence atomic. CLOCK_MONOTONIC keeps counting across sleep, so a grace
-    // window that straddles a sleep/wake cycle expires rather than suppressing
-    // a restart the post-wake network state genuinely needs.
-    _Atomic uint64_t    _lastEngineStartNs;
 }
-
-// Quiet window after the last path event before a triggered engine restart
-// actually fires. Long enough to ride out rapid path churn without stacking
-// restarts, short enough that a genuine path change recovers connectivity
-// quickly.
-static const NSTimeInterval kEngineRestartDebounceS = 3.0;
-
-// Grace window after a successful engine (re)start during which an
-// address-family-only path change does NOT trigger another restart. Routers
-// commonly deliver the IPv6 RA / DHCPv6 prefix 5-30s after DHCPv4 completes,
-// so one physical reconnect would otherwise restart the engine twice —
-// dropping every connection again and re-resolving proxy hostnames from a
-// fresh (empty) DNS cache. A family change outside the window still restarts:
-// the network genuinely changed shape mid-session.
-static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
 
 + (void)initialize {
     if (self == [PacketTunnelProvider class]) {
@@ -85,9 +46,6 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
                                                     0);
         _engineControlQueue = dispatch_queue_create(
             "com.tangzixiang.meow.PacketTunnel.engine-control", attr);
-        atomic_init(&_restartGeneration, 0);
-        atomic_init(&_pathGeneration, 0);
-        atomic_init(&_lastEngineStartNs, 0);
     }
     return self;
 }
@@ -131,9 +89,6 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
                 return;
             }
             self->_engine = engine;
-            atomic_store_explicit(&self->_lastEngineStartNs,
-                                  clock_gettime_nsec_np(CLOCK_MONOTONIC),
-                                  memory_order_relaxed);
 
             MWIPCListener *listener = [[MWIPCListener alloc]
                 initWithHandler:^(NSDictionary *intent) {
@@ -141,8 +96,6 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
                 }];
             [listener start];
             self->_ipcListener = listener;
-
-            [self startPathMonitor];
 
             [self writeState:@"connected" profileID:profileID errorMessage:nil];
             completionHandler(nil);
@@ -154,9 +107,7 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
            completionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "stopTunnel reason=%ld", (long)reason);
     MWEngineLogf(MWLogInfo, @"NE: stopTunnel reason=%ld", (long)reason);
-    atomic_fetch_add_explicit(&_restartGeneration, 1, memory_order_relaxed);
     dispatch_async(_engineControlQueue, ^{
-        [self stopPathMonitor];
         MWTunnelEngine *engine = self->_engine;
         self->_engine = nil;
         [engine stop];
@@ -171,10 +122,6 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
 - (void)sleepWithCompletionHandler:(void (^)(void))completionHandler {
     os_log_info(gLog, "sleep: keeping tun active before device sleep");
     MWEngineLog(MWLogInfo, @"NE: sleep — keeping tun active before device sleep");
-    // Invalidate any pending engine restart: we're heading back to sleep, so a
-    // restart now would just be torn down. Bumping the generation makes the
-    // scheduled block bail when it fires.
-    atomic_fetch_add_explicit(&_restartGeneration, 1, memory_order_relaxed);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         malloc_zone_pressure_relief(NULL, 0);
         completionHandler();
@@ -182,110 +129,13 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
 }
 
 - (void)wake {
+    // No restart, no probe: the engine runs uninterrupted across sleep/wake.
+    // In-place engine restarts (wake-health, path-change, address-family) were
+    // removed — a restart was a guaranteed multi-second DNS blackout, while
+    // everything the engine dials is per-flow/per-query and self-heals on the
+    // current network.
     os_log_info(gLog, "wake: tun remained active");
     MWEngineLog(MWLogInfo, @"NE: wake — tun remained active");
-    // Sleep invalidated any pending engine restart, and the path monitor only
-    // fires on deltas — a delta consumed during a darkwake (whose restart the
-    // re-sleep then canceled) never re-fires at the final wake. So don't trust
-    // path state: verify the data path actually moves packets. The probe is an
-    // in-process DNS round-trip through the whole ingress→lwip→meow-dns→egress
-    // pipeline (~ms when healthy, no upstream network needed in fake-IP mode).
-    // Only a failed probe schedules the (debounced, re-probed) restart, so a
-    // healthy wake no longer pays the restart's DNS blackout.
-    dispatch_async(_engineControlQueue, ^{
-        MWTunnelEngine *engine = self->_engine;
-        if (!engine) return;
-        if ([engine isDataPathHealthyWithTimeoutMs:2000]) {
-            os_log_info(gLog, "wake: data path healthy, no restart needed");
-            return;
-        }
-        os_log_error(gLog, "wake: data path unresponsive, scheduling engine restart");
-        MWEngineLog(MWLogError, @"NE: wake — data path unresponsive, scheduling engine restart");
-        [self scheduleEngineRestartForReason:@"wake-health"];
-    });
-}
-
-- (void)scheduleEngineRestartForReason:(NSString *)reason {
-    uint64_t gen = atomic_fetch_add_explicit(&_restartGeneration, 1, memory_order_relaxed) + 1;
-    __weak __typeof__(self) weak = self;
-    dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kEngineRestartDebounceS * NSEC_PER_SEC)),
-        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            __strong __typeof__(weak) self = weak;
-            if (!self) return;
-            if (atomic_load_explicit(&self->_restartGeneration, memory_order_relaxed) != gen) {
-                os_log_info(gLog, "%{public}@ restart: superseded by newer event, skipping",
-                            reason);
-                return;
-            }
-            [self restartEngineForGeneration:gen reason:reason];
-        });
-}
-
-// Restart the running engine in place. No-op if no engine is running (e.g.
-// restart raced a stop). Runs on _engineControlQueue so it cannot interleave with
-// a user/app stop.
-- (void)restartEngineForGeneration:(uint64_t)gen reason:(NSString *)reason {
-    dispatch_async(_engineControlQueue, ^{
-        if (atomic_load_explicit(&self->_restartGeneration, memory_order_relaxed) != gen) {
-            os_log_info(gLog, "%{public}@ restart: superseded before engine restart, skipping",
-                        reason);
-            return;
-        }
-
-        MWTunnelEngine *engine = self->_engine;
-        if (!engine) {
-            os_log_info(gLog, "%{public}@ restart: no engine running, skipping", reason);
-            return;
-        }
-
-        // A path event proves the physical network changed shape, not that the
-        // tunnel broke. Everything the engine dials is per-flow/per-query, so a
-        // live data path self-heals on the new network — while a restart is a
-        // guaranteed multi-second DNS blackout (listener down, fake-IP pool
-        // wiped, every flow dropped) right when the user starts using the
-        // device. Probe end-to-end first and keep a healthy engine running.
-        if ([engine isDataPathHealthyWithTimeoutMs:1500]) {
-            os_log_info(gLog, "%{public}@ restart: data path healthy, skipping restart",
-                        reason);
-            MWEngineLogf(MWLogInfo, @"NE: %@ restart — data path healthy, skipping", reason);
-            return;
-        }
-        // The probe blocked this queue for up to its timeout; a newer path
-        // event may have superseded this restart meanwhile. Let the newest
-        // generation own recovery instead of restarting twice back-to-back.
-        if (atomic_load_explicit(&self->_restartGeneration, memory_order_relaxed) != gen) {
-            os_log_info(gLog, "%{public}@ restart: superseded during health probe, skipping",
-                        reason);
-            return;
-        }
-        os_log_error(gLog, "%{public}@ restart: data path unresponsive, restarting engine",
-                     reason);
-        MWEngineLogf(MWLogError, @"NE: %@ restart — data path unresponsive, restarting",
-                     reason);
-
-        NSError *startErr = nil;
-        if (![engine restartWithError:&startErr]) {
-            os_log_error(gLog, "%{public}@ restart: engine start failed: %{public}@",
-                         reason,
-                         startErr.localizedDescription);
-            MWEngineLogf(MWLogError, @"NE: %@ restart — engine start failed: %@",
-                         reason, startErr.localizedDescription);
-            self->_engine = nil;
-            [self writeState:@"error" profileID:nil errorMessage:startErr.localizedDescription];
-            // A failed restart leaves no working data path. Tear the tunnel down so
-            // NE on-demand / the app can re-establish it cleanly rather than
-            // sitting connected-but-dead.
-            [self cancelTunnelWithError:startErr];
-            return;
-        }
-
-        atomic_store_explicit(&self->_lastEngineStartNs,
-                              clock_gettime_nsec_np(CLOCK_MONOTONIC),
-                              memory_order_relaxed);
-        os_log_info(gLog, "%{public}@ restart: engine restarted", reason);
-        MWEngineLogf(MWLogInfo, @"NE: %@ restart — engine restarted", reason);
-    });
 }
 
 // MARK: - App messages
@@ -455,130 +305,6 @@ static const NSTimeInterval kAddressFamilyRestartGraceS = 30.0;
         return;
     }
     [MWDarwinBridge post:MWNotificationState];
-}
-
-// MARK: - Network path monitoring
-
-- (void)startPathMonitor {
-    uint64_t pathGen = atomic_fetch_add_explicit(&_pathGeneration, 1, memory_order_relaxed) + 1;
-    _pathQueue = dispatch_queue_create("com.tangzixiang.meow.PacketTunnel.path",
-                                       DISPATCH_QUEUE_SERIAL);
-    _havePath = NO;
-    _lastSatisfied = NO;
-    _lastInterfaceType = nw_interface_type_other;
-    _lastHasIPv4 = NO;
-    _lastHasIPv6 = NO;
-
-    nw_path_monitor_t monitor = nw_path_monitor_create();
-    nw_path_monitor_set_queue(monitor, _pathQueue);
-
-    __weak __typeof__(self) weak = self;
-    nw_path_monitor_set_update_handler(monitor, ^(nw_path_t _Nonnull path) {
-        __strong __typeof__(weak) self = weak;
-        if (!self) return;
-        [self handlePathUpdate:path generation:pathGen];
-    });
-    nw_path_monitor_start(monitor);
-    _pathMonitor = monitor;
-}
-
-- (void)stopPathMonitor {
-    atomic_fetch_add_explicit(&_pathGeneration, 1, memory_order_relaxed);
-    atomic_fetch_add_explicit(&_restartGeneration, 1, memory_order_relaxed);
-    if (_pathMonitor) {
-        nw_path_monitor_cancel(_pathMonitor);
-        _pathMonitor = nil;
-    }
-    _pathQueue = nil;
-}
-
-// Caller queue: _pathQueue (serial). All ivar access here is single-threaded.
-- (void)handlePathUpdate:(nw_path_t)path generation:(uint64_t)pathGen {
-    if (atomic_load_explicit(&_pathGeneration, memory_order_relaxed) != pathGen) {
-        os_log_info(gLog, "path: stale monitor update ignored");
-        return;
-    }
-
-    nw_path_status_t status = nw_path_get_status(path);
-    BOOL satisfied = (status == nw_path_status_satisfied);
-
-    nw_interface_type_t iface = nw_interface_type_other;
-    BOOL hasIPv4 = NO;
-    BOOL hasIPv6 = NO;
-    if (satisfied) {
-        if (nw_path_uses_interface_type(path, nw_interface_type_wifi)) {
-            iface = nw_interface_type_wifi;
-        } else if (nw_path_uses_interface_type(path, nw_interface_type_cellular)) {
-            iface = nw_interface_type_cellular;
-        } else if (nw_path_uses_interface_type(path, nw_interface_type_wired)) {
-            iface = nw_interface_type_wired;
-        }
-        hasIPv4 = nw_path_has_ipv4(path);
-        hasIPv6 = nw_path_has_ipv6(path);
-    }
-
-    if (!_havePath) {
-        _havePath = YES;
-        _lastSatisfied = satisfied;
-        _lastInterfaceType = iface;
-        _lastHasIPv4 = hasIPv4;
-        _lastHasIPv6 = hasIPv6;
-        os_log_info(gLog, "path: initial satisfied=%d iface=%d v4=%d v6=%d",
-                    satisfied, iface, hasIPv4, hasIPv6);
-        return;
-    }
-
-    BOOL shouldRestart = NO;
-    if (satisfied && !_lastSatisfied) {
-        os_log_info(gLog, "path: connectivity regained");
-        MWEngineLog(MWLogInfo, @"NE: path — connectivity regained");
-        shouldRestart = YES;
-    } else if (satisfied && iface != _lastInterfaceType) {
-        os_log_info(gLog, "path: interface changed %d -> %d", _lastInterfaceType, iface);
-        MWEngineLogf(MWLogInfo, @"NE: path — interface changed %d -> %d",
-                     _lastInterfaceType, iface);
-        shouldRestart = YES;
-    } else if (satisfied && (hasIPv4 != _lastHasIPv4 || hasIPv6 != _lastHasIPv6)) {
-        // Same interface, same satisfied state, but the address-family set
-        // changed — e.g. the Wi-Fi network silently lost (or gained) IPv6
-        // via expired RAs or an upstream change. Restart the engine + tun2socks
-        // after a debounce so the fresh stack tracks the new network shape —
-        // unless an engine (re)start just happened, in which case this is
-        // almost certainly the late-v6 tail of the same physical reconnect
-        // and the fresh engine will pick the family up lazily on next dial.
-        uint64_t lastStartNs = atomic_load_explicit(&_lastEngineStartNs,
-                                                    memory_order_relaxed);
-        uint64_t nowNs = clock_gettime_nsec_np(CLOCK_MONOTONIC);
-        NSTimeInterval sinceStart = (NSTimeInterval)(nowNs - lastStartNs) / NSEC_PER_SEC;
-        if (lastStartNs != 0 && sinceStart < kAddressFamilyRestartGraceS) {
-            os_log_info(gLog,
-                        "path: address family changed v4 %d -> %d, v6 %d -> %d "
-                        "within %.0fs of engine start, absorbing (no restart)",
-                        _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6, sinceStart);
-            MWEngineLogf(MWLogInfo,
-                         @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d "
-                         @"within %.0fs of engine start, absorbing (no restart)",
-                         _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6, sinceStart);
-        } else {
-            os_log_info(gLog, "path: address family changed v4 %d -> %d, v6 %d -> %d",
-                        _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
-            MWEngineLogf(MWLogInfo,
-                         @"NE: path — address family changed v4 %d -> %d, v6 %d -> %d",
-                         _lastHasIPv4, hasIPv4, _lastHasIPv6, hasIPv6);
-            shouldRestart = YES;
-        }
-    }
-
-    _lastSatisfied = satisfied;
-    _lastInterfaceType = iface;
-    _lastHasIPv4 = hasIPv4;
-    _lastHasIPv6 = hasIPv6;
-
-    if (shouldRestart) {
-        os_log_info(gLog, "path: scheduling debounced engine restart");
-        MWEngineLog(MWLogInfo, @"NE: path — scheduling debounced engine restart");
-        [self scheduleEngineRestartForReason:@"path"];
-    }
 }
 
 @end
