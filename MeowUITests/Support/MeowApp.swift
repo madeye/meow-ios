@@ -22,7 +22,7 @@ struct MeowApp {
 
     /// Tab navigation
     var subscriptionsTab: XCUIElement {
-        app.tabBars.buttons["Subscriptions"]
+        app.tabBars.buttons["Configs"]
     }
 
     var proxyGroupsTab: XCUIElement {

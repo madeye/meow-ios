@@ -10,7 +10,7 @@
 
 
 /* Tab bar */
-"tabs.subscriptions" = "Subscriptions";
+"tabs.subscriptions" = "Configs";
 "tabs.proxyGroups" = "Proxy Groups";
 "tabs.utility" = "Utility";
 "tabs.settings" = "Settings";
@@ -61,22 +61,22 @@
 
 
 /* Subscriptions */
-"subscriptions.nav.title" = "Subscriptions";
-"subscriptions.home.addTitle" = "Add Subscription";
+"subscriptions.nav.title" = "Configs";
+"subscriptions.home.addTitle" = "Add Config";
 "subscriptions.home.addSubtitle" = "Connect a URL or import a local YAML profile.";
 "subscriptions.section.profiles" = "Profiles";
 "subscriptions.section.engine" = "Engine";
-"subscriptions.add.nav.title" = "Add Subscription";
+"subscriptions.add.nav.title" = "Add Config";
 "subscriptions.add.field.name" = "Name";
 "subscriptions.add.field.url" = "URL";
 "subscriptions.add.button.add" = "Add";
 "subscriptions.add.button.adding" = "Adding…";
 "subscriptions.editInfo.swipe" = "Edit Info";
 "subscriptions.refresh.swipe" = "Refresh";
-"subscriptions.editInfo.nav.title" = "Edit Subscription";
+"subscriptions.editInfo.nav.title" = "Edit Config";
 "subscriptions.editInfo.button.save" = "Save";
 "subscriptions.editInfo.footer" = "Changes to the URL take effect on the next refresh.";
-"subscriptions.import.errorTitle" = "Couldn't import subscription";
+"subscriptions.import.errorTitle" = "Couldn't import config";
 "subscriptions.row.updatedAgo %@" = "Updated %@ ago";
 "subscriptions.row.a11y.edit %@" = "Edit YAML for %@";
 "subscriptions.row.a11y.refresh %@" = "Refresh %@";
@@ -93,32 +93,32 @@
 "qrExport.button.share" = "Share";
 "qrExport.empty" = "Nothing to export — this profile has no Shadowsocks servers.";
 "qrExport.error.tooLong" = "This link is too long to fit in a QR code. Use Copy or Share instead.";
-"qrExport.caption.subscription" = "Scan to import this subscription URL into another client.";
+"qrExport.caption.subscription" = "Scan to import this config URL into another client.";
 "qrExport.caption.shadowsocks" = "Scan to import this server into any Shadowsocks-compatible client.";
 "qrExport.a11y.qrImage %@" = "QR code for %@";
-"subscriptions.toolbar.a11y.add" = "Add subscription";
+"subscriptions.toolbar.a11y.add" = "Add config";
 "subscriptions.toolbar.addFromURL" = "Add from URL";
 "subscriptions.toolbar.importFromFile" = "Import from iCloud Drive…";
 "subscriptions.import.invalidEncoding" = "The selected file isn't valid UTF-8 text.";
-"subscriptions.empty.title" = "No subscriptions yet";
-"subscriptions.empty.description" = "Tap + to add a Mihomo or Clash subscription URL.";
+"subscriptions.empty.title" = "No configs yet";
+"subscriptions.empty.description" = "Tap + to add a Mihomo or Clash config URL.";
 "subscriptions.empty.importFile" = "Import File";
 "subscriptions.toolbar.addShadowsocks" = "Add Shadowsocks Server";
 
 
 /* Deep-link import confirmation (meow://connect) */
-"deepLinkImport.nav.title" = "Import Subscription";
+"deepLinkImport.nav.title" = "Import Config";
 "deepLinkImport.section.subscription" = "This link wants to add:";
 "deepLinkImport.field.name" = "Name";
 "deepLinkImport.field.host" = "Host";
 "deepLinkImport.warning.insecure" = "Insecure connection — this profile can be tampered with in transit. Prefer an https:// link if the provider offers one.";
 "deepLinkImport.warning.acknowledge" = "I understand the risk of importing over HTTP";
-"deepLinkImport.notice.duplicate" = "A subscription with this URL is already imported. Continuing will update it in place instead of adding a duplicate.";
+"deepLinkImport.notice.duplicate" = "A config with this URL is already imported. Continuing will update it in place instead of adding a duplicate.";
 "deepLinkImport.button.import" = "Import";
-"deepLinkImport.button.update" = "Update Existing Subscription";
+"deepLinkImport.button.update" = "Update Existing Config";
 "deepLinkImport.button.importAndActivate" = "Import & Activate";
 "a11y.deepLinkImport.cancel" = "Cancel import";
-"deepLinkImport.a11y.url %@" = "Subscription URL: %@";
+"deepLinkImport.a11y.url %@" = "Config URL: %@";
 
 
 /* Add Shadowsocks server sheet */
@@ -371,7 +371,7 @@
 /* Accessibility — Subscriptions */
 "subscriptions.row.a11y.selected" = "Selected";
 "subscriptions.row.a11y.notSelected" = "Not selected";
-"subscriptions.row.a11y.selectHint" = "Activates this subscription";
+"subscriptions.row.a11y.selectHint" = "Activates this config";
 "subscriptions.row.a11y.editHint" = "Opens YAML editor";
 "subscriptions.row.a11y.refreshHint" = "Fetches the latest config from the remote URL";
 

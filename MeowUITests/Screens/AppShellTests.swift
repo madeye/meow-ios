@@ -25,7 +25,7 @@ final class AppShellTests: XCTestCase {
         let meow = MeowApp()
         meow.launch()
 
-        XCTAssertTrue(meow.app.navigationBars["Subscriptions"].waitForExistence(timeout: 5))
+        XCTAssertTrue(meow.app.navigationBars["Configs"].waitForExistence(timeout: 5))
         XCTAssertFalse(meow.app.tabBars.buttons["Home"].exists)
     }
 
@@ -38,7 +38,7 @@ final class AppShellTests: XCTestCase {
         XCTAssertTrue(meow.app.buttons["subscriptions.empty.importFromFile"].exists)
 
         addFromURL.tap()
-        XCTAssertTrue(meow.app.navigationBars["Add Subscription"].waitForExistence(timeout: 5))
+        XCTAssertTrue(meow.app.navigationBars["Add Config"].waitForExistence(timeout: 5))
     }
 
     func testProxyGroupsIsTopLevelTab() {

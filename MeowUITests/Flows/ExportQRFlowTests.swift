@@ -15,7 +15,7 @@ final class ExportQRFlowTests: XCTestCase {
         app.launchArguments += ["-UITests", "-ResetState", "-SeedShadowsocksProfile", "My Servers"]
         app.launch()
 
-        app.tabBars.buttons["Subscriptions"].tap()
+        app.tabBars.buttons["Configs"].tap()
         XCTAssertTrue(app.staticTexts["My Servers"].waitForExistence(timeout: 5))
 
         // The generated profile row offers QR export.

@@ -16,7 +16,7 @@
 
 
 /* Tab bar */
-"tabs.subscriptions" = "订阅";
+"tabs.subscriptions" = "配置";
 "tabs.proxyGroups" = "代理组";
 "tabs.utility" = "工具";
 "tabs.settings" = "设置";
@@ -67,22 +67,22 @@
 
 
 /* Subscriptions */
-"subscriptions.nav.title" = "订阅";
-"subscriptions.home.addTitle" = "添加订阅";
+"subscriptions.nav.title" = "配置";
+"subscriptions.home.addTitle" = "添加配置";
 "subscriptions.home.addSubtitle" = "连接 URL，或导入本地 YAML 配置。";
-"subscriptions.section.profiles" = "配置";
+"subscriptions.section.profiles" = "配置文件";
 "subscriptions.section.engine" = "引擎";
-"subscriptions.add.nav.title" = "添加订阅";
+"subscriptions.add.nav.title" = "添加配置";
 "subscriptions.add.field.name" = "名称";
 "subscriptions.add.field.url" = "网址";
 "subscriptions.add.button.add" = "添加";
 "subscriptions.add.button.adding" = "添加中…";
 "subscriptions.editInfo.swipe" = "编辑信息";
 "subscriptions.refresh.swipe" = "刷新";
-"subscriptions.editInfo.nav.title" = "编辑订阅";
+"subscriptions.editInfo.nav.title" = "编辑配置";
 "subscriptions.editInfo.button.save" = "保存";
 "subscriptions.editInfo.footer" = "网址的更改将在下次刷新时生效。";
-"subscriptions.import.errorTitle" = "导入订阅失败";
+"subscriptions.import.errorTitle" = "导入配置失败";
 "subscriptions.row.updatedAgo %@" = "%@前更新";
 "subscriptions.row.a11y.edit %@" = "编辑 %@ 的 YAML";
 "subscriptions.row.a11y.refresh %@" = "刷新 %@";
@@ -99,32 +99,32 @@
 "qrExport.button.share" = "分享";
 "qrExport.empty" = "没有可导出的内容 — 此配置不包含 Shadowsocks 服务器。";
 "qrExport.error.tooLong" = "链接过长，无法生成二维码。请使用复制或分享。";
-"qrExport.caption.subscription" = "扫描即可将此订阅地址导入其他客户端。";
+"qrExport.caption.subscription" = "扫描即可将此配置地址导入其他客户端。";
 "qrExport.caption.shadowsocks" = "扫描即可将此服务器导入任意兼容 Shadowsocks 的客户端。";
 "qrExport.a11y.qrImage %@" = "%@ 的二维码";
-"subscriptions.toolbar.a11y.add" = "添加订阅";
+"subscriptions.toolbar.a11y.add" = "添加配置";
 "subscriptions.toolbar.addFromURL" = "从 URL 添加";
 "subscriptions.toolbar.importFromFile" = "从 iCloud 云盘导入…";
 "subscriptions.import.invalidEncoding" = "所选文件不是有效的 UTF-8 文本。";
-"subscriptions.empty.title" = "暂无订阅";
-"subscriptions.empty.description" = "点击右上角的 + 添加 Mihomo 或 Clash 订阅链接。";
+"subscriptions.empty.title" = "暂无配置";
+"subscriptions.empty.description" = "点击右上角的 + 添加 Mihomo 或 Clash 配置链接。";
 "subscriptions.empty.importFile" = "导入文件";
 "subscriptions.toolbar.addShadowsocks" = "添加 Shadowsocks 服务器";
 
 
 /* Deep-link import confirmation (meow://connect) */
-"deepLinkImport.nav.title" = "导入订阅";
+"deepLinkImport.nav.title" = "导入配置";
 "deepLinkImport.section.subscription" = "此链接想要添加：";
 "deepLinkImport.field.name" = "名称";
 "deepLinkImport.field.host" = "主机";
 "deepLinkImport.warning.insecure" = "不安全的连接 — 此配置在传输过程中可能被篡改。如果服务商提供 https:// 链接，请优先使用。";
 "deepLinkImport.warning.acknowledge" = "我了解通过 HTTP 导入的风险";
-"deepLinkImport.notice.duplicate" = "已导入过此网址对应的订阅。继续操作将就地更新它，而不会新增重复项。";
+"deepLinkImport.notice.duplicate" = "已导入过此网址对应的配置。继续操作将就地更新它，而不会新增重复项。";
 "deepLinkImport.button.import" = "导入";
-"deepLinkImport.button.update" = "更新现有订阅";
+"deepLinkImport.button.update" = "更新现有配置";
 "deepLinkImport.button.importAndActivate" = "导入并激活";
 "a11y.deepLinkImport.cancel" = "取消导入";
-"deepLinkImport.a11y.url %@" = "订阅网址：%@";
+"deepLinkImport.a11y.url %@" = "配置网址：%@";
 
 
 /* Add Shadowsocks server sheet */
@@ -377,7 +377,7 @@
 /* Accessibility — Subscriptions */
 "subscriptions.row.a11y.selected" = "已选中";
 "subscriptions.row.a11y.notSelected" = "未选中";
-"subscriptions.row.a11y.selectHint" = "激活此订阅";
+"subscriptions.row.a11y.selectHint" = "激活此配置";
 "subscriptions.row.a11y.editHint" = "打开 YAML 编辑器";
 "subscriptions.row.a11y.refreshHint" = "从远程地址获取最新配置";
 
