@@ -1,0 +1,5 @@
+Build 2026072201 (1.4.0)
+
+• Adds graceful engine reload: config changes now hot-reload the engine, falling back to an in-place restart when needed — switching profiles no longer drops the tunnel.
+• Renames "Subscriptions" to "Configs" throughout the UI to better describe what they are: remote config URLs.
+• Please test switching and editing configs while connected, plus the usual lock/unlock and Wi-Fi↔cellular cycles.
