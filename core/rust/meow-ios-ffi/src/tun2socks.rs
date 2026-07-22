@@ -92,6 +92,14 @@ static TUN2SOCKS_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU6
 pub(crate) static ACTIVE_TCP_CONNS: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 
+/// Monotonic heartbeat counter bumped by the lwip stack driver and egress
+/// loops on every successful packet operation. The ObjC watchdog reads this
+/// via `meow_tun_heartbeat()` (lock-free atomic load) — if the value hasn't
+/// changed between two 30 s samples, the data path is wedged (e.g. lwip PCB
+/// list corruption holding LWIP_MUTEX forever). This replaces the old
+/// block_on-based probes which themselves hang when the runtime is dead.
+static DATA_PATH_HEARTBEAT: AtomicU64 = AtomicU64::new(0);
+
 /// JoinHandle of the current (or most recent) run task. The next `start()`
 /// takes it and awaits its teardown (bounded) before building a new lwip
 /// netstack — the lwip globals (`OUTPUT_CB_PTR`, netif hooks, pcb lists)
@@ -423,6 +431,15 @@ pub fn close_all_tcp_flows() -> usize {
         warn!("tun2socks: registry watchdog closed {} TCP flows", count);
     }
     count
+}
+
+/// Read the current data-path heartbeat counter. The value is monotonically
+/// increasing and bumped on every successful lwip stack driver or egress
+/// packet operation. A stalled value (no change between two samples) means
+/// the data path is wedged. Lock-free `Relaxed` load — safe to call from any
+/// thread including the ObjC watchdog timer.
+pub fn heartbeat() -> u64 {
+    DATA_PATH_HEARTBEAT.load(Ordering::Relaxed)
 }
 
 fn warn_capped(slot: &AtomicU64, msg: &str) {
@@ -904,6 +921,7 @@ async fn run_tun2socks(
                                     &format!("tun2socks: stack send error (frame dropped): {}", e),
                                 );
                             }
+                            DATA_PATH_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
                         }
                         None => break,
                     }
@@ -917,6 +935,7 @@ async fn run_tun2socks(
                                     "tun2socks: egress queue saturated, dropping outbound frame (Swift writePackets backpressure)",
                                 );
                             }
+                            DATA_PATH_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
                         }
                         Some(Err(e)) => {
                             warn_capped(
@@ -993,6 +1012,7 @@ async fn run_tun2socks(
                 continue;
             }
             emitter.emit(&pkt);
+            DATA_PATH_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
         }
     });
 

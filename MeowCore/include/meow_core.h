@@ -269,6 +269,9 @@ void meow_tun_stop_blocking(void);
  * tunnel control queue), never from an engine callback. Callers must
  * serialize probes.
  *
+ * Deprecated: superseded by the lock-free meow_tun_heartbeat() watchdog.
+ * Retained for manual diagnostics only — no production call sites remain.
+ *
  * # Safety
  * `src_ip` and `dns_ip` must be NUL-terminated C strings.
  */
@@ -287,8 +290,22 @@ int meow_tun_health_probe(const char *src_ip, const char *dns_ip, int timeout_ms
  * user sees "connected but no traffic".
  *
  * BLOCKS up to `timeout_ms`. Call from a NON-runtime thread.
+ *
+ * Deprecated: superseded by the lock-free meow_tun_heartbeat() watchdog.
+ * Retained for manual diagnostics only — no production call sites remain.
  */
 int meow_tun_tcp_health_probe(int timeout_ms);
+
+/**
+ * Read the data-path heartbeat counter. Monotonically increasing; bumped on
+ * every successful lwip stack driver or egress packet operation. The ObjC
+ * watchdog reads this via a lock-free atomic load — if the value hasn't
+ * changed between two 30 s samples the data path is wedged (e.g. lwip PCB
+ * corruption holding LWIP_MUTEX). Unlike the old block_on probes, this call
+ * NEVER blocks and NEVER touches the tokio runtime, so it works even when
+ * the runtime is completely dead.
+ */
+uint64_t meow_tun_heartbeat(void);
 
 /**
  * Abort every in-flight TCP flow tracked by tun2socks. This is an

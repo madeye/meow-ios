@@ -5,7 +5,6 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWEngineLog.h"
-#import "MWTunnelSettings.h"
 #import "meow_core.h"
 #import <stdatomic.h>
 #import <os/log.h>
@@ -38,14 +37,23 @@ static const NSTimeInterval kTeardownCooldownS = 5.0;
 
 static const int kLocalDNSPort = 1053;
 
-// Health probe watchdog: periodically injects a synthetic DNS query through
-// the full TUN data path (ingress → lwip → UDP → meow-dns → reply → egress).
-// When consecutive probes time out the data path is dead — the engine process
-// is alive and iOS reports "connected", but no traffic flows. Without this
-// watchdog the user must manually disconnect/reconnect.
+// Health watchdog: reads a lock-free atomic heartbeat counter from the Rust
+// data path (lwip stack driver + egress loops). If the counter hasn't changed
+// between two 30 s samples AND ingress packets advanced (apps are sending),
+// the data path is wedged (e.g. lwip PCB list corruption holding LWIP_MUTEX
+// forever). When neither heartbeat nor ingress moves, the device is simply
+// idle — no false restarts overnight. Unlike the old block_on probes, this
+// NEVER touches the tokio runtime, so it works even when the runtime is
+// completely dead.
 static const NSTimeInterval kHealthProbeIntervalS = 30.0;
 static const NSInteger kMaxProbeFailures          = 2;
-static const int kProbeTimeoutMs                  = 3000;
+
+// Hard wall-clock timeout for meow_tun_stop_blocking(). When lwip PCB
+// corruption holds LWIP_MUTEX, the run task can never finish teardown and
+// stop_blocking hangs forever. This timeout ensures the watchdog recovery
+// path can escalate to cancelTunnelWithError: (iOS kills the process) instead
+// of hanging the engine control queue indefinitely.
+static const NSTimeInterval kStopBlockingTimeoutS = 5.0;
 
 @implementation MWTunnelEngine {
     NEPacketTunnelFlow *_flow;
@@ -69,8 +77,10 @@ static const int kProbeTimeoutMs                  = 3000;
     NSTimeInterval _lastReliefAttempt;  // CFAbsoluteTime; 0 = never
     int64_t _lastTcpConns;              // prev snapshot's tcp_conns, for teardown-burst detection
     NSTimeInterval _lastTeardownRelief; // CFAbsoluteTime; 0 = never
-    NSTimeInterval _lastHealthCheckTime; // CFAbsoluteTime of last health probe; 0 = never
-    NSInteger _consecutiveProbeFailures; // consecutive probe timeouts (reset on success)
+    NSTimeInterval _lastHealthCheckTime; // CFAbsoluteTime of last heartbeat sample; 0 = never
+    uint64_t _lastHeartbeatValue;        // previous sample's heartbeat counter
+    int64_t _lastIngressPackets;         // previous sample's ingress packet count
+    NSInteger _consecutiveProbeFailures; // consecutive stalled-heartbeat samples (reset on progress)
 }
 
 + (void)initialize {
@@ -148,6 +158,12 @@ static const int kProbeTimeoutMs                  = 3000;
         return NO;
     }
     _tunStarted = YES;
+    // Reset watchdog baseline so the first sample after (re)start seeds
+    // without false-triggering.
+    _lastHealthCheckTime = 0;
+    _lastHeartbeatValue = 0;
+    _lastIngressPackets = 0;
+    _consecutiveProbeFailures = 0;
     return YES;
 }
 
@@ -176,6 +192,27 @@ static const int kProbeTimeoutMs                  = 3000;
 
 // MARK: - Restart
 
+/// Run meow_tun_stop_blocking() with a hard wall-clock timeout. Returns YES
+/// if the blocking stop completed within kStopBlockingTimeoutS, NO if it
+/// timed out (indicating the lwip stack is wedged and the process needs to
+/// be killed by iOS via cancelTunnelWithError:).
+- (BOOL)timedStopBlocking {
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        meow_tun_stop_blocking();
+        dispatch_semaphore_signal(sem);
+    });
+    long rc = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW,
+                        (int64_t)(kStopBlockingTimeoutS * NSEC_PER_SEC)));
+    if (rc != 0) {
+        os_log_error(gLog, "timedStopBlocking: meow_tun_stop_blocking() did not return within %.0fs — lwip likely wedged",
+                     kStopBlockingTimeoutS);
+        MWEngineLog(MWLogError, @"NE: stop_blocking timed out — escalating to process kill");
+        return NO;
+    }
+    return YES;
+}
+
 - (BOOL)restartWithError:(NSError **)error {
     if (!_started) {
         if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
@@ -188,7 +225,14 @@ static const int kProbeTimeoutMs                  = 3000;
 
     [self stopTrafficPump];
     if (_tunStarted) {
-        meow_tun_stop_blocking();
+        if (![self timedStopBlocking]) {
+            // lwip is wedged — can't cleanly restart. Signal failure so the
+            // caller (watchdog handler) escalates to cancelTunnelWithError:.
+            if (error) *error = [NSError errorWithDomain:@"MWTunnelEngine"
+                                                    code:8
+                                                userInfo:@{NSLocalizedDescriptionKey: @"stop_blocking timed out (lwip wedged)"}];
+            return NO;
+        }
         _tunStarted = NO;
     }
     meow_engine_stop();
@@ -252,13 +296,22 @@ static const int kProbeTimeoutMs                  = 3000;
 
     [self stopTrafficPump];
 
-    // BLOCKING stop: wait for the tun2socks run task — and its egress callback
-    // loop — to fully terminate before releasing the writer ctx below.
-    // meow_tun_stop() is fire-and-forget, so CFBridgingRelease-ing the
-    // CFBridgingRetain'd writer right after it returned could free the object
-    // while the still-draining egress task calls meowPacketWriterCB on it: a
-    // use-after-free. meow_tun_stop_blocking() joins the run task first.
-    meow_tun_stop_blocking();
+    // BLOCKING stop with timeout: wait for the tun2socks run task — and its
+    // egress callback loop — to fully terminate before releasing the writer
+    // ctx below. If lwip is wedged (PCB corruption) this will time out after
+    // kStopBlockingTimeoutS; we proceed anyway since iOS will kill the
+    // process shortly after stopTunnel returns.
+    //
+    // UAF safety on timeout: releasing _writerCtx while the detached stop
+    // thread may still reference it is safe HERE because (a) this path is
+    // only reached from -stopTunnel (final teardown), (b) iOS terminates the
+    // NE process within ~5 s of stopTunnel returning, and (c) the detached
+    // thread is stuck inside meow_tun_stop_blocking() waiting on a mutex it
+    // will never acquire — it cannot dereference the writer ctx before the
+    // process dies. In the restartWithError: path, a timeout returns NO and
+    // the caller escalates to cancelTunnelWithError: (immediate process kill)
+    // without ever reaching releaseWriterContext.
+    [self timedStopBlocking];
     _tunStarted = NO;
     meow_engine_stop();
 
@@ -455,53 +508,54 @@ static const int kProbeTimeoutMs                  = 3000;
     }
     _lastHealthCheckTime = now;
 
-    // Probe 1: UDP/DNS data path (ingress → lwip → UDP → meow-dns → reply).
-    int udpRc = meow_tun_health_probe(
-        MWTunnelClientIPv4Address.UTF8String,
-        MWTunnelDNSServerIPv4Address.UTF8String,
-        kProbeTimeoutMs);
+    // Lock-free atomic read — NEVER blocks, NEVER touches the tokio runtime.
+    // Works even when the runtime is completely dead (lwip PCB corruption).
+    uint64_t currentBeat = meow_tun_heartbeat();
+    int64_t currentIngress = atomic_load_explicit(&_ingressPackets, memory_order_relaxed);
 
-    // Probe 2: TCP path to the mixed listener. Catches the case where the
-    // mixed listener's connection slots are saturated (e.g. 256 concurrent
-    // from video streaming + QUIC fallback) — the UDP probe still passes
-    // but all new TCP flows queue forever.
-    int tcpRc = meow_tun_tcp_health_probe(kProbeTimeoutMs);
+    // First sample after start: seed the baseline, don't judge yet.
+    if (_lastHeartbeatValue == 0 && currentBeat == 0) {
+        // Engine just started, no traffic yet — not a failure.
+        _lastIngressPackets = currentIngress;
+        return;
+    }
 
-    // -1 means "not running" (benign race during stop/restart) — skip this
-    // cycle entirely without counting it as a failure.
-    if (udpRc == -1 || tcpRc == -1) return;
-
-    // Only -2 (timeout) indicates a dead data path. Any other non-zero is
-    // unexpected but we treat it conservatively as a failure.
-    BOOL udpDead = (udpRc == -2);
-    BOOL tcpDead = (tcpRc == -2);
-
-    if (!udpDead && !tcpDead) {
+    if (currentBeat != _lastHeartbeatValue) {
+        // Data path is making progress.
         if (_consecutiveProbeFailures > 0) {
-            os_log_info(gLog, "health probe: recovered after %ld failure(s)",
+            os_log_info(gLog, "health watchdog: recovered after %ld stalled sample(s)",
                         (long)_consecutiveProbeFailures);
         }
+        _consecutiveProbeFailures = 0;
+        _lastHeartbeatValue = currentBeat;
+        _lastIngressPackets = currentIngress;
+        return;
+    }
+
+    // Heartbeat hasn't moved. Distinguish "data path wedged" from "device
+    // idle": if no new ingress packets arrived since the last sample, the
+    // device simply has no traffic (locked screen, overnight) — NOT a stall.
+    // Only when apps ARE sending packets (ingress advancing) yet the
+    // heartbeat stays frozen do we have the precise "data plane not
+    // consuming" signature of a wedged lwip stack.
+    if (currentIngress == _lastIngressPackets) {
+        // Idle — no traffic in either direction. Skip this cycle.
         _consecutiveProbeFailures = 0;
         return;
     }
 
-    // Log which path failed for diagnostics.
-    if (udpDead) {
-        os_log_error(gLog, "health probe: UDP/DNS timeout");
-    }
-    if (tcpDead) {
-        os_log_error(gLog, "health probe: TCP mixed-listener timeout (saturated?)");
-    }
-    MWEngineLogf(MWLogError, @"NE: health probe failed udp=%d tcp=%d", udpRc, tcpRc);
-
+    // Ingress advancing but heartbeat frozen — data path is stalled.
     _consecutiveProbeFailures++;
-    os_log_error(gLog, "health probe: failure %ld/%ld",
-                 (long)_consecutiveProbeFailures, (long)kMaxProbeFailures);
+    os_log_error(gLog, "health watchdog: heartbeat stalled at %llu while ingress advanced (failure %ld/%ld)",
+                 currentBeat, (long)_consecutiveProbeFailures, (long)kMaxProbeFailures);
+    MWEngineLogf(MWLogError, @"NE: health watchdog heartbeat=%llu ingress=%lld failures=%ld",
+                 currentBeat, currentIngress, (long)_consecutiveProbeFailures);
+    _lastIngressPackets = currentIngress;
 
     if (_consecutiveProbeFailures >= kMaxProbeFailures) {
         _consecutiveProbeFailures = 0;
-        os_log_error(gLog, "health probe: data path dead — invoking recovery");
-        MWEngineLog(MWLogError, @"NE: health probe triggered engine restart");
+        os_log_error(gLog, "health watchdog: data path dead — invoking recovery");
+        MWEngineLog(MWLogError, @"NE: health watchdog triggered engine restart");
         if (self.onHealthCheckFailed) {
             self.onHealthCheckFailed();
         }

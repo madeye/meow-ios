@@ -1124,6 +1124,10 @@ pub extern "C" fn meow_tun_stop_blocking() {
 /// tunnel control queue), never from an engine callback. Callers must
 /// serialize probes.
 ///
+/// **Deprecated**: superseded by the lock-free `meow_tun_heartbeat()` watchdog
+/// in MWTunnelEngine (commit 7080596 era). Retained for manual diagnostics
+/// only — no production call sites remain.
+///
 /// # Safety
 /// `src_ip` and `dns_ip` must be NUL-terminated C strings.
 #[no_mangle]
@@ -1160,6 +1164,10 @@ pub unsafe extern "C" fn meow_tun_health_probe(
 /// user sees "connected but no traffic".
 ///
 /// BLOCKS up to `timeout_ms`. Call from a NON-runtime thread.
+///
+/// **Deprecated**: superseded by the lock-free `meow_tun_heartbeat()` watchdog
+/// in MWTunnelEngine. Retained for manual diagnostics only — no production
+/// call sites remain.
 #[no_mangle]
 pub extern "C" fn meow_tun_tcp_health_probe(timeout_ms: c_int) -> c_int {
     let Some(addr) = engine::mixed_dial_addr() else {
@@ -1177,6 +1185,18 @@ pub extern "C" fn meow_tun_tcp_health_probe(timeout_ms: c_int) -> c_int {
         Ok(Err(_)) => -2,  // connect refused / error
         Err(_) => -2,      // timeout
     }
+}
+
+/// Read the data-path heartbeat counter. Monotonically increasing; bumped on
+/// every successful lwip stack driver or egress packet operation. The ObjC
+/// watchdog reads this via a lock-free atomic load — if the value hasn't
+/// changed between two 30 s samples the data path is wedged (e.g. lwip PCB
+/// corruption holding LWIP_MUTEX). Unlike the old block_on probes, this call
+/// NEVER blocks and NEVER touches the tokio runtime, so it works even when
+/// the runtime is completely dead.
+#[no_mangle]
+pub extern "C" fn meow_tun_heartbeat() -> u64 {
+    tun2socks::heartbeat()
 }
 
 /// Abort every in-flight TCP flow tracked by tun2socks. This is an
