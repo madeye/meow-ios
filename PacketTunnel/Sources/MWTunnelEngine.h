@@ -7,6 +7,11 @@
 
 - (instancetype)initWithPacketFlow:(NEPacketTunnelFlow *)flow;
 
+/// Called on the traffic pump's background queue when consecutive health
+/// probes fail (data path is dead). The provider should dispatch recovery
+/// to the engine control queue.
+@property (nonatomic, copy, nullable) void (^onHealthCheckFailed)(void);
+
 /// Blocking: runs engine + tun2socks start FFI calls. Call on a background queue.
 - (BOOL)startWithError:(NSError **)error;
 

@@ -5,6 +5,7 @@
 #import "MWSharedStore.h"
 #import "MWDarwinBridge.h"
 #import "MWEngineLog.h"
+#import "MWTunnelSettings.h"
 #import "meow_core.h"
 #import <stdatomic.h>
 #import <os/log.h>
@@ -13,7 +14,38 @@
 
 static os_log_t gLog;
 
+// Phys-footprint soft cap: jetsam on the NE extension hits around 50 MiB on
+// recent iOS. When footprint reaches this threshold we nudge the allocator to
+// return free pages to the OS rather than restarting the engine — a restart
+// disrupts active connections and resets in-memory state for marginal gain.
+static const NSInteger kSoftCapFootprintMB    = 35;
+static const NSTimeInterval kReliefCooldownS  = 60.0;
+
+// Proactive-reclaim trigger for a TCP teardown burst. When a batch of flows
+// closes together — network handoff (Wi-Fi↔cellular), reconnect, or the app
+// dropping a page full of connections — their relay buffers (owned by meow's
+// `copy_bidirectional_buf`) free at once. That is the peak-fragmentation
+// moment: lots of just-freed pages the allocator is still holding. Returning
+// them now, rather than waiting up to the soft-cap watchdog, keeps the
+// footprint low while the extension is awake. We trigger off a drop in
+// `tcp_conns` (a clean integer count) rather than malloc's free-heap figure,
+// which includes non-resident reserved address space and reads larger than the
+// physical footprint itself (~21 MB free at a 12 MB footprint), so it can't
+// gate a reclaim. The short cooldown keeps normal open/close churn from
+// thrashing the allocator.
+static const int64_t kTeardownBurstFlows       = 16;
+static const NSTimeInterval kTeardownCooldownS = 5.0;
+
 static const int kLocalDNSPort = 1053;
+
+// Health probe watchdog: periodically injects a synthetic DNS query through
+// the full TUN data path (ingress → lwip → UDP → meow-dns → reply → egress).
+// When consecutive probes time out the data path is dead — the engine process
+// is alive and iOS reports "connected", but no traffic flows. Without this
+// watchdog the user must manually disconnect/reconnect.
+static const NSTimeInterval kHealthProbeIntervalS = 30.0;
+static const NSInteger kMaxProbeFailures          = 2;
+static const int kProbeTimeoutMs                  = 3000;
 
 @implementation MWTunnelEngine {
     NEPacketTunnelFlow *_flow;
@@ -34,6 +66,11 @@ static const int kLocalDNSPort = 1053;
     int64_t _lastDown;
     NSTimeInterval _lastTime;
     int _pumpTick;
+    NSTimeInterval _lastReliefAttempt;  // CFAbsoluteTime; 0 = never
+    int64_t _lastTcpConns;              // prev snapshot's tcp_conns, for teardown-burst detection
+    NSTimeInterval _lastTeardownRelief; // CFAbsoluteTime; 0 = never
+    NSTimeInterval _lastHealthCheckTime; // CFAbsoluteTime of last health probe; 0 = never
+    NSInteger _consecutiveProbeFailures; // consecutive probe timeouts (reset on success)
 }
 
 + (void)initialize {
@@ -346,6 +383,28 @@ static const int kLocalDNSPort = 1053;
     [memline writeToURL:statsURL atomically:NO encoding:NSUTF8StringEncoding error:nil];
 
     _pumpTick++;
+    if (_pumpTick % 10 == 0) {
+        malloc_zone_pressure_relief(NULL, 0);
+    }
+
+    // Proactive reclaim on a TCP teardown burst (see kTeardownBurstFlows). A
+    // sharp drop in live connections means a batch of relay buffers just
+    // freed; return those pages immediately rather than waiting for the next
+    // periodic relief or the soft-cap watchdog. The cooldown bounds this to at
+    // most one extra relief per kTeardownCooldownS so steady churn can't thrash
+    // the allocator.
+    if (_lastTcpConns - tcpConns >= kTeardownBurstFlows &&
+        (now - _lastTeardownRelief) >= kTeardownCooldownS) {
+        os_log_info(gLog,
+                    "teardown burst: tcp_conns %lld→%lld, returning free pages",
+                    _lastTcpConns, tcpConns);
+        malloc_zone_pressure_relief(NULL, 0);
+        _lastTeardownRelief = now;
+    }
+    _lastTcpConns = tcpConns;
+
+    [self maybeRelieveFootprintPressure:footprintMB now:now];
+    [self maybeRunHealthProbe:now];
 
     NSTimeInterval epoch = now + NSTimeIntervalSince1970;
     NSDictionary *snapshot = @{
@@ -369,6 +428,68 @@ static const int kLocalDNSPort = 1053;
         return;
     }
     [MWDarwinBridge post:MWNotificationTraffic];
+}
+
+// MARK: - Soft-cap watchdog
+
+- (void)maybeRelieveFootprintPressure:(NSInteger)footprintMB now:(NSTimeInterval)now {
+    if (footprintMB < kSoftCapFootprintMB) return;
+    if (_lastReliefAttempt > 0 && (now - _lastReliefAttempt) < kReliefCooldownS) {
+        return;
+    }
+    _lastReliefAttempt = now;
+
+    os_log_error(gLog,
+                 "soft-cap: footprint=%ldMB >= %ldMB, calling malloc_zone_pressure_relief",
+                 (long)footprintMB, (long)kSoftCapFootprintMB);
+    malloc_zone_pressure_relief(NULL, 0);
+}
+
+// MARK: - Health probe watchdog
+
+- (void)maybeRunHealthProbe:(NSTimeInterval)now {
+    if (!_started || !_tunStarted || !meow_engine_is_running()) return;
+    if (_lastHealthCheckTime > 0 &&
+        (now - _lastHealthCheckTime) < kHealthProbeIntervalS) {
+        return;
+    }
+    _lastHealthCheckTime = now;
+
+    // BLOCKS up to kProbeTimeoutMs — safe here on the BACKGROUND QoS queue.
+    int rc = meow_tun_health_probe(
+        MWTunnelClientIPv4Address.UTF8String,
+        MWTunnelDNSServerIPv4Address.UTF8String,
+        kProbeTimeoutMs);
+
+    if (rc == 0) {
+        // Data path is live.
+        if (_consecutiveProbeFailures > 0) {
+            os_log_info(gLog, "health probe: recovered after %ld failure(s)",
+                        (long)_consecutiveProbeFailures);
+        }
+        _consecutiveProbeFailures = 0;
+        return;
+    }
+
+    // rc == -1: tun not running (benign race during stop).
+    // rc == -2: probe timeout — data path is dead.
+    // rc == -3: invalid args (should never happen).
+    if (rc != -2) return;
+
+    _consecutiveProbeFailures++;
+    os_log_error(gLog, "health probe: timeout (failure %ld/%ld)",
+                 (long)_consecutiveProbeFailures, (long)kMaxProbeFailures);
+    MWEngineLogf(MWLogError, @"NE: health probe timeout (%ld/%ld)",
+                 (long)_consecutiveProbeFailures, (long)kMaxProbeFailures);
+
+    if (_consecutiveProbeFailures >= kMaxProbeFailures) {
+        _consecutiveProbeFailures = 0;
+        os_log_error(gLog, "health probe: data path dead — invoking recovery");
+        MWEngineLog(MWLogError, @"NE: health probe triggered engine restart");
+        if (self.onHealthCheckFailed) {
+            self.onHealthCheckFailed();
+        }
+    }
 }
 
 // MARK: - Config patching

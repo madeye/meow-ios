@@ -90,6 +90,36 @@ static os_log_t gLog;
             }
             self->_engine = engine;
 
+            // Health watchdog: when consecutive probes detect a dead data path,
+            // restart the engine in-place. If the restart also fails, cancel the
+            // tunnel so iOS on-demand rules reconnect from scratch.
+            __weak __typeof__(self) weakSelf = self;
+            engine.onHealthCheckFailed = ^{
+                __strong __typeof__(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                dispatch_async(strongSelf->_engineControlQueue, ^{
+                    MWTunnelEngine *eng = strongSelf->_engine;
+                    if (!eng || !eng.isEngineRunning) return;
+                    os_log_error(gLog, "health watchdog: data path dead — restarting engine");
+                    MWEngineLog(MWLogError, @"NE: health watchdog triggered engine restart");
+                    NSError *err = nil;
+                    if ([eng restartWithError:&err]) {
+                        [MWDarwinBridge post:MWNotificationReloaded];
+                        [strongSelf writeState:@"connected" profileID:nil errorMessage:nil];
+                        os_log_info(gLog, "health watchdog: engine restart complete");
+                        MWEngineLog(MWLogInfo, @"NE: health watchdog engine restart complete");
+                    } else {
+                        os_log_error(gLog, "health watchdog: restart failed: %{public}@",
+                                     err.localizedDescription);
+                        MWEngineLogf(MWLogError, @"NE: health watchdog restart failed: %@",
+                                     err.localizedDescription);
+                        [strongSelf writeState:@"error" profileID:nil
+                            errorMessage:err.localizedDescription];
+                        [strongSelf cancelTunnelWithError:nil];
+                    }
+                });
+            };
+
             MWIPCListener *listener = [[MWIPCListener alloc]
                 initWithHandler:^(NSDictionary *intent) {
                     [self handleIntent:intent];

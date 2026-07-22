@@ -16,7 +16,7 @@ let package = Package(
         .library(name: "MeowIPC", targets: ["MeowIPC"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.3"),
+        .package(path: "../build/Yams"),
     ],
     targets: [
         .target(
