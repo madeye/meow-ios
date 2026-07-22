@@ -275,6 +275,18 @@ void meow_tun_stop_blocking(void);
 int meow_tun_health_probe(const char *src_ip, const char *dns_ip, int timeout_ms);
 
 /**
+ * Test TCP connectivity to the engine's mixed listener (loopback). Returns
+ * 0 if the TCP handshake completes within `timeout_ms`, -1 if the engine is
+ * not running, -2 if the connect timed out (mixed listener saturated/wedged).
+ *
+ * Complements meow_tun_health_probe (UDP/DNS only). When the mixed listener
+ * is saturated the UDP probe still passes but TCP flows are dead.
+ *
+ * BLOCKS up to `timeout_ms`. Call from a NON-runtime thread.
+ */
+int meow_tun_tcp_health_probe(int timeout_ms);
+
+/**
  * Abort every in-flight TCP flow tracked by tun2socks. This is an
  * emergency diagnostic/teardown hook for dropping stale flows without
  * tearing down the engine or the TUN itself.

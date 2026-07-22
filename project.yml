@@ -245,6 +245,7 @@ schemes:
         MeowIntegrationTests: [test]
     run:
       config: Debug
+      executable: meow-ios
     test:
       config: Debug
       targets:

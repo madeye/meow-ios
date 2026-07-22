@@ -243,7 +243,7 @@
 		3D1746752AC889A678F94A02 /* MeowAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeowAPITests.swift; sourceTree = "<group>"; };
 		40EEE34003CA284E6D9754E0 /* AppModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelContainer.swift; sourceTree = "<group>"; };
 		415A45F45F6FA01D8DA04A95 /* YamlEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YamlEditorView.swift; sourceTree = "<group>"; };
-		459136B958385ACB511D5D14 /* PacketTunnel.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		459136B958385ACB511D5D14 /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		468AB5369E33BCD92920CF52 /* MWPreferences.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWPreferences.m; sourceTree = "<group>"; };
 		47CD1F1E7DD00599AF2A5238 /* clash_minimal.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = clash_minimal.yaml; sourceTree = "<group>"; };
 		48057A73B8C1C158EB155986 /* MWIPCListener.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWIPCListener.h; sourceTree = "<group>"; };
@@ -1597,6 +1597,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				DEVELOPMENT_TEAM = 4YQQ2646PG;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"MeowCore/Frameworks\"",
@@ -1650,6 +1651,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				DEVELOPMENT_TEAM = 4YQQ2646PG;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"MeowCore/Frameworks\"",

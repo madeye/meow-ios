@@ -1148,6 +1148,37 @@ pub unsafe extern "C" fn meow_tun_health_probe(
     rc as c_int
 }
 
+/// Test TCP connectivity to the engine's mixed listener (loopback). Returns
+/// 0 if the TCP handshake completes within `timeout_ms`, -1 if the engine is
+/// not running or the mixed listener address is unknown, -2 if the connect
+/// timed out (mixed listener is saturated or wedged).
+///
+/// This complements `meow_tun_health_probe` which only tests the UDP/DNS
+/// path. When the mixed listener's connection slots are full (e.g. 256
+/// concurrent connections from video streaming + QUIC fallback), new TCP
+/// flows from tun2socks queue forever — the UDP probe still passes but the
+/// user sees "connected but no traffic".
+///
+/// BLOCKS up to `timeout_ms`. Call from a NON-runtime thread.
+#[no_mangle]
+pub extern "C" fn meow_tun_tcp_health_probe(timeout_ms: c_int) -> c_int {
+    let Some(addr) = engine::mixed_dial_addr() else {
+        return -1;
+    };
+    if !engine::is_running() {
+        return -1;
+    }
+    let to = Duration::from_millis(timeout_ms.max(1) as u64);
+    let result = get_engine_runtime().block_on(async {
+        tokio::time::timeout(to, tokio::net::TcpStream::connect(addr)).await
+    });
+    match result {
+        Ok(Ok(_stream)) => 0,
+        Ok(Err(_)) => -2,  // connect refused / error
+        Err(_) => -2,      // timeout
+    }
+}
+
 /// Abort every in-flight TCP flow tracked by tun2socks. This is an
 /// emergency diagnostic/teardown hook for dropping stale flows without
 /// tearing down the engine or the TUN itself.

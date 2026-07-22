@@ -455,14 +455,21 @@ static const int kProbeTimeoutMs                  = 3000;
     }
     _lastHealthCheckTime = now;
 
-    // BLOCKS up to kProbeTimeoutMs — safe here on the BACKGROUND QoS queue.
-    int rc = meow_tun_health_probe(
+    // Probe 1: UDP/DNS data path (ingress → lwip → UDP → meow-dns → reply).
+    int udpRc = meow_tun_health_probe(
         MWTunnelClientIPv4Address.UTF8String,
         MWTunnelDNSServerIPv4Address.UTF8String,
         kProbeTimeoutMs);
 
-    if (rc == 0) {
-        // Data path is live.
+    // Probe 2: TCP path to the mixed listener. Catches the case where the
+    // mixed listener's connection slots are saturated (e.g. 256 concurrent
+    // from video streaming + QUIC fallback) — the UDP probe still passes
+    // but all new TCP flows queue forever.
+    int tcpRc = meow_tun_tcp_health_probe(kProbeTimeoutMs);
+
+    BOOL healthy = (udpRc == 0 && tcpRc == 0);
+
+    if (healthy) {
         if (_consecutiveProbeFailures > 0) {
             os_log_info(gLog, "health probe: recovered after %ld failure(s)",
                         (long)_consecutiveProbeFailures);
@@ -471,15 +478,17 @@ static const int kProbeTimeoutMs                  = 3000;
         return;
     }
 
-    // rc == -1: tun not running (benign race during stop).
-    // rc == -2: probe timeout — data path is dead.
-    // rc == -3: invalid args (should never happen).
-    if (rc != -2) return;
+    // Log which path failed for diagnostics.
+    if (udpRc == -2) {
+        os_log_error(gLog, "health probe: UDP/DNS timeout");
+    }
+    if (tcpRc == -2) {
+        os_log_error(gLog, "health probe: TCP mixed-listener timeout (saturated?)");
+    }
+    MWEngineLogf(MWLogError, @"NE: health probe failed udp=%d tcp=%d", udpRc, tcpRc);
 
     _consecutiveProbeFailures++;
-    os_log_error(gLog, "health probe: timeout (failure %ld/%ld)",
-                 (long)_consecutiveProbeFailures, (long)kMaxProbeFailures);
-    MWEngineLogf(MWLogError, @"NE: health probe timeout (%ld/%ld)",
+    os_log_error(gLog, "health probe: failure %ld/%ld",
                  (long)_consecutiveProbeFailures, (long)kMaxProbeFailures);
 
     if (_consecutiveProbeFailures >= kMaxProbeFailures) {
