@@ -277,10 +277,14 @@ int meow_tun_health_probe(const char *src_ip, const char *dns_ip, int timeout_ms
 /**
  * Test TCP connectivity to the engine's mixed listener (loopback). Returns
  * 0 if the TCP handshake completes within `timeout_ms`, -1 if the engine is
- * not running, -2 if the connect timed out (mixed listener saturated/wedged).
+ * not running or the mixed listener address is unknown, -2 if the connect
+ * timed out (mixed listener is saturated or wedged).
  *
- * Complements meow_tun_health_probe (UDP/DNS only). When the mixed listener
- * is saturated the UDP probe still passes but TCP flows are dead.
+ * This complements `meow_tun_health_probe` which only tests the UDP/DNS
+ * path. When the mixed listener's connection slots are full (e.g. 256
+ * concurrent connections from video streaming + QUIC fallback), new TCP
+ * flows from tun2socks queue forever — the UDP probe still passes but the
+ * user sees "connected but no traffic".
  *
  * BLOCKS up to `timeout_ms`. Call from a NON-runtime thread.
  */

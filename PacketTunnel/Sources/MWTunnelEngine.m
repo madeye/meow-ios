@@ -467,9 +467,16 @@ static const int kProbeTimeoutMs                  = 3000;
     // but all new TCP flows queue forever.
     int tcpRc = meow_tun_tcp_health_probe(kProbeTimeoutMs);
 
-    BOOL healthy = (udpRc == 0 && tcpRc == 0);
+    // -1 means "not running" (benign race during stop/restart) — skip this
+    // cycle entirely without counting it as a failure.
+    if (udpRc == -1 || tcpRc == -1) return;
 
-    if (healthy) {
+    // Only -2 (timeout) indicates a dead data path. Any other non-zero is
+    // unexpected but we treat it conservatively as a failure.
+    BOOL udpDead = (udpRc == -2);
+    BOOL tcpDead = (tcpRc == -2);
+
+    if (!udpDead && !tcpDead) {
         if (_consecutiveProbeFailures > 0) {
             os_log_info(gLog, "health probe: recovered after %ld failure(s)",
                         (long)_consecutiveProbeFailures);
@@ -479,10 +486,10 @@ static const int kProbeTimeoutMs                  = 3000;
     }
 
     // Log which path failed for diagnostics.
-    if (udpRc == -2) {
+    if (udpDead) {
         os_log_error(gLog, "health probe: UDP/DNS timeout");
     }
-    if (tcpRc == -2) {
+    if (tcpDead) {
         os_log_error(gLog, "health probe: TCP mixed-listener timeout (saturated?)");
     }
     MWEngineLogf(MWLogError, @"NE: health probe failed udp=%d tcp=%d", udpRc, tcpRc);
