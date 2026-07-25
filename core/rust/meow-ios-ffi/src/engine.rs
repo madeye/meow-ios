@@ -85,6 +85,20 @@ fn prepare_ios_config(yaml: &str) -> Result<String> {
         for key in ["port", "socks-port", "tproxy-port", "listeners"] {
             m.remove(serde_yaml::Value::String(key.to_string()));
         }
+        // iOS owns the listener concurrency cap. Upstream's default of 256
+        // (DEFAULT_MAX_CONNECTIONS) is sized for desktop/router duty; CN app
+        // bootstraps burst far past it — 2026-07-25: Tencent Video opened
+        // ~200 concurrent TCP in seconds and flapped the listener for 11 s.
+        // 384 absorbs that class of burst; worst case at upstream's ~90 KB
+        // per-conn accounting is ~35 MB on top of baseline, still inside the
+        // Network-Extension jetsam budget. lwip's MEMP_NUM_TCP_PCB is raised
+        // to match so the pcb pool cannot become the smaller bucket (which
+        // would re-arm the tcp_kill_timewait path). Subscriptions cannot
+        // override this value.
+        m.insert(
+            serde_yaml::Value::String("max-connections".to_string()),
+            serde_yaml::Value::Number(384.into()),
+        );
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
 }
@@ -676,6 +690,31 @@ proxies:
         let once = prepare_ios_config(yaml).expect("strip ok");
         let twice = prepare_ios_config(&once).expect("strip ok");
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn strip_injects_ios_owned_max_connections() {
+        // Injected when absent…
+        let out = prepare_ios_config("mode: rule\n").expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(
+            doc.as_mapping()
+                .unwrap()
+                .get(serde_yaml::Value::String("max-connections".into()))
+                .and_then(|v| v.as_u64()),
+            Some(384),
+        );
+        // …and forced when the subscription tries to set its own value.
+        let out = prepare_ios_config("mode: rule\nmax-connections: 64\n").expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(
+            doc.as_mapping()
+                .unwrap()
+                .get(serde_yaml::Value::String("max-connections".into()))
+                .and_then(|v| v.as_u64()),
+            Some(384),
+            "subscription must not override the iOS-owned cap",
+        );
     }
 
     #[test]

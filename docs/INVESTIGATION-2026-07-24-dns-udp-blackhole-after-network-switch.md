@@ -276,3 +276,16 @@ trace.inlong.qq.com 36……)叠加 ~50 UDP 会话,打满监听器 256 slot,
 
 UDP 预算在三家连测下全部表现正确:抖音/B站无感、腾讯视频 UDP 侧被
 驯服、监听器再未因 UDP 饱和。
+
+### 2026-07-25 14:03 闭环:监听器 cap 256→384,实测吞掉腾讯视频突发
+
+改动:engine.rs prepare_ios_config 强制注入 max-connections: 384(订阅
+不可覆盖,上游 meow-rs 零改动);lwip MEMP_NUM_TCP_PCB 256→384 配套。
+
+实测(腾讯视频冷启动+播放):tcp_conns 峰值 258(>256,旧 cap 必 flap),
+saturated 0 次;内存峰值 footprint 31MB / heap 35.4MB, jetsam 余量 ~30%;
+单连接成本实测 (35.4-12)/258 ≈ 90KB,与上游账本一致 → 384 是安全上限,
+512 不可行。播放体感丝滑,之前的 11s 卡死窗口消失。
+
+容量模型终态:TCP 保底 320(384-64 UDP 硬顶),弹性 ~380;UDP 硬顶 64;
+QUIC 走独立开关。三层:UDP 预算防洪峰 / 384 容量吞突发 / 开关管 H3。
