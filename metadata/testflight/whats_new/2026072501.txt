@@ -1,0 +1,4 @@
+Build 2026072501 (1.4.0)
+
+• Fixes the "All" routing mode. It was sending every connection to whichever node happened to sort first — often a placeholder entry from your provider that routes nowhere, or plain Direct — so switching to All either killed traffic outright or quietly proxied nothing. It now routes through the proxy group your rules already use, and follows whatever node you select in it.
+• Please test: switch the routing mode to All while connected and confirm traffic still flows through your selected node, then switch back to Rule. Note that the mode still resets to Rule when the tunnel reconnects — that's a known gap we're fixing next.
