@@ -676,10 +676,149 @@ fn random_port() -> u16 {
 // Config patching (replaces the Swift/Yams EffectiveConfigWriter)
 // ---------------------------------------------------------------------------
 
+/// The `name:` of every entry in a top-level sequence-of-mappings key
+/// (`proxies`, `proxy-groups`). Entries without a string `name` are skipped —
+/// meow-config drops them too.
+fn declared_names(root: &serde_yaml::Mapping, key: &str) -> Vec<String> {
+    root.get(key)
+        .and_then(serde_yaml::Value::as_sequence)
+        .map(|seq| {
+            seq.iter()
+                .filter_map(|item| item.as_mapping()?.get("name")?.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Policy names meow resolves internally. They are never *declared* in the
+/// config, so a rule may target them but they can never be the proxy this
+/// config is built around.
+const BUILTIN_POLICIES: [&str; 7] = [
+    "DIRECT",
+    "REJECT",
+    "REJECT-DROP",
+    "PASS",
+    "COMPATIBLE",
+    "GLOBAL",
+    "BLOCK",
+];
+
+/// The outbound this config is effectively built around: the target of the
+/// final `MATCH,` rule when it names a proxy or group declared here, else the
+/// first proxy-group, else the first proxy. Built-in policies never qualify —
+/// they carry no traffic of their own. `None` for a config with nothing but
+/// built-ins to route to.
+fn primary_proxy_target(root: &serde_yaml::Mapping) -> Option<String> {
+    let groups = declared_names(root, "proxy-groups");
+    let proxies = declared_names(root, "proxies");
+    let usable = |name: &str| {
+        !BUILTIN_POLICIES.contains(&name.to_ascii_uppercase().as_str())
+            && (groups.iter().any(|n| n == name) || proxies.iter().any(|n| n == name))
+    };
+
+    let match_target = root
+        .get("rules")
+        .and_then(serde_yaml::Value::as_sequence)
+        .and_then(|rules| {
+            rules.iter().rev().find_map(|rule| {
+                let rule = rule.as_str()?;
+                let mut parts = rule.split(',').map(str::trim);
+                if !parts.next()?.eq_ignore_ascii_case("MATCH") {
+                    return None;
+                }
+                parts.next().map(str::to_string)
+            })
+        });
+    if let Some(target) = match_target {
+        if usable(&target) {
+            return Some(target);
+        }
+    }
+    groups
+        .iter()
+        .find(|n| usable(n))
+        .or_else(|| proxies.iter().find(|n| usable(n)))
+        .cloned()
+}
+
+/// Declare the `GLOBAL` selector explicitly, ordered so its *first* member is
+/// the outbound the user actually routes through.
+///
+/// `global` mode dispatches every connection to whatever `GLOBAL` resolves to
+/// (`Tunnel::resolve_proxy`), and a `select` group with no stored pick uses its
+/// first member. meow-config auto-creates `GLOBAL` for mihomo compatibility
+/// when the config omits it, but builds the member list by sorting *all*
+/// registry keys — built-ins included — so the head of that list is whatever
+/// happens to sort first. On a typical subscription that is either `DIRECT`
+/// (global mode silently degrades to no proxying at all) or a bookkeeping
+/// pseudo-node the provider prepends to advertise quota — `137.15 G | 500.00 G`,
+/// `Expire Date：2026/09/10` — whose "server" answers nothing, so global mode
+/// black-holes every connection.
+///
+/// The app hides `GLOBAL` from the group picker, so there is no UI to correct
+/// the pick afterwards; it has to be right at parse time. Pointing it at
+/// `primary` — normally the top-level selector the rules already send unmatched
+/// traffic to — makes global mode mean "everything through the proxy I picked",
+/// and it keeps tracking that group's own selection because the member is the
+/// group, not a frozen snapshot of its current node.
+///
+/// The remaining members preserve mihomo's "GLOBAL lists everything" contract
+/// for external frontends. A config that declares its own `GLOBAL` is left
+/// alone.
+fn inject_global_selector(root: &mut serde_yaml::Mapping, primary: &str) {
+    let groups = declared_names(root, "proxy-groups");
+    let proxies = declared_names(root, "proxies");
+    // Either kind of declaration occupies the same registry slot meow-config
+    // checks before auto-creating, so either one means the config owns the name.
+    if groups.iter().chain(&proxies).any(|n| n == "GLOBAL") {
+        return;
+    }
+
+    let mut members = vec![primary.to_string()];
+    members.extend(groups.into_iter().chain(proxies).filter(|n| n != primary));
+    members.push("DIRECT".into());
+    members.push("REJECT".into());
+
+    let mut group = serde_yaml::Mapping::new();
+    group.insert(
+        serde_yaml::Value::String("name".into()),
+        serde_yaml::Value::String("GLOBAL".into()),
+    );
+    group.insert(
+        serde_yaml::Value::String("type".into()),
+        serde_yaml::Value::String("select".into()),
+    );
+    group.insert(
+        serde_yaml::Value::String("proxies".into()),
+        serde_yaml::Value::Sequence(
+            members
+                .into_iter()
+                .map(serde_yaml::Value::String)
+                .collect::<Vec<_>>(),
+        ),
+    );
+
+    let key = serde_yaml::Value::String("proxy-groups".into());
+    match root
+        .get_mut(&key)
+        .and_then(serde_yaml::Value::as_sequence_mut)
+    {
+        Some(seq) => seq.push(serde_yaml::Value::Mapping(group)),
+        None => {
+            root.insert(
+                key,
+                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(group)]),
+            );
+        }
+    }
+}
+
 /// Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
-/// socket; injects a hardened `external-controller` (random loopback port)
-/// + random bearer `secret`; injects `geox-url` when absent.
+/// socket; declares a `GLOBAL` selector headed by the config's primary
+/// outbound (so `mode: global` proxies rather than black-holes); injects a
+/// hardened `external-controller` (random loopback port) + random bearer
+/// `secret`; injects `geox-url` when absent.
 ///
 /// Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
 /// NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
@@ -722,6 +861,12 @@ pub unsafe extern "C" fn meow_patch_config(
     // the REST API on loopback is authenticated rather than open.
     for key in ["dns", "sniffer", "subscriptions"] {
         root.remove(serde_yaml::Value::String(key.to_string()));
+    }
+
+    // Before any group is appended, so the "first declared group" fallback
+    // still describes the user's own config.
+    if let Some(primary) = primary_proxy_target(root) {
+        inject_global_selector(root, &primary);
     }
 
     let port = if mixed_port > 0 {
@@ -1365,5 +1510,195 @@ proxies: []
         assert_ne!(secret, "user-provided");
         assert_eq!(secret.len(), 64);
         assert!(secret.bytes().all(|b| b.is_ascii_hexdigit()));
+    }
+
+    /// Read the injected `GLOBAL` group's member list out of a patched config.
+    fn global_members(patched: &str) -> Vec<String> {
+        let doc: serde_yaml::Value = serde_yaml::from_str(patched).expect("patched yaml");
+        doc.as_mapping()
+            .and_then(|root| root.get("proxy-groups"))
+            .and_then(serde_yaml::Value::as_sequence)
+            .expect("proxy-groups")
+            .iter()
+            .find_map(|g| {
+                let g = g.as_mapping()?;
+                if g.get("name")?.as_str()? != "GLOBAL" {
+                    return None;
+                }
+                Some(
+                    g.get("proxies")?
+                        .as_sequence()?
+                        .iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .expect("injected GLOBAL group")
+    }
+
+    /// The bug this guards: meow-config's auto-created `GLOBAL` sorts every
+    /// registry key, so the head of the list — the member a `select` group
+    /// dials when nothing is stored — lands on whatever sorts first. Here
+    /// that is the provider's quota pseudo-node, which routes nowhere, so
+    /// `mode: global` black-holed every connection.
+    #[test]
+    fn patch_config_heads_global_selector_with_the_match_target() {
+        let patched = patch_config(
+            r#"
+proxies:
+  - {name: "137.15 G | 500.00 G", type: ss, server: 1.1.1.1, port: 1, cipher: aes-128-gcm, password: p}
+  - {name: "HK 01", type: ss, server: 1.1.1.2, port: 1, cipher: aes-128-gcm, password: p}
+proxy-groups:
+  - {name: "AutoSelect", type: url-test, proxies: ["HK 01"]}
+  - {name: "Proxies", type: select, proxies: ["AutoSelect", "HK 01"]}
+rules:
+  - DOMAIN,example.com,DIRECT
+  - MATCH,Proxies
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let members = global_members(&patched);
+        assert_eq!(
+            members.first().map(String::as_str),
+            Some("Proxies"),
+            "global mode must dispatch through the config's MATCH target, not \
+             the alphabetically-first registry key",
+        );
+        // mihomo's "GLOBAL lists everything" contract, minus the duplicate head.
+        assert!(members.contains(&"AutoSelect".to_string()));
+        assert!(members.contains(&"HK 01".to_string()));
+        assert!(members.contains(&"137.15 G | 500.00 G".to_string()));
+        assert!(members.contains(&"DIRECT".to_string()));
+        assert_eq!(
+            members.iter().filter(|n| *n == "Proxies").count(),
+            1,
+            "head must not be duplicated further down the list",
+        );
+    }
+
+    /// No `MATCH` target to follow (or one naming a built-in): fall back to the
+    /// first declared group, then the first proxy — never to `DIRECT`, which
+    /// would make global mode a no-op.
+    #[test]
+    fn patch_config_global_selector_falls_back_to_first_declared_outbound() {
+        let group_first = patch_config(
+            r#"
+proxies:
+  - {name: "HK 01", type: ss, server: 1.1.1.2, port: 1, cipher: aes-128-gcm, password: p}
+proxy-groups:
+  - {name: "Proxies", type: select, proxies: ["HK 01"]}
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        assert_eq!(
+            global_members(&group_first).first().map(String::as_str),
+            Some("Proxies"),
+        );
+
+        let proxy_only = patch_config(
+            r#"
+proxies:
+  - {name: "HK 01", type: ss, server: 1.1.1.2, port: 1, cipher: aes-128-gcm, password: p}
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        assert_eq!(
+            global_members(&proxy_only).first().map(String::as_str),
+            Some("HK 01"),
+        );
+    }
+
+    /// A config that declares its own `GLOBAL` owns it — and one with nothing
+    /// but built-ins to route to gets no injected group at all (meow-config's
+    /// auto-created selector is then the only sensible answer).
+    #[test]
+    fn patch_config_leaves_user_global_and_outbound_less_configs_alone() {
+        let user_global = patch_config(
+            r#"
+proxies:
+  - {name: "HK 01", type: ss, server: 1.1.1.2, port: 1, cipher: aes-128-gcm, password: p}
+proxy-groups:
+  - {name: "GLOBAL", type: select, proxies: ["DIRECT", "HK 01"]}
+rules:
+  - MATCH,HK 01
+"#,
+            7890,
+            0,
+            1053,
+        );
+        assert_eq!(
+            global_members(&user_global),
+            vec!["DIRECT".to_string(), "HK 01".to_string()],
+        );
+
+        let no_outbound = patch_config(
+            r#"
+proxies: []
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let doc: serde_yaml::Value = serde_yaml::from_str(&no_outbound).expect("patched yaml");
+        assert!(doc
+            .as_mapping()
+            .and_then(|root| root.get("proxy-groups"))
+            .is_none());
+    }
+
+    /// End-to-end over the real parser: what `Tunnel::resolve_proxy` reaches
+    /// for in `global` mode is `proxies["GLOBAL"]`, and an unselected
+    /// `SelectorGroup` dials its first member. Assert against the built
+    /// registry rather than the YAML so a change in meow-config's group
+    /// construction can't quietly re-break global mode.
+    #[test]
+    fn global_selector_resolves_to_the_primary_group_in_the_built_registry() {
+        let patched = patch_config(
+            r#"
+proxies:
+  - {name: "137.15 G | 500.00 G", type: ss, server: 1.1.1.1, port: 1, cipher: aes-128-gcm, password: p}
+  - {name: "HK 01", type: ss, server: 1.1.1.2, port: 1, cipher: aes-128-gcm, password: p}
+proxy-groups:
+  - {name: "Proxies", type: select, proxies: ["HK 01"]}
+rules:
+  - MATCH,Proxies
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let rt = tokio::runtime::Runtime::new().expect("tokio rt");
+        let cfg = rt
+            .block_on(meow_config::load_config_from_str(&patched))
+            .expect("patched config loads");
+        let global = cfg.proxies.get("GLOBAL").expect("GLOBAL in registry");
+        // `current()` names the immediate member, not the recursive leaf —
+        // the group itself is the point: it keeps tracking whichever node the
+        // user picks in `Proxies`, which a frozen leaf reference would not.
+        assert_eq!(
+            global.current().as_deref(),
+            Some("Proxies"),
+            "global mode must dispatch through the config's own top selector",
+        );
+        assert_eq!(
+            cfg.proxies
+                .get("Proxies")
+                .and_then(|g| g.current())
+                .as_deref(),
+            Some("HK 01"),
+            "…which in turn resolves to its selected node",
+        );
     }
 }

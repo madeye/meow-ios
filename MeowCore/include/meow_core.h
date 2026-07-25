@@ -182,8 +182,10 @@ int meow_proxy_select(const char *group, const char *name);
 /**
  * Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
  * pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
- * socket; injects a hardened `external-controller` (random loopback port)
- * + random bearer `secret`; injects `geox-url` when absent.
+ * socket; declares a `GLOBAL` selector headed by the config's primary
+ * outbound (so `mode: global` proxies rather than black-holes); injects a
+ * hardened `external-controller` (random loopback port) + random bearer
+ * `secret`; injects `geox-url` when absent.
  *
  * Writes NUL-terminated UTF-8 into `out`/`out_cap`. Returns bytes needed (excl
  * NUL) on success; callers allocate `ret + 1` and retry if `ret >= out_cap`.
