@@ -186,11 +186,17 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
 }
 
 // "Block HTTP/3 (QUIC)" toggle. Default OFF — current behaviour is preserved
-// unless Swift flips it. When ON the tunnel cuts HTTP/3 off at two layers that
+// unless Swift flips it. When ON the tunnel cuts UDP off at two layers that
 // reinforce each other:
 //
-//   1. UDP egress to dst:443 is dropped (QUIC's transport), killing any QUIC
-//      handshake that still attempts a connection.
+//   1. Outbound UDP/443 is answered locally with an ICMP port-unreachable
+//      (never forwarded to the mixed listener), so the app learns immediately
+//      that QUIC is unavailable and falls back to TCP instead of
+//      retransmitting into a black hole. The upstream is TCP-only, so
+//      proxy-bound QUIC could never work; failing fast just skips the
+//      multi-second QUIC handshake timeout. Scope is strictly HTTP/3 — other
+//      UDP ports are unaffected (they are admission-controlled by the UDP
+//      session budget instead, see `UDP_SESSION_BUDGET`).
 //   2. SVCB (64) / HTTPS (65) DNS queries are answered NOERROR-empty by the
 //      intercept itself instead of being forwarded to meow-dns, so the client
 //      never learns the HTTP/3 `alpn`/SvcParams and falls back to A / fake-IPv4
@@ -201,10 +207,42 @@ pub fn udp_first_reply_deadline_ms() -> u64 {
 // harmless.
 static BLOCK_HTTP3: AtomicBool = AtomicBool::new(false);
 
-/// Throttle slot for the QUIC/HTTP3 UDP-drop log (dst:443 dropped while the
-/// block-HTTP3 toggle is on). Throttled via `warn_capped` to once per second so
-/// a QUIC-heavy app doesn't flood the on-device log.
-static BLOCK_HTTP3_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+/// Live UDP session cap. Every forwarded UDP flow costs one TCP control
+/// connection at the mixed listener, held for the session's idle TTL (60 s),
+/// so an unbounded UDP flood (the 2026-07-24 iQiyi PCDN storm) would saturate
+/// the listener's 256-connection cap and starve unrelated TCP. Capping live
+/// UDP sessions well below that turns a flood into a self-inflicted UDP-only
+/// outage: excess flows are rejected with ICMP port-unreachable (same
+/// fail-fast as the QUIC block) while TCP stays immune. 64 leaves the flood
+/// 192 listener slots of headroom it can never touch.
+const UDP_SESSION_BUDGET: usize = 64;
+
+/// Admission decision for a non-DNS outbound UDP datagram, made before any
+/// session is created. Pure function of (toggle, port, live session count)
+/// so the policy is unit-testable without a listener.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UdpAdmission {
+    Allow,
+    /// block-HTTP3 toggle on + UDP/443: QUIC can never work upstream, fail fast.
+    RejectQuic,
+    /// Too many live UDP sessions: flood containment, fail fast.
+    RejectBudget,
+}
+
+fn udp_flow_admission(block_http3_on: bool, dst_port: u16, live_sessions: usize) -> UdpAdmission {
+    if block_http3_on && dst_port == 443 {
+        return UdpAdmission::RejectQuic;
+    }
+    if live_sessions >= UDP_SESSION_BUDGET {
+        return UdpAdmission::RejectBudget;
+    }
+    UdpAdmission::Allow
+}
+
+/// Throttle slot for the UDP-reject log (QUIC-block or budget-exceeded).
+/// Throttled via `warn_capped` to once per second so a UDP-heavy app doesn't
+/// flood the on-device log.
+static UDP_REJECT_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Enable or disable the "block HTTP/3 (QUIC)" behaviour. Default OFF. Returns
 /// true unconditionally.
@@ -1039,6 +1077,11 @@ async fn run_tun2socks(
     let tcp_idle_sweeper_handle = tokio::spawn(run_tcp_idle_sweeper());
 
     let udp_reply_tx_accept = udp_reply_tx.clone();
+    // Raw-frame egress channel for locally-generated ICMP port-unreachable
+    // replies (block-HTTP3 UDP rejection). These can't go through
+    // `udp_reply_tx` — that channel serializes UDP payloads via the lwip UDP
+    // socket, and ICMP is a different protocol on the wire.
+    let icmp_tx_accept = egress_tx.clone();
     let udp_sessions_accept = udp_sessions.clone();
     let udp_sem_accept = udp_sem.clone();
     let dns_sem_accept = dns_sem.clone();
@@ -1068,9 +1111,10 @@ async fn run_tun2socks(
                 }
             };
             let reply_tx = udp_reply_tx_accept.clone();
+            let icmp_tx = icmp_tx_accept.clone();
             let sessions = udp_sessions_accept.clone();
             engine_handle_for_udp.spawn(async move {
-                dispatch_udp(payload, src, dst, reply_tx, sessions, permit).await;
+                dispatch_udp(payload, src, dst, reply_tx, icmp_tx, sessions, permit).await;
             });
         }
     });
@@ -1450,11 +1494,34 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for IdleTracking<T> {
 // UDP dispatch through DNS listener / SOCKS5 UDP ASSOCIATE.
 // ---------------------------------------------------------------------------
 
+/// Reject one outbound UDP datagram with an ICMP port-unreachable and a
+/// throttled log line. Fail fast so the client falls back to TCP (QUIC) or
+/// backs off (flood) instead of retransmitting into a black hole. `try_send`
+/// is lossy on purpose: a full egress queue means Swift-side backpressure,
+/// and UDP dispatch must never block on TUN writes — the client retries and
+/// gets answered then. A pair that builds no packet (mixed v4/v6, shouldn't
+/// happen) degrades to the old silent drop.
+fn reject_udp_with_icmp(
+    src: SocketAddr,
+    dst: SocketAddr,
+    payload: &[u8],
+    icmp_tx: &mpsc::Sender<Vec<u8>>,
+    reason: &'static str,
+) {
+    warn_capped(&UDP_REJECT_LOG_LAST_MS, reason);
+    let pkt = build_icmpv4_port_unreachable(src, dst, payload.len())
+        .or_else(|| build_icmpv6_port_unreachable(src, dst, payload));
+    if let Some(pkt) = pkt {
+        let _ = icmp_tx.try_send(pkt);
+    }
+}
+
 async fn dispatch_udp(
     payload: Vec<u8>,
     src: SocketAddr,
     dst: SocketAddr,
     reply_tx: mpsc::Sender<UdpMsg>,
+    icmp_tx: mpsc::Sender<Vec<u8>>,
     udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>,
     permit: OwnedSemaphorePermit,
 ) {
@@ -1464,10 +1531,16 @@ async fn dispatch_udp(
         return;
     }
 
-    if block_http3() && dst.port() == 443 {
-        warn_capped(
-            &BLOCK_HTTP3_DROP_LOG_LAST_MS,
-            "tun2socks: block-HTTP3 on, dropping outbound UDP/443 (QUIC)",
+    // QUIC fail-fast comes before the session lookup: with the toggle on, no
+    // UDP/443 session should exist at all — and if one predates the toggle
+    // flip, killing it is the point of the flip.
+    if udp_flow_admission(block_http3(), dst.port(), 0) == UdpAdmission::RejectQuic {
+        reject_udp_with_icmp(
+            src,
+            dst,
+            &payload,
+            &icmp_tx,
+            "tun2socks: block-HTTP3 on, rejecting outbound UDP/443 with ICMP port-unreachable",
         );
         return;
     }
@@ -1480,6 +1553,21 @@ async fn dispatch_udp(
             udp_sessions.lock().remove(&key);
         }
         drop(permit);
+        return;
+    }
+
+    // The budget gates only NEW session creation — live sessions were admitted
+    // earlier and keep their slot until their own idle TTL/failure eviction.
+    if udp_flow_admission(block_http3(), dst.port(), udp_sessions.lock().len())
+        == UdpAdmission::RejectBudget
+    {
+        reject_udp_with_icmp(
+            src,
+            dst,
+            &payload,
+            &icmp_tx,
+            "tun2socks: UDP session budget exhausted, rejecting new flow with ICMP port-unreachable",
+        );
         return;
     }
 
@@ -1996,6 +2084,174 @@ fn ipv4_header_checksum(header: &[u8]) -> u16 {
     !(sum as u16)
 }
 
+/// Build an ICMPv4 Destination Unreachable / Port Unreachable (type 3,
+/// code 3) packet answering the UDP datagram `src -> dst` whose UDP payload
+/// was `payload_len` bytes. The packet is addressed FROM the original
+/// destination (that is what a real end host's reply looks like) and quotes
+/// a reconstructed original IPv4 header + 8-byte UDP header, which satisfies
+/// RFC 792's "IP header + 64 bits" quote requirement — the quoted UDP
+/// checksum is 0 and the quoted payload is omitted, both fine for the
+/// fail-fast purpose (clients key the error off the quoted ports).
+///
+/// The result is a raw IPv4 frame meant for the TUN egress channel, NOT a
+/// UDP payload for `udp_write`. Returns `None` for non-v4 pairs; callers fall
+/// back to [`build_icmpv6_port_unreachable`].
+fn build_icmpv4_port_unreachable(
+    src: SocketAddr,
+    dst: SocketAddr,
+    payload_len: usize,
+) -> Option<Vec<u8>> {
+    let (src_ip, dst_ip) = match (src, dst) {
+        (SocketAddr::V4(s), SocketAddr::V4(d)) => (*s.ip(), *d.ip()),
+        _ => return None,
+    };
+    let orig_total_len = 20u16
+        .checked_add(8)
+        .and_then(|n| n.checked_add(u16::try_from(payload_len).ok()?))?;
+    let udp_len = 8u16.checked_add(u16::try_from(payload_len).ok()?)?;
+
+    let total_len: u16 = 20 + 8 + 28; // outer IPv4 + ICMP header + quote
+    let mut pkt = Vec::with_capacity(usize::from(total_len));
+
+    // Outer IPv4 header: proto=ICMP, from original dst, to original src.
+    pkt.push(0x45); // version=4, IHL=5
+    pkt.push(0x00);
+    pkt.extend_from_slice(&total_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]); // identification
+    pkt.extend_from_slice(&[0x40, 0x00]); // DF, offset 0
+    pkt.push(64); // TTL
+    pkt.push(1); // protocol = ICMP
+    pkt.extend_from_slice(&[0, 0]); // checksum placeholder
+    pkt.extend_from_slice(&dst_ip.octets());
+    pkt.extend_from_slice(&src_ip.octets());
+    let cksum = ipv4_header_checksum(&pkt[0..20]);
+    pkt[10..12].copy_from_slice(&cksum.to_be_bytes());
+
+    // ICMP header: type 3 (destination unreachable), code 3 (port
+    // unreachable), 4 bytes unused.
+    let icmp_start = pkt.len();
+    pkt.extend_from_slice(&[3, 3]);
+    pkt.extend_from_slice(&[0, 0]); // checksum placeholder
+    pkt.extend_from_slice(&[0, 0, 0, 0]);
+
+    // Quoted original IPv4 header (proto=UDP, src→dst as sent).
+    let quote_start = pkt.len();
+    pkt.push(0x45);
+    pkt.push(0x00);
+    pkt.extend_from_slice(&orig_total_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]);
+    pkt.extend_from_slice(&[0x40, 0x00]);
+    pkt.push(64);
+    pkt.push(17); // protocol = UDP
+    pkt.extend_from_slice(&[0, 0]); // checksum placeholder
+    pkt.extend_from_slice(&src_ip.octets());
+    pkt.extend_from_slice(&dst_ip.octets());
+    let q_cksum = ipv4_header_checksum(&pkt[quote_start..quote_start + 20]);
+    pkt[quote_start + 10..quote_start + 12].copy_from_slice(&q_cksum.to_be_bytes());
+
+    // Quoted UDP header: ports + length, checksum 0.
+    pkt.extend_from_slice(&src.port().to_be_bytes());
+    pkt.extend_from_slice(&dst.port().to_be_bytes());
+    pkt.extend_from_slice(&udp_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]);
+
+    // ICMP checksum over the whole ICMP message (36 bytes, even).
+    let icmp_cksum = ipv4_header_checksum(&pkt[icmp_start..]);
+    pkt[icmp_start + 2..icmp_start + 4].copy_from_slice(&icmp_cksum.to_be_bytes());
+    Some(pkt)
+}
+
+/// One's-complement checksum over an arbitrary byte slice (odd length is
+/// zero-padded, per RFC 1071). `ipv4_header_checksum` predates it and stays
+/// for the fixed 20-byte case; this one exists for the ICMPv6 pseudo-header
+/// computation. A computed 0x0000 is transmitted as 0xFFFF ("negative zero")
+/// so the on-wire value is never mistaken for "checksum not present".
+fn ones_complement_checksum(data: &[u8]) -> u16 {
+    let mut sum: u32 = 0;
+    let mut chunks = data.chunks_exact(2);
+    for c in &mut chunks {
+        sum += u32::from(u16::from_be_bytes([c[0], c[1]]));
+    }
+    if let [b] = chunks.remainder() {
+        sum += u32::from(*b) << 8;
+    }
+    while sum > 0xFFFF {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    let out = !(sum as u16);
+    if out == 0 {
+        0xFFFF
+    } else {
+        out
+    }
+}
+
+/// Build an ICMPv6 Destination Unreachable / Port Unreachable (type 1,
+/// code 4, RFC 4443 §3.1) packet answering the UDP datagram `src -> dst`
+/// with UDP payload `payload`. Mirror of [`build_icmpv4_port_unreachable`]
+/// for v6 pairs: addressed FROM the original destination, quoting the
+/// original IPv6 header + UDP header + as much payload as fits inside the
+/// 1280-byte IPv6 minimum MTU. The ICMPv6 checksum covers the pseudo-header
+/// (src, dst, length, next-header) plus the ICMP message (RFC 4443 §2.3).
+/// Returns `None` for non-v6 pairs.
+fn build_icmpv6_port_unreachable(
+    src: SocketAddr,
+    dst: SocketAddr,
+    payload: &[u8],
+) -> Option<Vec<u8>> {
+    let (src_ip, dst_ip) = match (src, dst) {
+        (SocketAddr::V6(s), SocketAddr::V6(d)) => (*s.ip(), *d.ip()),
+        _ => return None,
+    };
+    let udp_len = 8u16.checked_add(u16::try_from(payload.len()).ok()?)?;
+
+    // Quote budget: 1280 (min MTU) − 40 outer header − 8 ICMP − 40 quoted
+    // header − 8 quoted UDP header.
+    let payload_quote = payload.len().min(1280 - 40 - 8 - 40 - 8);
+    let icmp_len = (8 + 40 + 8 + payload_quote) as u32;
+    let total = 40 + icmp_len as usize;
+
+    let mut pkt = Vec::with_capacity(total);
+    // Outer IPv6 header: version 6, next header 58 (ICMPv6), hop limit 64,
+    // from original dst to original src.
+    pkt.extend_from_slice(&[0x60, 0, 0, 0]);
+    pkt.extend_from_slice(&(icmp_len as u16).to_be_bytes());
+    pkt.push(58);
+    pkt.push(64);
+    pkt.extend_from_slice(&dst_ip.octets());
+    pkt.extend_from_slice(&src_ip.octets());
+
+    // ICMPv6 header: type 1 (destination unreachable), code 4 (port
+    // unreachable), 4 bytes unused.
+    let icmp_start = pkt.len();
+    pkt.extend_from_slice(&[1, 4]);
+    pkt.extend_from_slice(&[0, 0]); // checksum placeholder
+    pkt.extend_from_slice(&[0, 0, 0, 0]);
+
+    // Quoted original IPv6 header (next header = UDP) + UDP header + payload.
+    pkt.extend_from_slice(&[0x60, 0, 0, 0]);
+    pkt.extend_from_slice(&udp_len.to_be_bytes());
+    pkt.push(17);
+    pkt.push(64);
+    pkt.extend_from_slice(&src_ip.octets());
+    pkt.extend_from_slice(&dst_ip.octets());
+    pkt.extend_from_slice(&src.port().to_be_bytes());
+    pkt.extend_from_slice(&dst.port().to_be_bytes());
+    pkt.extend_from_slice(&udp_len.to_be_bytes());
+    pkt.extend_from_slice(&[0, 0]); // quoted UDP checksum 0
+    pkt.extend_from_slice(&payload[..payload_quote]);
+
+    // Pseudo-header (outer src, dst, ICMP length, next header) + ICMP message.
+    let mut sum_input = Vec::with_capacity(40 + (total - icmp_start));
+    sum_input.extend_from_slice(&pkt[8..40]);
+    sum_input.extend_from_slice(&icmp_len.to_be_bytes());
+    sum_input.extend_from_slice(&[0, 0, 0, 58]);
+    sum_input.extend_from_slice(&pkt[icmp_start..]);
+    let cksum = ones_complement_checksum(&sum_input);
+    pkt[icmp_start + 2..icmp_start + 4].copy_from_slice(&cksum.to_be_bytes());
+    Some(pkt)
+}
+
 /// Parsed view of an IPv4 + UDP packet. Returned by [`parse_udp_packet`]; the
 /// `payload` borrow ties back to the caller's `ip_data` slice. Named fields
 /// avoid the positional-tuple footgun that hid the `from_ne_bytes` bug in
@@ -2152,6 +2408,128 @@ mod tests {
     }
 
     #[test]
+    fn icmpv4_port_unreachable_is_well_formed() {
+        let src = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 19, 0, 1)), 53799);
+        let dst = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(110, 81, 247, 106)), 28093);
+        let pkt = build_icmpv4_port_unreachable(src, dst, 24).expect("v4 pair builds");
+
+        // 20 outer IPv4 + 8 ICMP + 28 quote.
+        assert_eq!(pkt.len(), 56);
+        assert_eq!(pkt[0] >> 4, 4, "outer is IPv4");
+        assert_eq!(pkt[9], 1, "outer proto is ICMP");
+        // Addressed FROM the original destination TO the original sender.
+        assert_eq!(&pkt[12..16], &[110, 81, 247, 106]);
+        assert_eq!(&pkt[16..20], &[172, 19, 0, 1]);
+        // A valid header checksum makes the one's-complement sum (including
+        // the checksum field itself) come out 0.
+        assert_eq!(ipv4_header_checksum(&pkt[0..20]), 0);
+
+        // ICMP: type 3 (dest unreachable), code 3 (port unreachable).
+        assert_eq!(pkt[20], 3);
+        assert_eq!(pkt[21], 3);
+        assert_eq!(ipv4_header_checksum(&pkt[20..]), 0, "ICMP checksum valid");
+
+        // Quoted original IPv4 header: proto UDP, src→dst as originally sent.
+        assert_eq!(pkt[28] >> 4, 4);
+        assert_eq!(pkt[37], 17);
+        assert_eq!(&pkt[40..44], &[172, 19, 0, 1]);
+        assert_eq!(&pkt[44..48], &[110, 81, 247, 106]);
+        assert_eq!(ipv4_header_checksum(&pkt[28..48]), 0);
+        // Quoted original total length = 20 + 8 + payload.
+        assert_eq!(u16::from_be_bytes([pkt[30], pkt[31]]), 20 + 8 + 24);
+
+        // Quoted UDP header: original ports + length.
+        assert_eq!(u16::from_be_bytes([pkt[48], pkt[49]]), 53799);
+        assert_eq!(u16::from_be_bytes([pkt[50], pkt[51]]), 28093);
+        assert_eq!(u16::from_be_bytes([pkt[52], pkt[53]]), 8 + 24);
+    }
+
+    #[test]
+    fn icmpv4_port_unreachable_rejects_ipv6_pairs() {
+        let v6: std::net::Ipv6Addr = "fd6d:6577::1".parse().unwrap();
+        let src = SocketAddr::new(IpAddr::V6(v6), 1234);
+        let dst = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 443);
+        assert!(build_icmpv4_port_unreachable(src, dst, 0).is_none());
+    }
+
+    /// Recompute the ICMPv6 pseudo-header checksum over a built packet
+    /// (checksum field included): a valid packet sums to 0. Uses a raw
+    /// one's-complement without the 0→0xFFFF negative-zero mapping that
+    /// `ones_complement_checksum` applies for on-wire encoding.
+    fn icmpv6_checksum_residue(pkt: &[u8], icmp_len: u32) -> u16 {
+        let mut sum_input = Vec::new();
+        sum_input.extend_from_slice(&pkt[8..40]);
+        sum_input.extend_from_slice(&icmp_len.to_be_bytes());
+        sum_input.extend_from_slice(&[0, 0, 0, 58]);
+        sum_input.extend_from_slice(&pkt[40..]);
+        let mut sum: u32 = 0;
+        for c in sum_input.chunks_exact(2) {
+            sum += u32::from(u16::from_be_bytes([c[0], c[1]]));
+        }
+        while sum > 0xFFFF {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+        !(sum as u16)
+    }
+
+    #[test]
+    fn icmpv6_port_unreachable_is_well_formed() {
+        let src_ip: std::net::Ipv6Addr = "fd6d:6577::1".parse().unwrap();
+        let dst_ip: std::net::Ipv6Addr = "2606:4700:4700::1111".parse().unwrap();
+        let src = SocketAddr::new(IpAddr::V6(src_ip), 54321);
+        let dst = SocketAddr::new(IpAddr::V6(dst_ip), 443);
+        let payload = vec![0xABu8; 100];
+        let pkt = build_icmpv6_port_unreachable(src, dst, &payload).expect("v6 pair builds");
+
+        // 40 outer + 8 ICMP + 40 quoted + 8 UDP + 100 payload.
+        let icmp_len = 8 + 40 + 8 + 100;
+        assert_eq!(pkt.len(), 40 + icmp_len);
+        assert_eq!(pkt[0] >> 4, 6, "outer is IPv6");
+        assert_eq!(u16::from_be_bytes([pkt[4], pkt[5]]) as usize, icmp_len);
+        assert_eq!(pkt[6], 58, "next header is ICMPv6");
+        // Addressed FROM the original destination TO the original sender.
+        assert_eq!(&pkt[8..24], &dst_ip.octets());
+        assert_eq!(&pkt[24..40], &src_ip.octets());
+        // Checksum valid → residue 0.
+        assert_eq!(icmpv6_checksum_residue(&pkt, icmp_len as u32), 0);
+
+        // ICMPv6: type 1 (dest unreachable), code 4 (port unreachable).
+        assert_eq!(pkt[40], 1);
+        assert_eq!(pkt[41], 4);
+
+        // Quoted original IPv6 header: next header UDP, src→dst as sent.
+        assert_eq!(pkt[48] >> 4, 6);
+        assert_eq!(pkt[54], 17);
+        assert_eq!(&pkt[56..72], &src_ip.octets());
+        assert_eq!(&pkt[72..88], &dst_ip.octets());
+        // Quoted UDP header + payload.
+        assert_eq!(u16::from_be_bytes([pkt[88], pkt[89]]), 54321);
+        assert_eq!(u16::from_be_bytes([pkt[90], pkt[91]]), 443);
+        assert_eq!(u16::from_be_bytes([pkt[92], pkt[93]]), 8 + 100);
+        assert_eq!(&pkt[96..], &payload[..]);
+    }
+
+    #[test]
+    fn icmpv6_port_unreachable_truncates_quote_to_min_mtu() {
+        let src_ip: std::net::Ipv6Addr = "fd6d:6577::1".parse().unwrap();
+        let dst_ip: std::net::Ipv6Addr = "2606:4700:4700::1111".parse().unwrap();
+        let src = SocketAddr::new(IpAddr::V6(src_ip), 1234);
+        let dst = SocketAddr::new(IpAddr::V6(dst_ip), 443);
+        let payload = vec![0xCDu8; 2000];
+        let pkt = build_icmpv6_port_unreachable(src, dst, &payload).expect("v6 pair builds");
+        assert_eq!(pkt.len(), 1280, "quote capped at IPv6 minimum MTU");
+        let icmp_len = 1280 - 40;
+        assert_eq!(icmpv6_checksum_residue(&pkt, icmp_len as u32), 0);
+    }
+
+    #[test]
+    fn icmpv6_port_unreachable_rejects_ipv4_pairs() {
+        let src = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 19, 0, 1)), 1234);
+        let dst = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 443);
+        assert!(build_icmpv6_port_unreachable(src, dst, &[]).is_none());
+    }
+
+    #[test]
     fn parse_qtype_handles_compression_pointer_in_qname() {
         // Synthetic: qname is a 2-byte compression pointer (0xC0 0x0C →
         // points back to offset 12, the original qname). Some clients
@@ -2170,6 +2548,36 @@ mod tests {
     fn parse_qtype_rejects_short_packet() {
         assert_eq!(parse_dns_qtype(&[]), None);
         assert_eq!(parse_dns_qtype(&[0; 11]), None);
+    }
+
+    #[test]
+    fn udp_admission_rejects_only_443_when_block_on() {
+        // Toggle on: UDP/443 (QUIC) is fail-fast rejected; every other port
+        // (NTP 123, STUN, PCDN, ...) is admitted while budget remains.
+        assert_eq!(udp_flow_admission(true, 443, 0), UdpAdmission::RejectQuic);
+        assert_eq!(udp_flow_admission(true, 443, UDP_SESSION_BUDGET - 1), UdpAdmission::RejectQuic);
+        assert_eq!(udp_flow_admission(true, 123, 0), UdpAdmission::Allow);
+        assert_eq!(udp_flow_admission(true, 3478, 0), UdpAdmission::Allow);
+        assert_eq!(udp_flow_admission(true, 1443, 0), UdpAdmission::Allow);
+    }
+
+    #[test]
+    fn udp_admission_allows_everything_when_block_off() {
+        assert_eq!(udp_flow_admission(false, 443, 0), UdpAdmission::Allow);
+        assert_eq!(udp_flow_admission(false, 123, 0), UdpAdmission::Allow);
+        assert_eq!(udp_flow_admission(false, 3478, 0), UdpAdmission::Allow);
+    }
+
+    #[test]
+    fn udp_admission_budget_caps_new_sessions_regardless_of_toggle() {
+        // Budget full: new flows rejected even for non-QUIC ports and with
+        // the toggle off — flood containment is independent of the QUIC block.
+        assert_eq!(udp_flow_admission(false, 3478, UDP_SESSION_BUDGET), UdpAdmission::RejectBudget);
+        assert_eq!(udp_flow_admission(true, 123, UDP_SESSION_BUDGET), UdpAdmission::RejectBudget);
+        // …but QUIC rejection takes precedence (more specific reason).
+        assert_eq!(udp_flow_admission(true, 443, UDP_SESSION_BUDGET), UdpAdmission::RejectQuic);
+        // One below the cap: admitted.
+        assert_eq!(udp_flow_admission(false, 3478, UDP_SESSION_BUDGET - 1), UdpAdmission::Allow);
     }
 
     #[test]
