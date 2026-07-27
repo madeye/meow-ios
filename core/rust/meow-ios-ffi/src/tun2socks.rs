@@ -328,6 +328,12 @@ static STACK_INGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
+// Throttle slot for loopback-socket failures on the DNS dispatch path. A
+// fresh ephemeral UDP socket is bound per query; bind/send errors there were
+// silently swallowed (`.ok()?`), which made fd exhaustion present as exactly
+// the "DNS dead, TCP alive, no logs" phenotype. Throttled via warn_capped.
+static DNS_LOOPBACK_ERR_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
 // Throttle slot for the UDP reply-writer-backpressure drop log. When the
 // shared `udp_reply_tx` channel is momentarily full the reply reader drops the
 // datagram (UDP is lossy) and keeps the session alive; without a log this
@@ -1753,8 +1759,23 @@ async fn query_dns_listener(query: &[u8], dns_addr: SocketAddr) -> Option<Vec<u8
             SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], 0))
         }
     };
-    let socket = UdpSocket::bind(bind_addr).await.ok()?;
-    socket.send_to(query, dns_addr).await.ok()?;
+    let socket = match UdpSocket::bind(bind_addr).await {
+        Ok(s) => s,
+        Err(e) => {
+            warn_capped(
+                &DNS_LOOPBACK_ERR_LOG_LAST_MS,
+                &format!("tun2socks: DNS loopback socket bind failed (fd exhaustion?): {e}"),
+            );
+            return None;
+        }
+    };
+    if let Err(e) = socket.send_to(query, dns_addr).await {
+        warn_capped(
+            &DNS_LOOPBACK_ERR_LOG_LAST_MS,
+            &format!("tun2socks: DNS loopback send to {dns_addr} failed: {e}"),
+        );
+        return None;
+    }
     let mut buf = [0u8; 4096];
     let recv = tokio::time::timeout(DNS_TASK_TIMEOUT, socket.recv_from(&mut buf)).await;
     let (n, _from) = recv.ok()?.ok()?;

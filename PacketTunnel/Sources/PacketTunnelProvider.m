@@ -76,6 +76,21 @@ static os_log_t gLog;
             __strong __typeof__(weak) self = weak;
             if (!self) { completionHandler(nil); return; }
 
+            // Duplicate-start guard: a second startTunnel on a live process must
+            // not allocate a second engine generation. Without this, the second
+            // generation's meow_tun_start fails ("already running") and its
+            // error path calls meow_engine_stop() — tearing down the engine the
+            // FIRST generation is still serving. The old tun keeps running with
+            // no engine behind it: every DNS query and new TCP flow is silently
+            // dropped while the VPN icon stays on.
+            if (self->_engine) {
+                os_log_info(gLog, "startTunnel: engine already running — duplicate start ignored");
+                MWEngineLog(MWLogInfo, @"NE: duplicate startTunnel ignored — engine already running");
+                [self writeState:@"connected" profileID:profileID errorMessage:nil];
+                completionHandler(nil);
+                return;
+            }
+
             MWTunnelEngine *engine = [[MWTunnelEngine alloc] initWithPacketFlow:self.packetFlow];
             NSError *startErr = nil;
             if (![engine startWithError:&startErr]) {

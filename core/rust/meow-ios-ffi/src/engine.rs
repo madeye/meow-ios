@@ -319,10 +319,31 @@ pub fn start(config_path: &str) -> Result<()> {
     let mixed_dial_addr = cfg.listeners.mixed_port.map(loopback_addr);
     let dns_dial_addr = cfg.dns.listen_addr.map(|addr| loopback_addr(addr.port()));
 
+    // Resolve every fallible listener input BEFORE spawning anything, so an
+    // error `?`-return can't leak an already-spawned listener task (a leaked
+    // DNS task would keep port 1053 bound and fail the next start()).
+    let named_listener_addrs: Vec<SocketAddr> = cfg
+        .listeners
+        .named
+        .iter()
+        .map(|nl| {
+            bind_socket_addr(&nl.listen, nl.port).with_context(|| format!("listener '{}'", nl.name))
+        })
+        .collect::<Result<_>>()?;
+
     if let Some(listen_addr) = cfg.dns.listen_addr {
+        // Bind eagerly and propagate failure: `dns_dial_addr` above is only a
+        // promise that tun2socks can dial the DNS listener, and before this
+        // split a bind failure inside the spawned `run()` was log-only — the
+        // engine reported healthy while every DNS query timed out into an
+        // unbound loopback port. A DNS-less engine is not a working engine;
+        // fail start() instead.
         let dns_server = DnsServer::new(resolver.clone(), listen_addr);
+        let bound = crate::get_engine_runtime()
+            .block_on(dns_server.bind())
+            .with_context(|| format!("binding DNS listener on {listen_addr}"))?;
         listener_tasks.push(crate::get_engine_runtime().spawn(async move {
-            if let Err(e) = dns_server.run().await {
+            if let Err(e) = bound.run().await {
                 error!("DNS server error: {}", e);
             }
         }));
@@ -330,9 +351,7 @@ pub fn start(config_path: &str) -> Result<()> {
 
     let sniffer_runtime = Arc::new(SnifferRuntime::new(cfg.sniffer.clone()));
     let auth = cfg.auth.clone();
-    for nl in &cfg.listeners.named {
-        let addr = bind_socket_addr(&nl.listen, nl.port)
-            .with_context(|| format!("listener '{}'", nl.name))?;
+    for (nl, addr) in cfg.listeners.named.iter().zip(named_listener_addrs) {
         match nl.listener_type {
             meow_config::ListenerType::Mixed
             | meow_config::ListenerType::Http
