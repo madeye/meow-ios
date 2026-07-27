@@ -1,4 +1,5 @@
 #import "MWTunnelEngine.h"
+#import "MWTunnelSettings.h"
 #import "MWAppGroup.h"
 #import "MWPreferences.h"
 #import "MWPacketWriter.h"
@@ -250,6 +251,21 @@ static const int kLocalDNSPort                 = 1053;
     meow_engine_stop();
 
     [self releaseWriterContext];
+}
+
+// MARK: - Data-path health
+
+- (BOOL)isDataPathHealthyWithTimeoutMs:(int32_t)timeoutMs {
+    // Probe addresses must match NEPacketTunnelNetworkSettings: the forged
+    // query is src=<tun address>:53535 → dst=<advertised DNS server>:53, the
+    // exact shape of a real mDNSResponder query arriving on the TUN. In
+    // fake-IP mode the answer is synthesised locally, so a healthy verdict
+    // never depends on upstream reachability — safe right after a wake while
+    // the physical interface is still reassociating.
+    int rc = meow_tun_health_probe(MWTunnelClientIPv4Address.UTF8String,
+                                   MWTunnelDNSServerIPv4Address.UTF8String,
+                                   timeoutMs);
+    return rc == 0;
 }
 
 // MARK: - Engine state

@@ -144,13 +144,51 @@ static os_log_t gLog;
 }
 
 - (void)wake {
-    // No restart, no probe: the engine runs uninterrupted across sleep/wake.
-    // In-place engine restarts (wake-health, path-change, address-family) were
-    // removed — a restart was a guaranteed multi-second DNS blackout, while
-    // everything the engine dials is per-flow/per-query and self-heals on the
-    // current network.
-    os_log_info(gLog, "wake: tun remained active");
-    MWEngineLog(MWLogInfo, @"NE: wake — tun remained active");
+    // Probe-gated recovery, not a blind restart. Blind wake restarts were a
+    // guaranteed multi-second DNS blackout and were removed in 0cee30f; but
+    // their removal left the known in-process wedge class (lwIP data-path
+    // freeze across background sleep/wake: process alive, VPN icon on, only
+    // packets stop) with NO recovery at all in Release builds — the
+    // "DNS stops working after hours in background" phenotype. The probe is
+    // an end-to-end synthetic DNS query through the real packet pipeline; a
+    // healthy path returns in milliseconds and nothing is restarted. Only a
+    // twice-confirmed wedged path pays the restart blackout, which is strictly
+    // better than staying dead until the user toggles the VPN.
+    os_log_info(gLog, "wake: probing data path");
+    dispatch_async(_engineControlQueue, ^{
+        MWTunnelEngine *engine = self->_engine;
+        if (!engine || !engine.tunStarted) {
+            os_log_info(gLog, "wake: engine not running — nothing to probe");
+            return;
+        }
+        if ([engine isDataPathHealthyWithTimeoutMs:2000]) {
+            MWEngineLog(MWLogInfo, @"NE: wake — data path healthy");
+            return;
+        }
+        // Confirm before restarting: a post-wake ingress replay burst can
+        // drop probe frames (ingest is drop-on-full), so one failed probe is
+        // not yet evidence of a wedge.
+        if ([engine isDataPathHealthyWithTimeoutMs:2000]) {
+            MWEngineLog(MWLogInfo, @"NE: wake — data path healthy on second probe");
+            return;
+        }
+        os_log_error(gLog, "wake: data path wedged — in-place engine restart");
+        MWEngineLog(MWLogError, @"NE: wake — data path wedged; in-place engine restart");
+        NSError *err = nil;
+        if ([engine restartWithError:&err]) {
+            // New startedAt generation: the app replays persisted proxy
+            // selections off this edge, same as the reload-intent restart.
+            [self writeState:@"connected" profileID:nil errorMessage:nil];
+            MWEngineLog(MWLogInfo, @"NE: wake-health restart complete");
+        } else {
+            os_log_error(gLog, "wake-health restart failed: %{public}@",
+                         err.localizedDescription);
+            MWEngineLogf(MWLogError, @"NE: wake-health restart failed: %@ — cancelling tunnel",
+                         err.localizedDescription);
+            [self writeState:@"error" profileID:nil errorMessage:err.localizedDescription];
+            [self cancelTunnelWithError:nil];
+        }
+    });
 }
 
 // MARK: - App messages
