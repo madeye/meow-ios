@@ -813,7 +813,9 @@ fn inject_global_selector(root: &mut serde_yaml::Mapping, primary: &str) {
     }
 }
 
-/// Patch a Clash YAML config for iOS: strips `dns` and `subscriptions`;
+/// Patch a Clash YAML config for iOS: strips `subscriptions`; keeps the
+/// user's `dns` block but pins the fake-ip keys the tunnel requires on top
+/// (injecting default nameservers only when the config declares none);
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
 /// socket; declares a `GLOBAL` selector headed by the config's primary
 /// outbound (so `mode: global` proxies rather than black-holes); injects a
@@ -854,12 +856,12 @@ pub unsafe extern "C" fn meow_patch_config(
         return -1;
     };
 
-    // Strip `dns` and `sniffer` because iOS pins both blocks below: persistent
-    // fake-IP mapping plus TLS SNI inspection on the mixed listener. Strip
-    // `subscriptions` as well (handled app-side). `secret` is intentionally NOT
-    // stripped here — we overwrite it below with a per-install random token so
-    // the REST API on loopback is authenticated rather than open.
-    for key in ["dns", "sniffer", "subscriptions"] {
+    // Strip `sniffer` because iOS pins TLS SNI inspection on the mixed
+    // listener below. Strip `subscriptions` as well (handled app-side).
+    // `secret` is intentionally NOT stripped here — we overwrite it below with
+    // a per-install random token so the REST API on loopback is authenticated
+    // rather than open. `dns` is merged, not stripped — see below.
+    for key in ["sniffer", "subscriptions"] {
         root.remove(serde_yaml::Value::String(key.to_string()));
     }
 
@@ -893,7 +895,15 @@ pub unsafe extern "C" fn meow_patch_config(
         serde_yaml::Value::String(bind_addr.into()),
     );
 
-    let mut dns = serde_yaml::Mapping::new();
+    // Start from the user's own `dns` block so their resolver choices
+    // (nameserver, fallback, fake-ip-filter, …) survive, then pin the keys the
+    // tunnel requires on top: the packet tunnel routes 28.0.0.0/8 into the tun
+    // and reverse-maps fake IPs back to hostnames, so `enhanced-mode`, the
+    // fake-ip range, and the listen socket are not user-configurable.
+    let mut dns = match root.remove(serde_yaml::Value::String("dns".into())) {
+        Some(serde_yaml::Value::Mapping(user_dns)) => user_dns,
+        _ => serde_yaml::Mapping::new(),
+    };
     for (k, v) in [
         ("enable", serde_yaml::Value::Bool(true)),
         (
@@ -909,13 +919,20 @@ pub unsafe extern "C" fn meow_patch_config(
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
     }
-    dns.insert(
-        serde_yaml::Value::String("nameserver".into()),
-        serde_yaml::Value::Sequence(vec![
-            serde_yaml::Value::String("119.29.29.29".into()),
-            serde_yaml::Value::String("223.5.5.5".into()),
-        ]),
-    );
+    let needs_default_nameserver = match dns.get("nameserver") {
+        Some(serde_yaml::Value::Sequence(list)) => list.is_empty(),
+        Some(serde_yaml::Value::Null) | None => true,
+        Some(_) => false,
+    };
+    if needs_default_nameserver {
+        dns.insert(
+            serde_yaml::Value::String("nameserver".into()),
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("119.29.29.29".into()),
+                serde_yaml::Value::String("223.5.5.5".into()),
+            ]),
+        );
+    }
     root.insert(
         serde_yaml::Value::String("dns".into()),
         serde_yaml::Value::Mapping(dns),
@@ -1427,6 +1444,93 @@ rules:
             sniff.get("HTTP").is_none(),
             "user HTTP sniffer was replaced"
         );
+    }
+
+    #[test]
+    fn patch_config_respects_user_dns_but_pins_fake_ip() {
+        let patched = patch_config(
+            r#"
+dns:
+  enable: false
+  enhanced-mode: redir-host
+  listen: 0.0.0.0:53
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - 1.1.1.1
+    - https://dns.google/dns-query
+  fallback:
+    - 8.8.8.8
+  fake-ip-filter:
+    - '*.lan'
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+        let dns = doc
+            .as_mapping()
+            .and_then(|root| root.get("dns"))
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("dns mapping");
+
+        // The tunnel-critical keys override whatever the user wrote.
+        assert_eq!(
+            dns.get("enable").and_then(serde_yaml::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            dns.get("enhanced-mode").and_then(serde_yaml::Value::as_str),
+            Some("fake-ip")
+        );
+        assert_eq!(
+            dns.get("fake-ip-range").and_then(serde_yaml::Value::as_str),
+            Some("28.0.0.0/8")
+        );
+        assert_eq!(
+            dns.get("listen").and_then(serde_yaml::Value::as_str),
+            Some("127.0.0.1:1053")
+        );
+
+        // The user's resolver choices survive the patch.
+        let nameservers: Vec<&str> = dns
+            .get("nameserver")
+            .and_then(serde_yaml::Value::as_sequence)
+            .expect("user nameservers kept")
+            .iter()
+            .filter_map(serde_yaml::Value::as_str)
+            .collect();
+        assert_eq!(nameservers, vec!["1.1.1.1", "https://dns.google/dns-query"]);
+        assert!(dns.get("fallback").is_some(), "user fallback kept");
+        assert!(
+            dns.get("fake-ip-filter").is_some(),
+            "user fake-ip-filter kept"
+        );
+    }
+
+    #[test]
+    fn patch_config_injects_default_nameservers_when_absent() {
+        for yaml in [
+            "rules:\n  - MATCH,DIRECT\n",
+            "dns:\n  nameserver: []\nrules:\n  - MATCH,DIRECT\n",
+            "dns:\n  nameserver:\nrules:\n  - MATCH,DIRECT\n",
+        ] {
+            let patched = patch_config(yaml, 7890, 0, 1053);
+            let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+            let nameservers: Vec<&str> = doc
+                .as_mapping()
+                .and_then(|root| root.get("dns"))
+                .and_then(serde_yaml::Value::as_mapping)
+                .and_then(|dns| dns.get("nameserver"))
+                .and_then(serde_yaml::Value::as_sequence)
+                .expect("default nameservers injected")
+                .iter()
+                .filter_map(serde_yaml::Value::as_str)
+                .collect();
+            assert_eq!(nameservers, vec!["119.29.29.29", "223.5.5.5"], "{yaml}");
+        }
     }
 
     #[test]
