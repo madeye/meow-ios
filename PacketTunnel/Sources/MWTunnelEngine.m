@@ -346,9 +346,6 @@ static const int kLocalDNSPort = 1053;
     [memline writeToURL:statsURL atomically:NO encoding:NSUTF8StringEncoding error:nil];
 
     _pumpTick++;
-    if (_pumpTick % 10 == 0) {
-        malloc_zone_pressure_relief(NULL, 0);
-    }
 
     NSTimeInterval epoch = now + NSTimeIntervalSince1970;
     NSDictionary *snapshot = @{
