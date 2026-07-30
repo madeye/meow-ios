@@ -815,7 +815,7 @@ fn inject_global_selector(root: &mut serde_yaml::Mapping, primary: &str) {
 
 /// Patch a Clash YAML config for iOS: strips `subscriptions`; keeps the
 /// user's `dns` block but pins the fake-ip keys the tunnel requires on top
-/// (injecting default nameservers only when the config declares none);
+/// (user nameservers stay first, the built-in defaults are always appended);
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
 /// socket; declares a `GLOBAL` selector headed by the config's primary
 /// outbound (so `mode: global` proxies rather than black-holes); injects a
@@ -919,20 +919,23 @@ pub unsafe extern "C" fn meow_patch_config(
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
     }
-    let needs_default_nameserver = match dns.get("nameserver") {
-        Some(serde_yaml::Value::Sequence(list)) => list.is_empty(),
-        Some(serde_yaml::Value::Null) | None => true,
-        Some(_) => false,
+    // User-supplied nameservers stay first; the built-in defaults are always
+    // appended (deduped) so the tunnel keeps a known-good plain-UDP resolver
+    // even when the user's entries are unreachable or DoH-only.
+    let mut nameservers = match dns.get("nameserver") {
+        Some(serde_yaml::Value::Sequence(list)) => list.clone(),
+        _ => Vec::new(),
     };
-    if needs_default_nameserver {
-        dns.insert(
-            serde_yaml::Value::String("nameserver".into()),
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("119.29.29.29".into()),
-                serde_yaml::Value::String("223.5.5.5".into()),
-            ]),
-        );
+    for default in ["119.29.29.29", "223.5.5.5"] {
+        let entry = serde_yaml::Value::String(default.into());
+        if !nameservers.contains(&entry) {
+            nameservers.push(entry);
+        }
     }
+    dns.insert(
+        serde_yaml::Value::String("nameserver".into()),
+        serde_yaml::Value::Sequence(nameservers),
+    );
     root.insert(
         serde_yaml::Value::String("dns".into()),
         serde_yaml::Value::Mapping(dns),
@@ -1494,7 +1497,8 @@ rules:
             Some("127.0.0.1:1053")
         );
 
-        // The user's resolver choices survive the patch.
+        // The user's resolver choices survive the patch, ahead of the
+        // always-appended built-in defaults.
         let nameservers: Vec<&str> = dns
             .get("nameserver")
             .and_then(serde_yaml::Value::as_sequence)
@@ -1502,7 +1506,15 @@ rules:
             .iter()
             .filter_map(serde_yaml::Value::as_str)
             .collect();
-        assert_eq!(nameservers, vec!["1.1.1.1", "https://dns.google/dns-query"]);
+        assert_eq!(
+            nameservers,
+            vec![
+                "1.1.1.1",
+                "https://dns.google/dns-query",
+                "119.29.29.29",
+                "223.5.5.5"
+            ]
+        );
         assert!(dns.get("fallback").is_some(), "user fallback kept");
         assert!(
             dns.get("fake-ip-filter").is_some(),
@@ -1511,26 +1523,36 @@ rules:
     }
 
     #[test]
-    fn patch_config_injects_default_nameservers_when_absent() {
+    fn patch_config_always_appends_default_nameservers() {
+        fn nameservers(yaml: &str) -> Vec<String> {
+            let patched = patch_config(yaml, 7890, 0, 1053);
+            let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+            doc.as_mapping()
+                .and_then(|root| root.get("dns"))
+                .and_then(serde_yaml::Value::as_mapping)
+                .and_then(|dns| dns.get("nameserver"))
+                .and_then(serde_yaml::Value::as_sequence)
+                .expect("nameserver list present")
+                .iter()
+                .filter_map(serde_yaml::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        }
+
+        // Absent, null, or empty user lists get exactly the defaults.
         for yaml in [
             "rules:\n  - MATCH,DIRECT\n",
             "dns:\n  nameserver: []\nrules:\n  - MATCH,DIRECT\n",
             "dns:\n  nameserver:\nrules:\n  - MATCH,DIRECT\n",
         ] {
-            let patched = patch_config(yaml, 7890, 0, 1053);
-            let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
-            let nameservers: Vec<&str> = doc
-                .as_mapping()
-                .and_then(|root| root.get("dns"))
-                .and_then(serde_yaml::Value::as_mapping)
-                .and_then(|dns| dns.get("nameserver"))
-                .and_then(serde_yaml::Value::as_sequence)
-                .expect("default nameservers injected")
-                .iter()
-                .filter_map(serde_yaml::Value::as_str)
-                .collect();
-            assert_eq!(nameservers, vec!["119.29.29.29", "223.5.5.5"], "{yaml}");
+            assert_eq!(nameservers(yaml), ["119.29.29.29", "223.5.5.5"], "{yaml}");
         }
+
+        // A default already listed by the user is not duplicated.
+        assert_eq!(
+            nameservers("dns:\n  nameserver:\n    - 223.5.5.5\nrules:\n  - MATCH,DIRECT\n"),
+            ["223.5.5.5", "119.29.29.29"]
+        );
     }
 
     #[test]
