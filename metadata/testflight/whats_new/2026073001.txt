@@ -1,0 +1,4 @@
+Build 2026073001 (1.4.0)
+
+• Your DNS settings now work. The dns: section of your config used to be ignored entirely — the app replaced it with a hard-coded resolver setup. Now your nameserver, fallback, fake-ip-filter, and nameserver-policy entries are respected; the app only pins the few keys the tunnel needs (fake-ip mode and its address range). The built-in resolvers (119.29.29.29 / 223.5.5.5) stay in the list as a fallback after your own entries.
+• Please test: if your config has a dns: section, reconnect and confirm names resolve through your chosen servers; if it doesn't, just confirm browsing still works as before.
