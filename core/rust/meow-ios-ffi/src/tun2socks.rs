@@ -857,6 +857,13 @@ async fn run_tun2socks(
     let (mut stack, mut tcp_listener, udp_socket) =
         lwip::NetStack::with_buffer_size(1024, 256).map_err(|e| io::Error::other(e.to_string()))?;
 
+    // Flips once the single-owner lwip core task has finished its
+    // deterministic teardown (every pcb closed, hooks cleared). Awaited at
+    // the end of this generation so the next `start()`'s
+    // wait-for-predecessor covers the core task too — lwIP's pcb lists are
+    // process globals, and two live cores would corrupt them.
+    let mut lwip_core_done = stack.core_done();
+
     let (udp_write, mut udp_read) = udp_socket.split();
 
     let (udp_reply_tx, mut udp_reply_rx) = mpsc::channel::<UdpMsg>(256);
@@ -1073,26 +1080,32 @@ async fn run_tun2socks(
         }
     }
 
-    // Await cancellation of lwIP-owning tasks before this outer generation
-    // finishes. Dropping JoinHandles after `abort()` would detach those tasks,
-    // letting the next `start()` build a fresh NetStack while old NetStack,
-    // TcpListener, UdpSocket, or TcpStream drops are still mutating lwIP globals
-    // on another runtime worker.
+    // Await cancellation of our forwarding tasks before this outer generation
+    // finishes. Handle drops no longer touch lwIP state (the single-owner
+    // core owns every C call), but joining after `abort()` still matters:
+    // detached tasks would keep pumping channels — and holding lwip handles —
+    // while the next generation spins up.
     abort_and_join("tcp accept", tcp_accept_handle).await;
 
     close_all_tcp_flows();
     tcp_flow_tasks.close();
     tcp_flow_tasks.wait().await;
 
-    // UdpSocket::drop in the pinned lwip fork does not take LWIP_MUTEX, so keep
-    // the socket alive until both possible concurrent users have stopped: the
-    // UDP writer's send_to path and the stack driver's input/callback path.
     abort_and_join("udp writer", udp_writer_handle).await;
     abort_and_join("stack driver", stack_handle).await;
     abort_and_join("udp accept", udp_accept_handle).await;
     abort_and_join("egress", egress_handle).await;
     abort_and_join("tcp idle sweeper", tcp_idle_sweeper_handle).await;
     drop(udp_reply_tx);
+
+    // Every lwip handle (stack, listener, udp halves, streams) is dropped by
+    // now, which triggers the core task's teardown of every pcb. Wait for it
+    // to finish so two cores never overlap on the process-global lwIP state;
+    // a wedged core surfaces via `start()`'s "still waiting for previous
+    // instance teardown" logging rather than as silent corruption.
+    if lwip_core_done.wait_for(|done| *done).await.is_err() {
+        logging::bridge_log("tun2socks: lwip core exited without done signal");
+    }
 
     logging::bridge_log("tun2socks: exiting");
     Ok(())
