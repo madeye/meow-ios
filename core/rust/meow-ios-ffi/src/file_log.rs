@@ -140,6 +140,16 @@ where
         .with_target(true)
         .with_level(true)
         .with_writer(NbMakeWriter(nb))
-        .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
+        // Release tee stays at INFO: the DEBUG volume (per-packet ingress
+        // lines, 1 Hz memstats, per-connection chatter) wrote >4.3 GB/day on
+        // device and tripped the iOS disk-writes resource budget
+        // (diskwrites_resource reports, 2026-07-28/29). INFO keeps match
+        // decisions + warnings + errors — enough for field post-mortems.
+        // Debug builds keep DEBUG for on-device diagnosis.
+        .with_filter(if cfg!(debug_assertions) {
+            tracing_subscriber::filter::LevelFilter::DEBUG
+        } else {
+            tracing_subscriber::filter::LevelFilter::INFO
+        });
     Some(layer)
 }

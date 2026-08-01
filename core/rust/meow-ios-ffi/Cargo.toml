@@ -140,7 +140,19 @@ panic = "abort"
 # Consumer contract: one live stack generation per process; run_tun2socks
 # awaits NetStack::core_done() at teardown to enforce it.
 #
-# Upstream to https://github.com/ssrlive/lwip and drop the patch if they
-# take it.
+# Fork rev b4f2b949 (ligdeve/lwip, branch fix/tcp-pcb-notify-and-pool) sits
+# directly on top of madeye's single-owner rev bd627695 and adds two C-side
+# hardening patches the Rust-layer redesign does not cover:
+#   1. fire the err callback on all three silent pcb free paths
+#      (tcp_input_delayed_close w/ TF_RXCLOSED, slowtmr TIME-WAIT reap,
+#      tcp_abandon TIME-WAIT branch via tcp_kill_timewait) — under the
+#      single-owner core these no longer cause double-frees, but a silently
+#      reaped pcb leaves the owning handle believing the stream is alive;
+#      the err event is what lets it die (see
+#      docs/INVESTIGATION-2026-07-23-lwip-pcb-double-free-wedge.md);
+#   2. raise iOS MEMP_NUM_TCP_PCB 256 -> 384 to match the mixed-listener
+#      max-connections cap injected in engine.rs prepare_ios_config.
+# Upstream both to https://github.com/madeye/lwip and drop the fork once
+# they land.
 [patch.crates-io]
-lwip = { git = "https://github.com/madeye/lwip", rev = "bd62769574bc828b6c76cd62777d7490a140249d" }
+lwip = { git = "https://github.com/ligdeve/lwip", rev = "b4f2b949ac3863e4e818b7f589a2cd09b4cb3359" }

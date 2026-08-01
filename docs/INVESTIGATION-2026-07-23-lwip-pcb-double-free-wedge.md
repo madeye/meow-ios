@@ -212,3 +212,15 @@ tcp_free/tcp_alloc + pcb + caller",ring 里的 caller 可 atos 定位到
 至此已修三条静默路径:delayed_close(ERR_CLSD)、slowtmr TW 收割、
 tcp_abandon TW 分支。lwip 内所有释放 pcb 的代码路径现已全部覆盖
 err 通知。若再崩溃,大概率是第四条未知路径,magic 会继续当场抓获。
+
+### 2026-07-29 观察期结论:修复成立(4.5 天零崩溃)
+
+07-25 07:54(TW 修复前最后一次崩溃)后至 07-29，零 PacketTunnel
+crash ips。meow_magic 未再触发——三条路径补全后无第四条漏网。
+收尾时可将 lwip-diag 的三处修复以 lwip-upstream 分支
+fix/tcp-pcb-silent-free-notify(73fa8c44)上游化,诊断仪器退役。
+
+**新发现(非崩溃):** 两份 diskwrites_resource 报告(07-28/29)——
+诊断期重度文件日志导致隧道日写入 >4.3GB,超过 iOS 49.71KB/s/天
+预算。收尾必办:release 版关闭或大幅削减隧道文件日志,否则系统
+会因磁盘写入超标持续记录(且有闪存磨损隐患)。

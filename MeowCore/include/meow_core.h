@@ -269,8 +269,9 @@ void meow_tun_stop_blocking(void);
  * tunnel control queue), never from an engine callback. Callers must
  * serialize probes.
  *
- * Deprecated: superseded by the lock-free meow_tun_heartbeat() watchdog.
- * Retained for manual diagnostics only — no production call sites remain.
+ * **Deprecated**: superseded by the lock-free `meow_tun_heartbeat()` watchdog
+ * in MWTunnelEngine (commit 7080596 era). Retained for manual diagnostics
+ * only — no production call sites remain.
  *
  * # Safety
  * `src_ip` and `dns_ip` must be NUL-terminated C strings.
@@ -291,8 +292,9 @@ int meow_tun_health_probe(const char *src_ip, const char *dns_ip, int timeout_ms
  *
  * BLOCKS up to `timeout_ms`. Call from a NON-runtime thread.
  *
- * Deprecated: superseded by the lock-free meow_tun_heartbeat() watchdog.
- * Retained for manual diagnostics only — no production call sites remain.
+ * **Deprecated**: superseded by the lock-free `meow_tun_heartbeat()` watchdog
+ * in MWTunnelEngine. Retained for manual diagnostics only — no production
+ * call sites remain.
  */
 int meow_tun_tcp_health_probe(int timeout_ms);
 
