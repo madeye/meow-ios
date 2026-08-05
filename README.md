@@ -6,9 +6,13 @@ tunnel provider.
 
 ## Install
 
+[<img src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" height="60">](https://apps.apple.com/us/app/meow-smart-vpn/id6778303404)
 [<img src="https://img.shields.io/badge/TestFlight-Public%20Beta-0070F5?style=for-the-badge&logo=apple&logoColor=white" alt="Join the TestFlight public beta" height="60">](https://testflight.apple.com/join/HSptQN3h)
 
-Public beta is open on TestFlight: <https://testflight.apple.com/join/HSptQN3h>.
+Available on the App Store:
+<https://apps.apple.com/us/app/meow-smart-vpn/id6778303404>. Want the latest
+builds early? The public beta is open on TestFlight:
+<https://testflight.apple.com/join/HSptQN3h>.
 Requires iOS 17 or later (iPhone and iPad). Bring your own Mihomo / Clash
 subscription — meow does not provide proxy servers.
 
@@ -23,8 +27,9 @@ per-version changelogs.
 
 ## Status
 
-Public beta on TestFlight; the first App Store release (v1.4.0) is in
-review. See [`docs/PRD.md`](docs/PRD.md) and
+Live on the
+[App Store](https://apps.apple.com/us/app/meow-smart-vpn/id6778303404) (v1.4.0),
+with the public beta continuing on TestFlight. See [`docs/PRD.md`](docs/PRD.md) and
 [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for the product spec and task
 breakdown.
 
