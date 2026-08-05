@@ -30,9 +30,10 @@ struct DeepLinkImportConfirmation: Identifiable, Equatable {
         link.name
     }
 
-    /// Plain HTTP is still accepted (some subscription hosts don't offer
-    /// TLS), but the confirmation must call it out prominently — the
-    /// profile can be tampered with in transit.
+    /// Plain-HTTP links reach the confirmation sheet (so the user learns
+    /// why they won't work) but the actual import is rejected by
+    /// `SubscriptionService.rejectPlainHTTP` — ATS blocks cleartext HTTP,
+    /// so the fetch could never succeed anyway.
     var isInsecure: Bool {
         link.subscriptionURL.scheme?.lowercased() == "http"
     }

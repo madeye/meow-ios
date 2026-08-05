@@ -100,6 +100,48 @@ struct SubscriptionServiceTests {
         #expect(profile.yamlContent == body)
     }
 
+    // MARK: - Plain-HTTP config URLs are rejected with an explanation (ATS blocks the fetch)
+
+    @Test
+    @MainActor
+    func `add rejects a plain-http URL before touching the network`() async throws {
+        let harness = try makeService()
+
+        await #expect(throws: SubscriptionError.insecureHTTPURL) {
+            _ = try await harness.service.add(name: "Airport", url: "http://example.com/sub.yaml")
+        }
+        #expect(try harness.context.fetch(FetchDescriptor<Profile>()).isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func `updateInfo rejects a plain-http URL and leaves the profile untouched`() throws {
+        let harness = try makeService()
+        let profile = Profile(name: "Old", url: "https://example.com/a.yaml", yamlContent: "mixed-port: 7890\n")
+        harness.context.insert(profile)
+        try harness.context.save()
+
+        #expect(throws: SubscriptionError.insecureHTTPURL) {
+            try harness.service.updateInfo(profile, name: "New", url: "  HTTP://example.com/a.yaml ")
+        }
+        #expect(profile.name == "Old")
+        #expect(profile.url == "https://example.com/a.yaml")
+    }
+
+    @Test
+    @MainActor
+    func `refresh rejects a stored plain-http URL`() async throws {
+        let harness = try makeService()
+        let profile = Profile(name: "Legacy", url: "http://example.com/legacy.yaml", yamlContent: "proxies: []\n")
+        harness.context.insert(profile)
+        try harness.context.save()
+
+        await #expect(throws: SubscriptionError.insecureHTTPURL) {
+            try await harness.service.refresh(profile)
+        }
+        #expect(profile.yamlContent == "proxies: []\n")
+    }
+
     // MARK: - #289: refresh keeps config.yaml in sync only for the selected profile
 
     @Test

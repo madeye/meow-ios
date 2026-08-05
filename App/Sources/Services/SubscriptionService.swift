@@ -137,8 +137,12 @@ final class SubscriptionService {
     /// config is left as-is here. Attaching a URL to a previously local-only
     /// import (empty `url`) promotes it to a refreshable subscription.
     func updateInfo(_ profile: Profile, name: String, url: String) throws {
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedURL.isEmpty {
+            try Self.rejectPlainHTTP(trimmedURL)
+        }
         profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        profile.url = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        profile.url = trimmedURL
         try modelContext.save()
     }
 
@@ -213,7 +217,19 @@ final class SubscriptionService {
 
     // MARK: - Fetch + normalize
 
+    /// Rejects plain-http config URLs up front. ATS
+    /// (`NSAllowsArbitraryLoads` = false in `App/Info.plist`) blocks
+    /// cleartext HTTP in the app process, so the fetch could only ever fail
+    /// with an opaque `NSURLError` — tell the user why instead.
+    static func rejectPlainHTTP(_ url: String) throws {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("http://") {
+            throw SubscriptionError.insecureHTTPURL
+        }
+    }
+
     private func fetchAndNormalize(url: String) async throws -> String {
+        try Self.rejectPlainHTTP(url)
         guard let remote = URL(string: url) else { throw SubscriptionError.invalidURL }
         var request = URLRequest(url: remote)
         // Most subscription panels gate the served proxy list on User-Agent —
@@ -247,11 +263,26 @@ final class SubscriptionService {
     }
 }
 
-enum SubscriptionError: Error {
+enum SubscriptionError: Error, Equatable {
     case invalidURL
+    case insecureHTTPURL
     case http(status: Int)
     case decodeFailed
     case conversionFailed(String)
+}
+
+extension SubscriptionError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .insecureHTTPURL:
+            String(
+                localized: "subscriptions.error.plainHTTP",
+                comment: "Shown when a config URL uses http:// — iOS ATS blocks cleartext connections",
+            )
+        case .invalidURL, .http, .decodeFailed, .conversionFailed:
+            nil
+        }
+    }
 }
 
 enum SubscriptionFormat {

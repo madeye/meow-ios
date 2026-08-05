@@ -11,8 +11,11 @@ struct URLValidationTests {
     }
 
     @Test(.disabled("blocked on validator"))
-    func `accepts http URLs with warning`() {
-        // #expect(SubscriptionURL.validate("http://example.com") == .insecureHttp)
+    func `rejects plain-http URLs`() {
+        // Covered today by `SubscriptionService.rejectPlainHTTP` (ATS blocks
+        // cleartext HTTP, so http:// links are rejected with an explanation —
+        // see SubscriptionServiceTests). A future standalone validator should
+        // keep rejecting: SubscriptionURL.validate("http://example.com") == .insecureHttp
     }
 
     @Test(.disabled("blocked on validator"))

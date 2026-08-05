@@ -106,6 +106,7 @@
 "subscriptions.toolbar.addFromURL" = "从 URL 添加";
 "subscriptions.toolbar.importFromFile" = "从 iCloud 云盘导入…";
 "subscriptions.import.invalidEncoding" = "所选文件不是有效的 UTF-8 文本。";
+"subscriptions.error.plainHTTP" = "该配置链接使用未加密的 HTTP。iOS 会拦截非 HTTPS 连接,无法下载配置,请改用 https:// 链接。";
 "subscriptions.empty.title" = "暂无配置";
 "subscriptions.empty.description" = "点击右上角的 + 添加 Mihomo 或 Clash 配置链接。";
 "subscriptions.empty.importFile" = "导入文件";

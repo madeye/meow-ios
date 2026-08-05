@@ -100,6 +100,7 @@
 "subscriptions.toolbar.addFromURL" = "Add from URL";
 "subscriptions.toolbar.importFromFile" = "Import from iCloud Drive…";
 "subscriptions.import.invalidEncoding" = "The selected file isn't valid UTF-8 text.";
+"subscriptions.error.plainHTTP" = "This config URL uses plain HTTP. iOS blocks insecure (non-HTTPS) connections, so the config can't be downloaded. Please use an https:// URL instead.";
 "subscriptions.empty.title" = "No configs yet";
 "subscriptions.empty.description" = "Tap + to add a Mihomo or Clash config URL.";
 "subscriptions.empty.importFile" = "Import File";
