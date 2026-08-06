@@ -815,7 +815,8 @@ fn inject_global_selector(root: &mut serde_yaml::Mapping, primary: &str) {
 
 /// Patch a Clash YAML config for iOS: strips `subscriptions`; keeps the
 /// user's `dns` block but pins the fake-ip keys the tunnel requires on top
-/// (user nameservers stay first, the built-in defaults are always appended);
+/// (supported user nameservers stay first, unsupported DHCP resolvers are
+/// omitted, and the built-in defaults are always appended);
 /// pins `mixed-port`, `allow-lan`, listener bind address, and DNS listen
 /// socket; declares a `GLOBAL` selector headed by the config's primary
 /// outbound (so `mode: global` proxies rather than black-holes); injects a
@@ -919,13 +920,21 @@ pub unsafe extern "C" fn meow_patch_config(
     ] {
         dns.insert(serde_yaml::Value::String(k.into()), v);
     }
-    // User-supplied nameservers stay first; the built-in defaults are always
-    // appended (deduped) so the tunnel keeps a known-good plain-UDP resolver
-    // even when the user's entries are unreachable or DoH-only.
+    // Supported user-supplied nameservers stay first. DHCP resolvers depend on
+    // platform interface discovery that the embedded parser does not support,
+    // so omit the scheme on iOS and let the built-in defaults provide the
+    // compatible fallback. The defaults are always appended (deduped) so the
+    // tunnel keeps a known-good plain-UDP resolver even when the user's entries
+    // are unreachable or DoH-only.
     let mut nameservers = match dns.get("nameserver") {
         Some(serde_yaml::Value::Sequence(list)) => list.clone(),
         _ => Vec::new(),
     };
+    nameservers.retain(|entry| {
+        !entry
+            .as_str()
+            .is_some_and(|address| url::Url::parse(address).is_ok_and(|url| url.scheme() == "dhcp"))
+    });
     for default in ["119.29.29.29", "223.5.5.5"] {
         let entry = serde_yaml::Value::String(default.into());
         if !nameservers.contains(&entry) {
@@ -1523,7 +1532,7 @@ rules:
     }
 
     #[test]
-    fn patch_config_always_appends_default_nameservers() {
+    fn patch_config_normalizes_nameservers() {
         fn nameservers(yaml: &str) -> Vec<String> {
             let patched = patch_config(yaml, 7890, 0, 1053);
             let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
@@ -1553,6 +1562,59 @@ rules:
             nameservers("dns:\n  nameserver:\n    - 223.5.5.5\nrules:\n  - MATCH,DIRECT\n"),
             ["223.5.5.5", "119.29.29.29"]
         );
+
+        // DHCP resolvers are unsupported on iOS regardless of their target.
+        assert_eq!(
+            nameservers("dns:\n  nameserver:\n    - dhcp://en0\nrules:\n  - MATCH,DIRECT\n"),
+            ["119.29.29.29", "223.5.5.5"]
+        );
+        assert_eq!(
+            nameservers(
+                r#"
+dns:
+  nameserver:
+    - dhcp://en0
+    - 1.1.1.1
+    - dhcp://system
+    - https://dns.google/dns-query
+rules:
+  - MATCH,DIRECT
+"#
+            ),
+            [
+                "1.1.1.1",
+                "https://dns.google/dns-query",
+                "119.29.29.29",
+                "223.5.5.5"
+            ]
+        );
+    }
+
+    #[test]
+    fn patch_config_drops_dhcp_nameserver_and_loads_config() {
+        let tmp = tempfile::tempdir().expect("temp config dir");
+        let config_path = tmp.path().join("effective-config.yaml");
+        let patched = patch_config(
+            r#"
+dns:
+  nameserver:
+    - dhcp://en0
+proxies:
+  - name: DIRECT
+    type: direct
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        std::fs::write(&config_path, patched).expect("write effective config");
+        crate::get_engine_runtime()
+            .block_on(meow_config::load_config(
+                config_path.to_str().expect("utf-8 config path"),
+            ))
+            .expect("load DHCP-normalized config");
     }
 
     #[test]
