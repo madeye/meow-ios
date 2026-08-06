@@ -1,11 +1,10 @@
-• Dark mode: the whole app now follows your system appearance, with a refreshed color theme matched to the app icon
-• Brand-new cat app icon and in-app branding that shows connection status at a glance
-• Share servers as QR codes: Shadowsocks servers export as standard ss:// links, URL subscriptions export their subscription URL — scan with any compatible client
-• Test a whole proxy group with one tap; each proxy row now shows its protocol type
-• Built-in YAML editor for any subscription (pencil icon next to the refresh button)
-• Friendlier first launch: add a subscription from a URL or file right on the home tab
-• Stability: the tunnel stays healthy across device sleep/wake, latency badges update reliably, and the Connections screen lists live connections correctly
-
-Known limitation: non-DNS UDP traffic is not yet forwarded by the tunnel — QUIC/HTTP3 falls back to TCP HTTP/2 (usually transparent to the user). Fix is in progress.
+• Reliability: the tunnel's TCP/IP engine was reworked from the ground up, fixing rare "connected but no traffic" freezes — especially after the phone sleeps overnight
+• Smarter wake handling: after waking, the tunnel checks its actual data path and only restarts when truly needed
+• DNS: the dns: section of your config (nameserver, fallback, fake-ip-filter, nameserver-policy) is now respected
+• Config changes apply instantly with hot reload, without dropping the connection where possible
+• New App Icon picker in Settings, with two additional icons
+• "Subscriptions" are now called "Configs" throughout the app
+• Global mode now routes through your config's primary outbound
+• Clearer error when a config URL uses plain http:// instead of https://
 
 Issues and feedback: https://github.com/madeye/meow-ios/issues

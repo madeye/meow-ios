@@ -1,0 +1,10 @@
+Build 2026080601 (1.5.0)
+
+• Release candidate for App Store version 1.5.0 — same engine as the previous build, now under the new version number.
+• Tunnel engine rework: the TCP/IP stack runs on a single dedicated owner instead of a shared lock, removing the root cause behind past "connected but no traffic" freezes (especially overnight sleep/wake).
+• Smarter wake handling: after the phone wakes, the tunnel probes actual data-path health and only restarts when the path is really dead.
+• DNS: your config's dns: section (nameserver, fallback, fake-ip-filter, nameserver-policy) is respected; default resolvers are kept as a safety net.
+• Config changes now hot-reload without dropping the tunnel where possible.
+• New: App Icon picker in Settings with two additional icons. "Subscriptions" are now called "Configs" throughout the app.
+• Fix: Global mode routes through your config's primary outbound instead of an arbitrary first entry. Plain http:// config URLs are rejected with a clear error.
+• Please test: leave the VPN connected overnight and through normal daily use (lock/unlock, Wi-Fi/cellular switches). If browsing ever stops while the VPN icon is still on, export the log from Settings and report it.
