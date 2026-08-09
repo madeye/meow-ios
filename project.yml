@@ -4,6 +4,9 @@ options:
   bundleIdPrefix: com.tangzixiang.meow
   deploymentTarget:
     iOS: "17.0"
+    # NEPacketTunnelProvider landed on tvOS in 17.0 — there is no earlier
+    # floor worth supporting because the whole app is the tunnel.
+    tvOS: "17.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
   groupSortPosition: top
@@ -235,6 +238,150 @@ targets:
             /usr/bin/xcrun strip -Sx "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
           fi
 
+  meow-tvos:
+    type: application
+    platform: tvOS
+    sources:
+      - path: AppTV/Sources
+      # The tvOS app reuses the model + service layer verbatim and replaces
+      # only the view layer. Nothing under Models/ or Services/ imports UIKit
+      # or SwiftUI, so it compiles for tvOS unchanged — see AppTV/README.md.
+      - path: App/Sources/Models
+      - path: App/Sources/Services
+      - path: App/Sources/AppModel.swift
+      - path: App/Sources/AppModelContainer.swift
+      # Localizable.strings and the GeoIP/geosite databases are shared;
+      # Assets.xcassets is not — it holds iPhone Home Screen icon sets, and
+      # tvOS wants a Brand Assets stack instead (not shipped in this MVP).
+      - path: App/Resources
+        optional: true
+        excludes:
+          - "**/*.md"
+          - "Assets.xcassets"
+    info:
+      path: AppTV/Info.plist
+      properties:
+        CFBundleDisplayName: meow
+        CFBundleShortVersionString: "1.5.0"
+        CFBundleVersion: "2026080601"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+          NSAllowsLocalNetworking: true
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: AppTV/AppTV.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tangzixiang.meow
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.tangzixiang.meow
+    settings:
+      base:
+        # Same bundle ID as the iOS app on purpose: one App Store record and
+        # universal purchase across iPhone/iPad and Apple TV. The two never
+        # collide because they ship as separate platform binaries.
+        PRODUCT_BUNDLE_IDENTIFIER: com.tangzixiang.meow
+        TVOS_DEPLOYMENT_TARGET: "17.0"
+        TARGETED_DEVICE_FAMILY: "3"
+        SUPPORTED_PLATFORMS: "appletvos appletvsimulator"
+        CODE_SIGN_ENTITLEMENTS: AppTV/AppTV.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: App/Sources/BridgingHeader.h
+        GENERATE_INFOPLIST_FILE: NO
+        CLANG_ENABLE_MODULES: YES
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/include
+        LIBRARY_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/Frameworks
+        OTHER_LDFLAGS:
+          - -ObjC
+          # boring-sys (via meow-transport boring-tls feature) vendors
+          # BoringSSL C++ — link libc++ so std::__1 symbols resolve.
+          - -lc++
+    dependencies:
+      - target: PacketTunnelTV
+        embed: true
+        codeSign: true
+      - package: MeowShared
+        product: MeowModels
+      - package: MeowShared
+        product: MeowIPC
+      - package: Yams
+      - framework: MeowCore/Frameworks/MeowCore.xcframework
+        embed: false
+        optional: true
+      - sdk: SystemConfiguration.framework
+    postBuildScripts:
+      - name: Strip Release binary (strip -Sx)
+        runOnlyWhenInstalling: false
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "$CONFIGURATION" = "Release" ]; then
+            /usr/bin/xcrun strip -Sx "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+          fi
+
+  PacketTunnelTV:
+    type: app-extension
+    platform: tvOS
+    # Byte-for-byte the same provider as iOS: PacketTunnel/Sources is pure
+    # Objective-C over NetworkExtension and the Rust FFI, with no UIKit and no
+    # iOS-only API in it, so tvOS needs a target but not a fork.
+    sources:
+      - path: PacketTunnel/Sources
+    info:
+      path: PacketTunnelTV/Info.plist
+      properties:
+        CFBundleDisplayName: meow Tunnel
+        CFBundleShortVersionString: "1.5.0"
+        CFBundleVersion: "2026080601"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: PacketTunnelProvider
+    entitlements:
+      path: PacketTunnelTV/PacketTunnelTV.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tangzixiang.meow
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.tangzixiang.meow
+    settings:
+      base:
+        # Matches the iOS extension's identifier so the hardcoded
+        # `providerBundleIdentifier` in VpnManager.configureIfNeeded stays
+        # correct on both platforms.
+        PRODUCT_BUNDLE_IDENTIFIER: com.tangzixiang.meow.PacketTunnel
+        TVOS_DEPLOYMENT_TARGET: "17.0"
+        TARGETED_DEVICE_FAMILY: "3"
+        SUPPORTED_PLATFORMS: "appletvos appletvsimulator"
+        CODE_SIGN_ENTITLEMENTS: PacketTunnelTV/PacketTunnelTV.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        CLANG_ENABLE_MODULES: YES
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/include
+        LIBRARY_SEARCH_PATHS:
+          - $(SRCROOT)/MeowCore/Frameworks
+        OTHER_LDFLAGS:
+          - -ObjC
+          # boring-sys (via meow-transport boring-tls feature) vendors
+          # BoringSSL C++ — link libc++ so std::__1 symbols resolve.
+          - -lc++
+    dependencies:
+      - framework: MeowCore/Frameworks/MeowCore.xcframework
+        embed: false
+        optional: true
+      - sdk: SystemConfiguration.framework
+    postBuildScripts:
+      - name: Strip Release binary (strip -Sx)
+        runOnlyWhenInstalling: false
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "$CONFIGURATION" = "Release" ]; then
+            /usr/bin/xcrun strip -Sx "$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+          fi
+
 schemes:
   meow-ios:
     build:
@@ -255,5 +402,15 @@ schemes:
       gatherCoverageData: true
       coverageTargets:
         - meow-ios
+    archive:
+      config: Release
+
+  meow-tvos:
+    build:
+      targets:
+        meow-tvos: all
+        PacketTunnelTV: all
+    run:
+      config: Debug
     archive:
       config: Release

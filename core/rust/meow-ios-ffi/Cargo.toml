@@ -88,11 +88,23 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1
 # fingerprint field falls back to a stub-warn. Cost: boring-sys vendors
 # BoringSSL, adding ~several MB to the stripped extension binary —
 # watch the 50 MB NE budget after a release archive.
+#
+# boring-sys' build script maps only macOS/iOS onto CMake's Apple
+# cross-compilation flags, so a tvOS target gets neither a sysroot nor an
+# `-mtvos-version-min`. Fixed upstream in cloudflare/boring#519; see the
+# `[patch.crates-io]` note below for why we still carry a git pin.
 meow-config = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a", features = ["boring-tls"] }
 meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a", default-features = false, features = ["listener-mixed"] }
 meow-api = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
+# meow-proxy's default `ss` feature pulls shadowsocks-rust, whose
+# `net/sys/unix/bsd/mod.rs` routes tvos/watchos to the macOS impl — but that
+# impl unconditionally imports `BatchRecvMessage` / `BatchSendMessage`, which
+# `net/udp.rs` cfg-gates to a narrower OS list. The two lists disagree, so
+# the crate doesn't compile for tvOS at all. Fixed upstream in
+# shadowsocks/shadowsocks-rust#2162; see the `[patch.crates-io]` note below
+# for why we still carry a git pin.
 meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "74e8083a151ca1708864a306189375188d74381a" }
 
 [build-dependencies]
@@ -148,3 +160,24 @@ panic = "abort"
 # take it.
 [patch.crates-io]
 lwip = { git = "https://github.com/madeye/lwip", rev = "5f6f0dfe025c967157ff328d94efe488852d8755" }
+# shadowsocks/shadowsocks-rust#2162 (the tvOS/watchOS cfg fix described above)
+# merged on 2026-08-08, but the newest crates.io release is 1.24.0 from
+# 2025-12-11 — it predates the fix. Pin the merge commit until 1.25.0 ships,
+# then drop this line and let meow-proxy resolve from the registry again.
+#
+# Not tvOS-only: 1.24 -> 1.25 also moves shadowsocks-crypto 0.6 -> 0.7, which
+# swaps the AEAD stack (new aes / cipher / hmac / sha1 majors) for iOS as well.
+# Re-test Shadowsocks throughput and all three cipher families on device after
+# touching this pin.
+shadowsocks = { git = "https://github.com/shadowsocks/shadowsocks-rust", rev = "db65eaa8244603e5ef7c5fbc60add10e41a5477a" }
+# cloudflare/boring#519 (the tvOS CMake arms described above) merged on
+# 2026-08-03 and is tagged v5.2.0, but that tag was never published to
+# crates.io — the registry still tops out at 5.1.0. Pin the tag until 5.2.0
+# ships, then drop these three lines.
+#
+# Also not tvOS-only: v5.1.0..v5.2.0 is 30 commits over 41 files and includes
+# two BoringSSL bumps, so iOS gets a new vendored TLS library out of this too.
+# Re-test TLS, ECH and the uTLS fingerprints on device after touching it.
+boring = { git = "https://github.com/cloudflare/boring", tag = "v5.2.0" }
+boring-sys = { git = "https://github.com/cloudflare/boring", tag = "v5.2.0" }
+tokio-boring = { git = "https://github.com/cloudflare/boring", tag = "v5.2.0" }

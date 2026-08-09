@@ -11,7 +11,7 @@
 | macOS | 15.x (Apple Silicon) | Required for iOS 26 SDK. |
 | Xcode | 26.4 | Bundled clang + iOS 26 simulator. |
 | Swift | 6.0 | Project uses strict concurrency. |
-| Rust | 1.82+ | `rustup target add aarch64-apple-ios aarch64-apple-ios-sim` |
+| Rust | 1.82+ | Four Apple targets — see One-time setup. |
 | xcodegen | 2.40+ | `brew install xcodegen` |
 | cbindgen | 0.28+ | Installed as a Cargo dev-dependency. |
 
@@ -19,8 +19,13 @@
 
 ```sh
 brew install xcodegen
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim \
+                  aarch64-apple-tvos aarch64-apple-tvos-sim
 ```
+
+Both tvOS targets are tier 2 with prebuilt std, so no `-Zbuild-std` and no
+nightly. `scripts/build-rust.sh` adds any missing target itself; installing
+them up front just keeps the first build from stalling on a download.
 
 ## Signing
 
@@ -76,6 +81,10 @@ link the same XCFramework directly — there is no `MIHOMO_CORE_LINKED`
 conditional; the framework is declared `optional: true` in `project.yml`
 so source compiles before the `.a` exists, but link fails without it.
 
+The XCFramework carries four slices — `aarch64-apple-ios{,-sim}` and
+`aarch64-apple-tvos{,-sim}` — built in that order, so a break on the newer
+tvOS pair can't silently cost the shipping iOS platform.
+
 ```sh
 ./scripts/build-rust.sh   # → MeowCore.xcframework
 ```
@@ -104,6 +113,21 @@ so source compiles before the `.a` exists, but link fails without it.
 2. (Optional while UI-only) Build the native lib: `./scripts/build-rust.sh`
 3. Open `meow-ios.xcodeproj`, select the `meow-ios` scheme.
 4. Run on an iOS 26 simulator or a provisioned device.
+
+### Apple TV
+
+The `meow-tvos` scheme builds the tvOS app plus its `PacketTunnelTV`
+extension. Same bundle identifier as iOS (`com.tangzixiang.meow`) — the two
+are a universal purchase, not two products.
+
+```sh
+xcodebuild build -project meow-ios.xcodeproj -scheme meow-tvos \
+    -destination 'platform=tvOS Simulator,name=Apple TV'
+```
+
+See [`AppTV/README.md`](../AppTV/README.md) for what the tvOS target reuses,
+what it replaces, and the platform limits (tvOS 17 floor, no QR scan, no
+Brand Assets yet).
 
 For a signed device-ready Release build from the command line, use:
 

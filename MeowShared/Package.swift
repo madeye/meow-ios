@@ -5,9 +5,12 @@ let package = Package(
     name: "MeowShared",
     platforms: [
         .iOS(.v17),
+        // tvOS 17 is the floor for the whole port: NEPacketTunnelProvider
+        // isn't available on Apple TV before it.
+        .tvOS(.v17),
         // macOS 15 lets `swift test` drive MeowSharedTests from the command
-        // line. Production builds always target iOS via `project.yml`; this
-        // declaration is only so CI / local dev can run pure-logic tests
+        // line. Production builds always target iOS / tvOS via `project.yml`;
+        // this declaration is only so CI / local dev can run pure-logic tests
         // without spinning up a simulator.
         .macOS(.v15),
     ],

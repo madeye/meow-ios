@@ -314,6 +314,14 @@
 "traffic.tile.thisMonth" = "本月";
 
 
+/* tvOS home screen (TVContentView) */
+"tv.subscription.section" = "订阅";
+"tv.subscription.field.url" = "订阅地址";
+"tv.subscription.error.invalidURL" = "请输入以 http:// 或 https:// 开头的订阅地址。";
+"tv.profiles.section" = "配置";
+"tv.profiles.empty" = "还没有配置。添加订阅地址即可开始。";
+
+
 /* Fullscreen diagnostics overlay (ContentView) */
 "content.diagnostics.nav.title" = "诊断";
 

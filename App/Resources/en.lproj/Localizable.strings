@@ -308,6 +308,16 @@
 "traffic.tile.thisMonth" = "This Month";
 
 
+/* tvOS home screen (TVContentView) — the tvOS target compiles App/Resources
+   but not App/Sources/Views, so it reuses home.* / subscriptions.* above and
+   adds only what has no iPhone counterpart. */
+"tv.subscription.section" = "Subscription";
+"tv.subscription.field.url" = "Subscription URL";
+"tv.subscription.error.invalidURL" = "Enter an http:// or https:// subscription URL.";
+"tv.profiles.section" = "Profiles";
+"tv.profiles.empty" = "No profiles yet. Add a subscription URL to get started.";
+
+
 /* Fullscreen diagnostics overlay (ContentView) */
 "content.diagnostics.nav.title" = "Diagnostics";
 

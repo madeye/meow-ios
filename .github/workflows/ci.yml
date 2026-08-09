@@ -31,10 +31,13 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust (stable + iOS targets)
+      - name: Set up Rust (stable + iOS/tvOS targets)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+          # Both tvOS targets are tier 2 with prebuilt std, so no -Zbuild-std.
+          # scripts/build-rust.sh would `rustup target add` them itself, but
+          # installing here keeps that a no-op and the failure legible.
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-tvos,aarch64-apple-tvos-sim
       - name: Cache cargo registry, git, and build target
         uses: actions/cache@v4
         with:
@@ -183,6 +186,43 @@ jobs:
         with:
           name: ui-xcresult
           path: build/ui.xcresult
+
+  tvos-build:
+    needs: [build-core]
+    # The tvOS port has no test bundle of its own — MeowTests already covers
+    # Models/ and Services/, which is everything meow-tvos reuses, and the
+    # only tvOS-specific code is one SwiftUI view. So this job answers the one
+    # question CI can't get elsewhere: does the tvOS target still compile and
+    # link against the aarch64-apple-tvos slice of MeowCore.xcframework.
+    #
+    # Device destination only, deliberately: it needs just the AppleTVOS SDK
+    # (mandatory for any tvOS build) rather than a simulator runtime, and it
+    # exercises the slice that actually ships. See the lwip note in
+    # core/rust/meow-ios-ffi/Cargo.toml — the device slice is the one whose
+    # SDK resolution used to work by luck.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ^26.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: MeowCore.xcframework
+          path: MeowCore/Frameworks/MeowCore.xcframework
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build meow-tvos + PacketTunnelTV
+        run: |
+          xcodebuild build \
+            -project meow-ios.xcodeproj \
+            -scheme meow-tvos \
+            -configuration Debug \
+            -destination 'generic/platform=tvOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify
 
   archive:
     needs: [build-core, unit-test, ui-test]
