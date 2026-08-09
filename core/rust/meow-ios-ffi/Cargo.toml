@@ -123,7 +123,11 @@ codegen-units = 1
 strip = "symbols"
 panic = "abort"
 
-# Patched lwip. rev bd627695 replaces the upstream shared-state-plus-
+# Patched lwip. rev 5f6f0dfe = the bd627695 single-owner core plus two
+# build.rs-only cherry-picks from the rust branch (tvOS SDK/bindgen support
+# and correct simulator detection for aarch64-apple-ios-sim, which
+# previously built the simulator slice against the device SDK; plus the
+# Windows bcrypt link fix). rev bd627695 replaces the upstream shared-state-plus-
 # LWIP_MUTEX design with a single-owner core: one task (spawned by
 # NetStack::with_buffer_size, so it lands on the tun2socks runtime) makes
 # every lwIP C call, and TcpStream/TcpListener/UdpSocket/NetStack are pure
@@ -143,4 +147,4 @@ panic = "abort"
 # Upstream to https://github.com/ssrlive/lwip and drop the patch if they
 # take it.
 [patch.crates-io]
-lwip = { git = "https://github.com/madeye/lwip", rev = "bd62769574bc828b6c76cd62777d7490a140249d" }
+lwip = { git = "https://github.com/madeye/lwip", rev = "5f6f0dfe025c967157ff328d94efe488852d8755" }

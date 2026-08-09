@@ -31,4 +31,4 @@ ctrlc = "3"
 # the fork's fixes, a different netstack than the one that ships on-device.
 # Keep this rev in lockstep with core/rust/meow-ios-ffi/Cargo.toml.
 [patch.crates-io]
-lwip = { git = "https://github.com/madeye/lwip", rev = "bd62769574bc828b6c76cd62777d7490a140249d" }
+lwip = { git = "https://github.com/madeye/lwip", rev = "5f6f0dfe025c967157ff328d94efe488852d8755" }
