@@ -800,4 +800,49 @@ mod config_parse_tests {
             "all 22 user-defined groups plus injected GLOBAL must resolve",
         );
     }
+
+    /// One proxy of every protocol compiled into this build (meow-config
+    /// defaults + the explicit `anytls` opt-in). Asserted by name so a
+    /// silently dropped feature flag — which warn-skips the entry in lenient
+    /// parsing instead of erroring — fails loudly here. Companion to the
+    /// `ss`-only regression test above; see the meow-config dep comment in
+    /// Cargo.toml for the full feature inventory.
+    #[test]
+    fn every_compiled_protocol_parses() {
+        let yaml = r#"
+proxies:
+  - {name: p-ss, type: ss, server: 1.2.3.4, port: 8388, cipher: aes-256-gcm, password: pw}
+  - {name: p-trojan, type: trojan, server: 1.2.3.4, port: 443, password: pw}
+  - {name: p-vless, type: vless, server: 1.2.3.4, port: 443, uuid: 8b1e3b64-3c7e-4a2d-9c7d-000000000001}
+  - {name: p-vmess, type: vmess, server: 1.2.3.4, port: 443, uuid: 8b1e3b64-3c7e-4a2d-9c7d-000000000002}
+  - {name: p-snell, type: snell, server: 1.2.3.4, port: 8388, psk: secret}
+  - {name: p-hysteria2, type: hysteria2, server: 1.2.3.4, port: 443, password: pw}
+  - {name: p-anytls, type: anytls, server: 1.2.3.4, port: 443, password: pw}
+rules:
+  - MATCH,DIRECT
+"#;
+        let stripped = super::prepare_ios_config(yaml).expect("strip ok");
+        let rt = tokio::runtime::Runtime::new().expect("tokio rt");
+        // block_on provides the live reactor the anytls adapter's pool-reaper
+        // spawn needs at parse time.
+        let cfg = rt
+            .block_on(meow_config::load_config_from_str(&stripped))
+            .expect("full-protocol config must load");
+
+        for name in [
+            "p-ss",
+            "p-trojan",
+            "p-vless",
+            "p-vmess",
+            "p-snell",
+            "p-hysteria2",
+            "p-anytls",
+        ] {
+            assert!(
+                cfg.proxies.contains_key(name),
+                "{name} missing after parse — its protocol feature was \
+                 compiled out or the parser rejected the minimal entry",
+            );
+        }
+    }
 }

@@ -100,7 +100,7 @@ enum ClashConfigLinter {
     private static let validProxyTypes: Set<String> = [
         "ss", "trojan", "vless", "vmess", "socks5", "http",
         "wireguard", "tuic", "hysteria", "hysteria2",
-        "ssh", "snell", "direct", "reject",
+        "ssh", "snell", "anytls", "direct", "reject",
     ]
 
     private static func checkProxies(
@@ -138,7 +138,7 @@ enum ClashConfigLinter {
         let typeStr = m[Node("type")]?.scalar?.string ?? ""
         let needsServer: Set = [
             "ss", "trojan", "vless", "vmess", "socks5", "http",
-            "tuic", "hysteria", "hysteria2", "snell",
+            "tuic", "hysteria", "hysteria2", "snell", "anytls",
         ]
         if needsServer.contains(typeStr) {
             if m[Node("server")] == nil {
