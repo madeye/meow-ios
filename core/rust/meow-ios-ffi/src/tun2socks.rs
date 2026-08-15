@@ -32,6 +32,16 @@
 //! `dispatch_tcp` and `dispatch_udp` pass the literal destination to the
 //! mixed listener via SOCKS5; meow's normal inbound path reverses fake-IPs back
 //! to the original qname before rule matching.
+//!
+//! UDP ASSOCIATE is one control TCP per **source socket**, not per 5-tuple.
+//! SOCKS5 UDP already multiplexes destinations in the per-datagram header, so
+//! a P2P client that fans one local port out to hundreds of peers (Xunlei /
+//! Thunder on `:12345`, BitTorrent DHT, …) must not open hundreds of mixed-
+//! listener connections. Each ASSOCIATE holds a mixed-listener slot, and that
+//! listener is capped at 256 — a swarm saturates it and starves real TCP
+//! (HTTPS never even completes `connect(127.0.0.1:mixed)`). Known Thunder
+//! swarm ports are dropped before ASSOCIATE; everything else shares the
+//! per-source session.
 
 use crate::logging;
 use futures::{SinkExt, StreamExt};
@@ -47,14 +57,16 @@ use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::sync::{mpsc, oneshot, Notify, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{mpsc, oneshot, watch, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio_util::task::TaskTracker;
 use tracing::{info, trace, warn};
 
 type UdpMsg = (Vec<u8>, SocketAddr, SocketAddr);
 type AnyIpPktFrame = Vec<u8>;
 type NetstackTcpStream = lwip::TcpStream;
-type UdpSessionKey = (SocketAddr, SocketAddr);
+/// One SOCKS5 UDP ASSOCIATE per app source socket. Destinations are
+/// multiplexed in the SOCKS5 UDP header — see the module-level note.
+type UdpSessionKey = SocketAddr;
 
 /// Matches the cbindgen-emitted typedef in `meow_core.h`: Rust calls this
 /// whenever netstack or DNS produces an egress packet bound for the utun.
@@ -284,16 +296,15 @@ pub fn tcp_idle_ttl_ms() -> u64 {
 }
 
 // Live-UDP-session cap. This is NOT merely a burst/dispatch-window cap: the
-// `udp_sem` permit acquired per datagram in the accept loop is moved into the
-// per-flow reply-reader task (see `spawn_udp_reply_reader`) and held until that
-// task exits, so the permit population equals the live-flow population. It
-// therefore bounds the count of simultaneously-live UDP flows — each pinning a
-// NAT entry, a `reply_readers` entry, an `Arc<UdpSession>` and a 4 KiB reader
-// buffer — which the idle-TTL sweeper alone cannot do (the sweeper only reaps
-// flows quiet > 60 s, never active ones). 512 live flows * (UdpSession + 4 KiB)
-// is comfortably inside the ~50 MB NE jetsam budget; once full, new flows are
-// dropped (the app's UDP is lossy and retries) rather than evicting working
-// ones.
+// `udp_sem` permit acquired when a **new source socket** opens an ASSOCIATE
+// is moved into the per-source reply-reader task (see
+// `spawn_socks5_udp_reply_reader`) and held until that task exits, so the
+// permit population equals the live ASSOCIATE population. Subsequent
+// datagrams from a source that already has a session take no permit —
+// destinations are multiplexed on that one control TCP. 512 live
+// ASSOCIATEs * (session + 4 KiB reader buffer) fits the ~50 MB NE jetsam
+// budget; once full, new *sources* are dropped (UDP is lossy) rather than
+// evicting working ones.
 const UDP_BURST_CAP: usize = 512;
 
 // In-TUN UDP/53 handler fan-out cap. Each UDP/53 packet spawns an async
@@ -327,6 +338,22 @@ static EGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 static STACK_INGRESS_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
 
 static UDP_CAP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+// Thunder / Xunlei swarm UDP ports. These never complete a SOCKS5 UDP
+// first-reply through the mixed listener (peers don't answer the relay)
+// but each 5-tuple used to open its own ASSOCIATE and pin a mixed slot
+// for 10 s. Dropped before ASSOCIATE — Xunlei TCP control (api-pan,
+// sandai.net over TCP) is unaffected. 8000 is deliberately omitted:
+// too many legitimate services share it.
+const P2P_UDP_DROP_PORTS: &[u16] = &[12_345, 12_346, 3506, 4322];
+static P2P_UDP_DROP_LOG_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Local mixed-listener connect + SOCKS5 UDP ASSOCIATE handshake bound.
+/// The OS `connect()` timeout is ~75 s (error 60); when the mixed listener
+/// is queued/saturated that hang held a live-session permit and blocked
+/// every other UDP source. 3 s is well above a healthy loopback handshake
+/// and short enough that a P2P retry does not pin the cap.
+const UDP_ASSOCIATE_DIAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 // Throttle slot for the UDP reply-writer-backpressure drop log. When the
 // shared `udp_reply_tx` channel is momentarily full the reply reader drops the
@@ -867,11 +894,10 @@ async fn run_tun2socks(
     let (udp_write, mut udp_read) = udp_socket.split();
 
     let (udp_reply_tx, mut udp_reply_rx) = mpsc::channel::<UdpMsg>(256);
-    let udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let udp_nat = UdpNat::new();
     // Publish a weak handle so `debug_counts()` (harness RSS monitor) can
     // sample this set's size without owning it.
-    *reply_readers_slot().lock() = Some(Arc::downgrade(&udp_sessions));
+    *reply_readers_slot().lock() = Some(Arc::downgrade(&udp_nat.sessions));
 
     let (stack_ingress_tx, mut stack_ingress_rx) = mpsc::channel::<AnyIpPktFrame>(256);
     let (egress_tx, mut egress_rx) = mpsc::channel::<Vec<u8>>(1024);
@@ -1019,38 +1045,75 @@ async fn run_tun2socks(
     let tcp_idle_sweeper_handle = tokio::spawn(run_tcp_idle_sweeper());
 
     let udp_reply_tx_accept = udp_reply_tx.clone();
-    let udp_sessions_accept = udp_sessions.clone();
+    let udp_nat_accept = udp_nat.clone();
     let udp_sem_accept = udp_sem.clone();
     let dns_sem_accept = dns_sem.clone();
     let engine_handle_for_udp = crate::get_engine_runtime().handle().clone();
     let udp_accept_handle = tokio::spawn(async move {
         while let Some((payload, src, dst)) = udp_read.next().await {
-            let sem = if dst.port() == 53 {
-                dns_sem_accept.clone()
-            } else {
-                udp_sem_accept.clone()
-            };
-            let permit = match sem.try_acquire_owned() {
-                Ok(p) => p,
-                Err(_) => {
-                    if dst.port() == 53 {
+            if dst.port() != 53 && should_drop_p2p_udp(dst) {
+                warn_capped(
+                    &P2P_UDP_DROP_LOG_LAST_MS,
+                    "tun2socks: dropping P2P UDP swarm datagram (Thunder/Xunlei port)",
+                );
+                continue;
+            }
+            if dst.port() != 53 && block_http3() && dst.port() == 443 {
+                warn_capped(
+                    &BLOCK_HTTP3_DROP_LOG_LAST_MS,
+                    "tun2socks: block-HTTP3 on, dropping outbound UDP/443 (QUIC)",
+                );
+                continue;
+            }
+
+            // DNS and first-ASSOCIATE-per-source take a permit. Datagrams
+            // for a source that is already live or mid-open do not: they
+            // multiplex on the existing control TCP and must not exhaust
+            // UDP_BURST_CAP during a swarm burst or a 3 s ASSOCIATE dial.
+            let permit = if dst.port() == 53 {
+                match dns_sem_accept.clone().try_acquire_owned() {
+                    Ok(p) => Some(p),
+                    Err(_) => {
                         warn_capped(
                             &DNS_CAP_LOG_LAST_MS,
                             "tun2socks: DNS burst cap reached, dropping query",
                         );
-                    } else {
-                        warn_capped(
-                            &UDP_CAP_LOG_LAST_MS,
-                            "tun2socks: UDP live-session cap reached, dropping datagram",
-                        );
+                        continue;
                     }
-                    continue;
+                }
+            } else {
+                match udp_nat_accept.lookup(src) {
+                    UdpLookup::Live(session) => {
+                        let nat = udp_nat_accept.clone();
+                        engine_handle_for_udp.spawn(async move {
+                            dispatch_udp_on_session(session, payload, src, dst, Some(&nat)).await;
+                        });
+                        continue;
+                    }
+                    UdpLookup::Opening(wait) => {
+                        let nat = udp_nat_accept.clone();
+                        engine_handle_for_udp.spawn(async move {
+                            dispatch_udp_wait(nat, wait, payload, src, dst).await;
+                        });
+                        continue;
+                    }
+                    UdpLookup::NeedOpen(wait) => match udp_sem_accept.clone().try_acquire_owned() {
+                        Ok(p) => Some(p),
+                        Err(_) => {
+                            udp_nat_accept.fail_open(src, &wait);
+                            warn_capped(
+                                &UDP_CAP_LOG_LAST_MS,
+                                "tun2socks: UDP live-session cap reached, dropping datagram",
+                            );
+                            continue;
+                        }
+                    },
                 }
             };
             let reply_tx = udp_reply_tx_accept.clone();
-            let sessions = udp_sessions_accept.clone();
+            let nat = udp_nat_accept.clone();
             engine_handle_for_udp.spawn(async move {
-                dispatch_udp(payload, src, dst, reply_tx, sessions, permit).await;
+                dispatch_udp(payload, src, dst, reply_tx, nat, permit).await;
             });
         }
     });
@@ -1430,13 +1493,87 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for IdleTracking<T> {
 // UDP dispatch through DNS listener / SOCKS5 UDP ASSOCIATE.
 // ---------------------------------------------------------------------------
 
+/// Per-run UDP ASSOCIATE table. `sessions` is the live set (one entry per
+/// app source socket). `opening` holds a `watch` sender so concurrent
+/// datagrams from the same source wait for the in-flight ASSOCIATE instead
+/// of each opening their own mixed-listener TCP.
+#[derive(Clone)]
+struct UdpNat {
+    sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>,
+    opening: Arc<Mutex<HashMap<UdpSessionKey, watch::Sender<bool>>>>,
+}
+
+enum UdpLookup {
+    Live(Arc<Socks5UdpSession>),
+    Opening(watch::Receiver<bool>),
+    NeedOpen(watch::Sender<bool>),
+}
+
+impl UdpNat {
+    fn new() -> Self {
+        Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            opening: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn lookup(&self, src: SocketAddr) -> UdpLookup {
+        if let Some(s) = self.sessions.lock().get(&src).cloned() {
+            return UdpLookup::Live(s);
+        }
+        let mut opening = self.opening.lock();
+        // Re-check under the opening lock so a just-published session is
+        // not classified as NeedOpen.
+        if let Some(s) = self.sessions.lock().get(&src).cloned() {
+            return UdpLookup::Live(s);
+        }
+        if let Some(tx) = opening.get(&src) {
+            UdpLookup::Opening(tx.subscribe())
+        } else {
+            let (tx, _rx) = watch::channel(false);
+            opening.insert(src, tx.clone());
+            UdpLookup::NeedOpen(tx)
+        }
+    }
+
+    fn insert_live(&self, src: SocketAddr, session: Arc<Socks5UdpSession>) {
+        self.sessions.lock().insert(src, session);
+    }
+
+    fn remove_if(&self, src: SocketAddr, session: &Arc<Socks5UdpSession>) {
+        let mut g = self.sessions.lock();
+        if g.get(&src).is_some_and(|s| Arc::ptr_eq(s, session)) {
+            g.remove(&src);
+        }
+    }
+
+    fn publish_open(&self, src: SocketAddr, tx: &watch::Sender<bool>) {
+        self.opening.lock().remove(&src);
+        let _ = tx.send(true);
+    }
+
+    fn fail_open(&self, src: SocketAddr, tx: &watch::Sender<bool>) {
+        self.publish_open(src, tx);
+    }
+
+    fn fail_open_src(&self, src: SocketAddr) {
+        if let Some(tx) = self.opening.lock().remove(&src) {
+            let _ = tx.send(true);
+        }
+    }
+}
+
+fn should_drop_p2p_udp(dst: SocketAddr) -> bool {
+    P2P_UDP_DROP_PORTS.contains(&dst.port())
+}
+
 async fn dispatch_udp(
     payload: Vec<u8>,
     src: SocketAddr,
     dst: SocketAddr,
     reply_tx: mpsc::Sender<UdpMsg>,
-    udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>,
-    permit: OwnedSemaphorePermit,
+    nat: UdpNat,
+    permit: Option<OwnedSemaphorePermit>,
 ) {
     if dst.port() == 53 {
         let _permit = permit;
@@ -1449,44 +1586,69 @@ async fn dispatch_udp(
             &BLOCK_HTTP3_DROP_LOG_LAST_MS,
             "tun2socks: block-HTTP3 on, dropping outbound UDP/443 (QUIC)",
         );
+        nat.fail_open_src(src);
         return;
     }
 
-    let key = (src, dst);
-    let existing = { udp_sessions.lock().get(&key).cloned() };
-    if let Some(session) = existing {
-        if let Err(e) = send_socks5_udp(&session, dst, &payload).await {
-            warn!("tun2socks: SOCKS5 UDP send failed for {src} -> {dst}: {e}");
-            udp_sessions.lock().remove(&key);
+    // Only NeedOpen reaches here with Some(permit). Live/Opening are
+    // dispatched via the dedicated helpers so they never hold a cap slot.
+    let Some(permit) = permit else {
+        let existing = nat.sessions.lock().get(&src).cloned();
+        if let Some(session) = existing {
+            dispatch_udp_on_session(session, payload, src, dst, Some(&nat)).await;
         }
-        drop(permit);
         return;
-    }
+    };
 
     let Some(mixed_addr) = crate::engine::mixed_dial_addr() else {
         logging::bridge_log("tun2socks: mixed listener not running, dropping UDP datagram");
+        nat.fail_open_src(src);
         return;
     };
+
     let session = match open_socks5_udp_session(mixed_addr).await {
         Ok(s) => s,
         Err(e) => {
             warn!("tun2socks: SOCKS5 UDP ASSOCIATE failed for {src} -> {dst}: {e}");
+            nat.fail_open_src(src);
             return;
         }
     };
 
-    udp_sessions.lock().insert(key, session.clone());
-    spawn_socks5_udp_reply_reader(
-        key,
-        session.clone(),
-        src,
-        dst,
-        reply_tx,
-        udp_sessions,
-        permit,
-    );
+    nat.insert_live(src, session.clone());
+    nat.fail_open_src(src);
+    spawn_socks5_udp_reply_reader(src, session.clone(), src, reply_tx, nat.clone(), permit);
+    dispatch_udp_on_session(session, payload, src, dst, Some(&nat)).await;
+}
+
+async fn dispatch_udp_wait(
+    nat: UdpNat,
+    mut wait: watch::Receiver<bool>,
+    payload: Vec<u8>,
+    src: SocketAddr,
+    dst: SocketAddr,
+) {
+    if !*wait.borrow() {
+        let _ = wait.changed().await;
+    }
+    let existing = nat.sessions.lock().get(&src).cloned();
+    if let Some(session) = existing {
+        dispatch_udp_on_session(session, payload, src, dst, Some(&nat)).await;
+    }
+}
+
+async fn dispatch_udp_on_session(
+    session: Arc<Socks5UdpSession>,
+    payload: Vec<u8>,
+    src: SocketAddr,
+    dst: SocketAddr,
+    nat: Option<&UdpNat>,
+) {
     if let Err(e) = send_socks5_udp(&session, dst, &payload).await {
-        warn!("tun2socks: initial SOCKS5 UDP send failed for {src} -> {dst}: {e}");
+        warn!("tun2socks: SOCKS5 UDP send failed for {src} -> {dst}: {e}");
+        if let Some(nat) = nat {
+            nat.remove_if(src, &session);
+        }
     }
 }
 
@@ -1539,7 +1701,12 @@ impl Drop for Socks5UdpSession {
 }
 
 async fn open_socks5_udp_session(mixed_addr: SocketAddr) -> io::Result<Arc<Socks5UdpSession>> {
-    let mut control = TcpStream::connect(mixed_addr).await?;
+    let mut control =
+        tokio::time::timeout(UDP_ASSOCIATE_DIAL_TIMEOUT, TcpStream::connect(mixed_addr))
+            .await
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::TimedOut, "UDP ASSOCIATE connect timed out")
+            })??;
     socks5_negotiate(&mut control).await?;
     control
         .write_all(&[
@@ -1584,21 +1751,35 @@ fn encode_socks5_udp_header(out: &mut Vec<u8>, addr: SocketAddr) {
     encode_socks5_addr(out, addr);
 }
 
-fn socks5_udp_payload_offset(buf: &[u8]) -> Option<usize> {
-    if buf.len() < 4 || buf[2] != 0 {
+/// Decode a SOCKS5 UDP request/reply header. Returns `(dst, payload_offset)`.
+/// Fragmented datagrams (`FRAG != 0`) and domain ATYP are rejected: the
+/// netstack can only inject an IP-sourced UDP packet back to the app.
+fn decode_socks5_udp(buf: &[u8]) -> Option<(SocketAddr, usize)> {
+    if buf.len() < 4 || buf[0] != 0 || buf[1] != 0 || buf[2] != 0 {
         return None;
     }
-    let mut pos = 4usize;
-    match buf[3] {
-        SOCKS5_ATYP_IPV4 => pos = pos.checked_add(4)?,
-        SOCKS5_ATYP_IPV6 => pos = pos.checked_add(16)?,
-        SOCKS5_ATYP_DOMAIN => {
-            let len = *buf.get(pos)? as usize;
-            pos = pos.checked_add(1 + len)?;
+    let (ip, port_off) = match buf[3] {
+        SOCKS5_ATYP_IPV4 => {
+            if buf.len() < 10 {
+                return None;
+            }
+            (IpAddr::from([buf[4], buf[5], buf[6], buf[7]]), 8usize)
+        }
+        SOCKS5_ATYP_IPV6 => {
+            if buf.len() < 22 {
+                return None;
+            }
+            let mut octets = [0u8; 16];
+            octets.copy_from_slice(&buf[4..20]);
+            (IpAddr::from(octets), 20usize)
         }
         _ => return None,
+    };
+    if buf.len() < port_off + 2 {
+        return None;
     }
-    pos.checked_add(2).filter(|off| *off <= buf.len())
+    let port = u16::from_be_bytes([buf[port_off], buf[port_off + 1]]);
+    Some((SocketAddr::new(ip, port), port_off + 2))
 }
 
 async fn send_socks5_udp(
@@ -1622,9 +1803,8 @@ fn spawn_socks5_udp_reply_reader(
     key: UdpSessionKey,
     session: Arc<Socks5UdpSession>,
     app_src: SocketAddr,
-    app_dst: SocketAddr,
     reply_tx: mpsc::Sender<UdpMsg>,
-    udp_sessions: Arc<Mutex<HashMap<UdpSessionKey, Arc<Socks5UdpSession>>>>,
+    nat: UdpNat,
     permit: OwnedSemaphorePermit,
 ) {
     crate::get_engine_runtime().spawn(async move {
@@ -1643,8 +1823,7 @@ fn spawn_socks5_udp_reply_reader(
                     Ok(res) => res,
                     Err(_) => {
                         warn!(
-                            "UDP first-reply deadline exceeded for {:?} after {} ms; evicting session",
-                            key, first_reply_deadline_ms,
+                            "UDP first-reply deadline exceeded for {key} after {first_reply_deadline_ms} ms; evicting session"
                         );
                         break 'reader;
                     }
@@ -1701,19 +1880,25 @@ fn spawn_socks5_udp_reply_reader(
                 Ok((n, _from)) => {
                     had_first_reply = true;
                     session.last_activity_ms.store(now_ms(), Ordering::Relaxed);
-                    let Some(off) = socks5_udp_payload_offset(&buf[..n]) else {
+                    // Shared ASSOCIATE: the reply may be from any dest the
+                    // source has spoken to. Reconstruct the peer from the
+                    // SOCKS5 UDP header so netstack emits the correct src.
+                    let Some((remote, off)) = decode_socks5_udp(&buf[..n]) else {
                         continue;
                     };
-                    let msg: UdpMsg = (buf[off..n].to_vec(), app_dst, app_src);
+                    if off > n {
+                        continue;
+                    }
+                    let msg: UdpMsg = (buf[off..n].to_vec(), remote, app_src);
                     forward_udp_reply(&reply_tx, msg);
                 }
                 Err(e) => {
-                    info!("UDP reply reader closing for {:?}: {}", key, e);
+                    info!("UDP reply reader closing for {key}: {e}");
                     break 'reader;
                 }
             }
         }
-        udp_sessions.lock().remove(&key);
+        nat.remove_if(key, &session);
     });
 }
 
@@ -2029,7 +2214,7 @@ fn parse_udp_packet(ip_data: &[u8]) -> Option<ParsedUdp<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
+    use std::net::{Ipv4Addr, Ipv6Addr};
     use std::sync::Mutex as StdMutex;
 
     /// Hand-built IPv4 + UDP packet: src 10.0.0.7:54321 → dst 172.19.0.2:53,
@@ -2312,6 +2497,82 @@ mod tests {
         forward_udp_reply(&tx, (vec![3u8], dst, src));
         let third = rx.try_recv().expect("post-drop datagram still deliverable");
         assert_eq!(third.0, vec![3u8]);
+    }
+
+    #[test]
+    fn decode_socks5_udp_roundtrip_ipv4() {
+        let dst = SocketAddr::from((Ipv4Addr::new(183, 248, 6, 106), 12_345));
+        let mut pkt = Vec::new();
+        encode_socks5_udp_header(&mut pkt, dst);
+        pkt.extend_from_slice(b"hi");
+        let (got, off) = decode_socks5_udp(&pkt).expect("header decodes");
+        assert_eq!(got, dst);
+        assert_eq!(&pkt[off..], b"hi");
+    }
+
+    #[test]
+    fn decode_socks5_udp_roundtrip_ipv6() {
+        let dst = SocketAddr::from((Ipv6Addr::LOCALHOST, 443));
+        let mut pkt = Vec::new();
+        encode_socks5_udp_header(&mut pkt, dst);
+        pkt.extend_from_slice(&[1, 2, 3]);
+        let (got, off) = decode_socks5_udp(&pkt).expect("header decodes");
+        assert_eq!(got, dst);
+        assert_eq!(&pkt[off..], &[1, 2, 3]);
+    }
+
+    #[test]
+    fn decode_socks5_udp_rejects_fragment_and_domain() {
+        // FRAG != 0
+        let mut frag = vec![0, 0, 1, SOCKS5_ATYP_IPV4, 1, 2, 3, 4, 0, 53];
+        frag.extend_from_slice(b"x");
+        assert!(decode_socks5_udp(&frag).is_none());
+
+        // ATYP domain — cannot inject as an IP-sourced UDP packet
+        let mut domain = vec![0, 0, 0, SOCKS5_ATYP_DOMAIN, 7];
+        domain.extend_from_slice(b"foo.com");
+        domain.extend_from_slice(&[0, 53, b'x']);
+        assert!(decode_socks5_udp(&domain).is_none());
+    }
+
+    #[test]
+    fn p2p_udp_drop_is_restricted_to_thunder_swarm_ports() {
+        let ip = Ipv4Addr::new(183, 248, 6, 106);
+        for port in [12_345, 12_346, 3506, 4322] {
+            assert!(
+                should_drop_p2p_udp(SocketAddr::from((ip, port))),
+                "port {port} should drop"
+            );
+        }
+        for port in [53, 443, 8000, 3478, 19_399] {
+            assert!(
+                !should_drop_p2p_udp(SocketAddr::from((ip, port))),
+                "port {port} must not drop"
+            );
+        }
+    }
+
+    #[test]
+    fn udp_nat_lookup_shares_one_open_per_source() {
+        let nat = UdpNat::new();
+        let src = SocketAddr::from((Ipv4Addr::new(172, 19, 0, 1), 64_479));
+        match nat.lookup(src) {
+            UdpLookup::NeedOpen(_) => {}
+            UdpLookup::Live(_) => panic!("first lookup must NeedOpen, got Live"),
+            UdpLookup::Opening(_) => panic!("first lookup must NeedOpen, got Opening"),
+        }
+        match nat.lookup(src) {
+            UdpLookup::Opening(_) => {}
+            UdpLookup::Live(_) => panic!("second lookup must Opening, got Live"),
+            UdpLookup::NeedOpen(_) => panic!("second lookup must Opening, got NeedOpen"),
+        }
+        // A different source still gets its own ASSOCIATE.
+        let other = SocketAddr::from((Ipv4Addr::new(172, 19, 0, 1), 64_480));
+        match nat.lookup(other) {
+            UdpLookup::NeedOpen(_) => {}
+            UdpLookup::Live(_) => panic!("other src must NeedOpen, got Live"),
+            UdpLookup::Opening(_) => panic!("other src must NeedOpen, got Opening"),
+        }
     }
 
     /// All tests in this module mutate the process-wide `tcp_flows()`
