@@ -1170,35 +1170,13 @@ pub extern "C" fn meow_tun_close_all_tcp_flows() -> c_int {
     n as c_int
 }
 
-/// Set the per-flow dial deadline, in milliseconds. Bounds the time
-/// `dispatch_tcp` waits for the relay's first byte of progress on the
-/// netstack stream before declaring the dial hung and dropping the
-/// future. See docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md
-/// for context.
-///
-/// Default 10000 ms. Pass `0` to disable the watchdog (relies on the
-/// 30 s idle sweeper to reap stuck flows). Negative values are rejected.
-///
-/// Takes effect on the next flow accepted; does not abort in-flight
-/// flows mid-wait.
-///
-/// Returns 0 on success, -1 on invalid input.
-#[no_mangle]
-pub extern "C" fn meow_tun_set_dial_deadline_ms(ms: c_int) -> c_int {
-    if ms < 0 {
-        set_error("dial deadline must be >= 0".into());
-        return -1;
-    }
-    tun2socks::set_dial_deadline_ms(ms as u64);
-    0
-}
-
-/// Read the currently-configured per-flow dial deadline, in
-/// milliseconds. `0` means the watchdog is disabled.
-#[no_mangle]
-pub extern "C" fn meow_tun_dial_deadline_ms() -> c_int {
-    tun2socks::dial_deadline_ms() as c_int
-}
+// The old `meow_tun_set_dial_deadline_ms` / `meow_tun_dial_deadline_ms`
+// FFI pair is gone: the per-flow "dial deadline" watchdog it configured
+// had been inert since the meow-listener refactor and was removed. Hung
+// DIRECT dials are now bounded inside the engine via the
+// `tcp-connect-timeout` config field that `prepare_ios_config` injects
+// (default 10 s) — see the note above the first-payload gate in
+// tun2socks.rs.
 
 /// Set the TCP first-payload wait budget, in milliseconds. lwIP completes
 /// the local 3-way handshake on its own, so without this gate every SYN
@@ -1236,8 +1214,8 @@ pub extern "C" fn meow_tun_tcp_first_payload_wait_ms() -> c_int {
 }
 
 /// Set the per-UDP-session first-reply deadline, in milliseconds. The
-/// symmetric counterpart to `meow_tun_set_dial_deadline_ms` for the UDP
-/// path — UDP doesn't connect, but iOS auto-bypass can silently drop
+/// UDP counterpart of the engine-side `tcp-connect-timeout` bound —
+/// UDP doesn't connect, but iOS auto-bypass can silently drop
 /// the outbound sendto when the scoped-routing cache is stale, leaving
 /// the reply reader parked on `read_packet` forever. Bounding the
 /// *first* reply lets us evict a dead session so the next app datagram
@@ -1269,7 +1247,7 @@ pub extern "C" fn meow_tun_udp_first_reply_deadline_ms() -> c_int {
 }
 
 /// Set the per-TCP-flow idle TTL, in milliseconds. The complement to
-/// `meow_tun_set_dial_deadline_ms` for flows whose dial *succeeded* but
+/// the engine-side `tcp-connect-timeout` bound, for flows whose dial *succeeded* but
 /// then went permanently quiet — e.g. the upstream proxy EOF'd an idle
 /// connection and the (suspended) app never FINs back, parking the relay
 /// forever while it pins an accept-cap permit and an lwip pcb. Hours of

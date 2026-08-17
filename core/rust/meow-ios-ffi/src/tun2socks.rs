@@ -121,40 +121,20 @@ fn run_handle_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
 // without it a burst is bounded only by upstream/relay backpressure and the
 // 30 s idle sweeper — watch RSS against the ~50 MB NE jetsam ceiling.
 
-// Per-flow dial deadline. Bounds the time `dispatch_tcp` waits for the
-// relay's first byte of progress on the netstack stream before declaring
-// the dial hung and dropping the future. See
-// docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md for the
-// failure mode: `DirectAdapter::dial_tcp` awaits `TcpStream::connect`
-// with no timeout, and an iOS reachability-cache / scoped-routing
-// transient can leave the connect hanging until cap-pressure eviction
-// reaps the flow. With the deadline, the app sees a RST in
-// `DIAL_DEADLINE_MS` ms instead of 30 s, the `tcp_accept_sem` permit is
-// released promptly, and `ConnectionGuard`'s Drop runs the meow
-// session cleanup on the discarded future.
-//
-// 10 s default: safely above cold cellular handshakes against distant
-// CN PoPs (~5-8 s observed) and below Mobile Safari's ~12 s
-// request-timeout floor, so the app's own retry loop kicks in.
-// Tunable at runtime via [`set_dial_deadline_ms`] /
-// `meow_tun_set_dial_deadline_ms` — set to 0 to disable the watchdog.
-const DIAL_DEADLINE_MS_DEFAULT: u64 = 10_000;
-static DIAL_DEADLINE_MS: AtomicU64 = AtomicU64::new(DIAL_DEADLINE_MS_DEFAULT);
-
-/// Set the per-flow dial deadline, in milliseconds. `0` disables the
-/// deadline (no watchdog — flows that hang in `dial_tcp` will only be
-/// reaped when the accept cap forces a longest-idle eviction). Returns
-/// true unconditionally.
-pub fn set_dial_deadline_ms(ms: u64) -> bool {
-    DIAL_DEADLINE_MS.store(ms, Ordering::Relaxed);
-    true
-}
-
-/// Read the currently-configured dial deadline, in milliseconds. `0`
-/// means the watchdog is disabled.
-pub fn dial_deadline_ms() -> u64 {
-    DIAL_DEADLINE_MS.load(Ordering::Relaxed)
-}
+// Hung-dial bounding lives in the engine now, not here. The old per-flow
+// "dial deadline" watchdog (`DIAL_DEADLINE_MS` / `run_dial_watchdog`,
+// removed) tried to detect a hung `DirectAdapter::dial_tcp` (see
+// docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md) from relay
+// progress — but since the meow-listener refactor the SOCKS5 CONNECT
+// reply is eager and `dispatch_tcp` bumped `last_active_ms` before the
+// watchdog started, so it parked immediately and could never fire. The
+// signal was unfixable at this layer anyway: "no relay progress yet" is
+// indistinguishable from a legitimate plaintext long-poll waiting on its
+// first downstream byte. The bound now sits where the hang actually is:
+// `prepare_ios_config` (engine.rs) injects `tcp-connect-timeout: 10`,
+// which meow-config wires into `DirectAdapter::with_connect_timeout` —
+// established flows are untouched by construction, and a hung connect
+// errors out of `dial_tcp`, closing the loopback leg so the app sees RST.
 
 // First-payload gate on the TCP dial. lwIP completes the local 3-way
 // handshake on its own (SYN in → SYN-ACK out), so *every* SYN that enters
@@ -197,8 +177,9 @@ pub fn tcp_first_payload_wait_ms() -> u64 {
     TCP_FIRST_PAYLOAD_WAIT_MS.load(Ordering::Relaxed)
 }
 
-// Per-UDP-session first-reply deadline. The symmetric counterpart to
-// DIAL_DEADLINE_MS for the UDP path. UDP doesn't connect, so there's no
+// Per-UDP-session first-reply deadline. The UDP counterpart of the
+// engine-side `tcp-connect-timeout` bound (see the note above the
+// first-payload gate). UDP doesn't connect, so there's no
 // `TcpStream::connect` hang to bound — but iOS auto-bypass can silently
 // drop the outbound sendto when the kernel's scoped-routing cache is
 // stale, in which case the upstream never sees the datagram and the
@@ -207,7 +188,7 @@ pub fn tcp_first_payload_wait_ms() -> u64 {
 // evicted from `nat_table` + `reply_readers`, so the next app datagram
 // dispatches a fresh socket against (hopefully) a refreshed iOS route.
 //
-// 10 s default to match TCP's `DIAL_DEADLINE_MS`. The cost for legit
+// 10 s default to match the engine's TCP connect bound. The cost for legit
 // no-reply UDP traffic (fire-and-forget telemetry, mDNS) is a
 // dispatch + bind churn every 10 s — negligible relative to even a
 // single round-trip's allocation cost. Tunable at runtime via
@@ -1253,9 +1234,7 @@ async fn dispatch_tcp(
         return;
     };
 
-    let accepted_at_ms = state.last_active_ms.load(Ordering::Relaxed);
-    let dial_deadline = DIAL_DEADLINE_MS.load(Ordering::Relaxed);
-    let watchdog_state = state.clone();
+    let eof_state = state.clone();
 
     let local_eof = Arc::new(Notify::new());
     let mut local = IdleTracking {
@@ -1301,14 +1280,6 @@ async fn dispatch_tcp(
         }
     }
 
-    local
-        .state
-        .last_active_ms
-        .store(now_ms().max(accepted_at_ms + 1), Ordering::Relaxed);
-
-    let eof_state = watchdog_state.clone();
-    let dial_watchdog = run_dial_watchdog(watchdog_state, accepted_at_ms, dial_deadline);
-    tokio::pin!(dial_watchdog);
     let relay = tokio::io::copy_bidirectional(&mut local, &mut proxy);
     tokio::pin!(relay);
 
@@ -1327,12 +1298,6 @@ async fn dispatch_tcp(
                     }
                 }
             }
-        }
-        _ = &mut dial_watchdog => {
-            warn!(
-                "tun2socks: mixed-listener dial deadline exceeded for {} -> {} after {} ms; dropping flow",
-                src, dst, dial_deadline,
-            );
         }
     }
 }
@@ -1377,53 +1342,6 @@ async fn await_first_payload<R: AsyncRead + Unpin>(local: &mut R, wait_ms: u64) 
             FirstPayload::Payload(buf)
         }
         Err(_) => FirstPayload::DialWithout,
-    }
-}
-
-/// Dial-deadline watchdog body. Resolves when the per-flow dial has been
-/// idle past the budget; parks forever once the relay starts so the
-/// `select!` arm in `dispatch_tcp` lets the relay future own the rest of
-/// the lifetime.
-///
-/// `dial_deadline_ms == 0` opts out (watchdog parks forever, behaviour
-/// matches the pre-fix pipeline that relied solely on cap-pressure
-/// eviction). Otherwise the watchdog ticks every 500 ms — fine grained
-/// enough to make sub-second `dial_deadline_ms` settings (used by tests)
-/// converge in <=2 ticks, coarse enough not to be a measurable wake-up
-/// cost under steady state.
-///
-/// Factored out of `dispatch_tcp` so unit tests can drive it without
-/// standing up the engine, netstack, and tcp-listener plumbing the
-/// real call site requires. See the `dial_watchdog_*` tests at the
-/// bottom of this file for the contract pinned in CI.
-async fn run_dial_watchdog(state: Arc<FlowState>, accepted_at_ms: u64, dial_deadline_ms: u64) {
-    if dial_deadline_ms == 0 {
-        std::future::pending::<()>().await;
-        return;
-    }
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(dial_deadline_ms);
-    loop {
-        // 500 ms is the longest a sub-second deadline can wait without
-        // overshooting the budget by more than one tick. Pick something
-        // smaller (say 100 ms) only if test flakiness from the 500 ms
-        // floor becomes a real issue.
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
-            // Relay started — dial succeeded. Park; the relay future
-            // now controls the task's lifetime.
-            std::future::pending::<()>().await;
-            return;
-        }
-        if tokio::time::Instant::now() >= deadline {
-            // Final re-check to close the tick-to-deadline race: touch()
-            // could have fired in the sleep wake-up between the load
-            // above and the deadline check.
-            if state.last_active_ms.load(Ordering::Relaxed) > accepted_at_ms {
-                std::future::pending::<()>().await;
-                return;
-            }
-            return;
-        }
     }
 }
 
@@ -2954,128 +2872,6 @@ mod tests {
         let mut buf = [0u8; 5];
         tun.read_exact(&mut buf).await.unwrap();
         assert_eq!(&buf, b"hello");
-    }
-
-    /// Tier 3 regression harness — see
-    /// `docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md`.
-    ///
-    /// Models the failure mode that operators reported as 断流: the
-    /// upstream relay never starts (e.g. `DirectAdapter::dial_tcp`'s
-    /// underlying `TcpStream::connect` is hung on a TEST-NET-1
-    /// black-hole / iOS routing-cache transient), so
-    /// `IdleTracking::touch` never runs and `FlowState.last_active_ms`
-    /// stays frozen at its accept-time value. The watchdog must reap
-    /// the flow within the configured `dial_deadline_ms` budget rather
-    /// than waiting on cap-pressure eviction.
-    #[tokio::test(start_paused = true)]
-    async fn dial_watchdog_fires_when_relay_never_starts() {
-        let now = now_ms();
-        let state = Arc::new(FlowState {
-            last_active_ms: AtomicU64::new(now),
-        });
-
-        let started = tokio::time::Instant::now();
-        // Run with a 750 ms deadline (chosen above the 500 ms tick floor
-        // so we hit exactly one tick before the deadline check) and
-        // assert it resolves within a generous bound.
-        let outer = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            run_dial_watchdog(state.clone(), now, 750),
-        )
-        .await;
-
-        assert!(
-            outer.is_ok(),
-            "watchdog did not resolve within outer 3 s guard — regression"
-        );
-        let elapsed = started.elapsed();
-        // Sub-1500 ms upper bound: the watchdog should fire after at most
-        // ⌈750 / 500⌉ = 2 sleep ticks (1000 ms) plus the final re-check.
-        assert!(
-            elapsed < std::time::Duration::from_millis(1_500),
-            "watchdog took {:?}, expected <1.5 s with a 750 ms deadline",
-            elapsed
-        );
-        // The watchdog must not mutate `last_active_ms` — that's the
-        // relay's job. Pin the contract so a future refactor can't
-        // accidentally trample the field and mask a dial-hang regression.
-        assert_eq!(state.last_active_ms.load(Ordering::Relaxed), now);
-    }
-
-    /// Mirror of the above for the "dial succeeded normally" case: the
-    /// relay advances `last_active_ms` before the deadline expires, and
-    /// the watchdog must park forever (i.e. not return) so the relay
-    /// future owns the rest of the flow's lifetime. Drives the same
-    /// `select!`-arm semantics as `dispatch_tcp` without standing up
-    /// the netstack.
-    #[tokio::test(start_paused = true)]
-    async fn dial_watchdog_parks_when_relay_starts_in_time() {
-        let now = now_ms();
-        let state = Arc::new(FlowState {
-            last_active_ms: AtomicU64::new(now),
-        });
-
-        // Bump `last_active_ms` after 200 ms — simulates the first
-        // `IdleTracking::touch()` once the relay reads the app's first
-        // payload. The watchdog should observe the advance on its first
-        // 500 ms tick and park.
-        let state_for_bump = state.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            state_for_bump
-                .last_active_ms
-                .store(now + 1, Ordering::Relaxed);
-        });
-
-        // 750 ms deadline; outer 2 s guard. If the watchdog mistakenly
-        // returns despite the bump, the outer timeout doesn't fire and
-        // `outer.is_err()` fails.
-        let outer = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            run_dial_watchdog(state, now, 750),
-        )
-        .await;
-        assert!(
-            outer.is_err(),
-            "watchdog returned despite the relay starting before the deadline — regression",
-        );
-    }
-
-    /// `dial_deadline_ms == 0` is the documented opt-out: the watchdog
-    /// must never fire, even if the relay never starts. Falls back to
-    /// cap-pressure eviction as the only line of defence.
-    #[tokio::test(start_paused = true)]
-    async fn dial_watchdog_zero_deadline_opts_out() {
-        let now = now_ms();
-        let state = Arc::new(FlowState {
-            last_active_ms: AtomicU64::new(now),
-        });
-
-        // 5 s outer guard with a 0 deadline: the watchdog should never
-        // resolve in that window.
-        let outer = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            run_dial_watchdog(state, now, 0),
-        )
-        .await;
-        assert!(
-            outer.is_err(),
-            "0-ms deadline must opt out of the watchdog (parked forever)",
-        );
-    }
-
-    #[test]
-    fn dial_deadline_ms_roundtrip_and_zero_disables() {
-        let prev = dial_deadline_ms();
-        // Default initial value matches the documented threshold.
-        // (Other tests don't touch this knob, so the first read sees it.)
-        assert!(set_dial_deadline_ms(7_500));
-        assert_eq!(dial_deadline_ms(), 7_500);
-        assert!(set_dial_deadline_ms(0));
-        assert_eq!(dial_deadline_ms(), 0, "0 must be accepted to opt out");
-        // Restore so other parallel tests that may sample the knob see the
-        // configured default.
-        set_dial_deadline_ms(prev);
     }
 
     #[test]

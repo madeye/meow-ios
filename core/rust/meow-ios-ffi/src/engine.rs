@@ -71,7 +71,9 @@ fn install_tls_provider() {
 /// Normalize the effective YAML before `load_config`: iOS owns exactly one
 /// mixed listener (`mixed-port`) and exactly one DNS listener (`dns.listen`).
 /// Drop other listener shorthands / explicit listener arrays so subscriptions
-/// cannot create duplicate ports or unexpected inbound sockets.
+/// cannot create duplicate ports or unexpected inbound sockets. Also inject
+/// the iOS default `tcp-connect-timeout` (bounded DIRECT dial) when the
+/// config doesn't set one — see the inline comment for rationale.
 ///
 /// Operates on a generic `serde_yaml::Value` rather than projecting through
 /// `RawConfig`: the latter has no `#[serde(flatten)]` catch-all and no
@@ -84,6 +86,20 @@ fn prepare_ios_config(yaml: &str) -> Result<String> {
     if let serde_yaml::Value::Mapping(m) = &mut doc {
         for key in ["port", "socks-port", "tproxy-port", "listeners"] {
             m.remove(serde_yaml::Value::String(key.to_string()));
+        }
+        // Bound the built-in DIRECT adapter's `TcpStream::connect`. iOS
+        // scoped-routing / reachability-cache transients can leave a direct
+        // connect hanging indefinitely (see
+        // docs/INVESTIGATION-2026-05-18-tcp-direct-rule-disconnect.md);
+        // without a bound the flow is reaped only by the 600 s idle
+        // sweeper. 10 s: safely above cold cellular handshakes against
+        // distant CN PoPs (~5-8 s observed) and below Mobile Safari's
+        // ~12 s request-timeout floor, so the app's own retry loop kicks
+        // in. Injected only when the user's config doesn't set it, so a
+        // subscription/user override wins.
+        let key = serde_yaml::Value::String("tcp-connect-timeout".to_string());
+        if !m.contains_key(&key) {
+            m.insert(key, serde_yaml::Value::Number(10.into()));
         }
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
@@ -540,6 +556,34 @@ log-level: info
         assert_eq!(m.get("mixed-port").and_then(|v| v.as_i64()), Some(7892));
         assert_eq!(m.get("mode").and_then(|v| v.as_str()), Some("rule"));
         assert_eq!(m.get("log-level").and_then(|v| v.as_str()), Some("info"));
+    }
+
+    #[test]
+    fn prepare_injects_default_tcp_connect_timeout() {
+        let out = prepare_ios_config("mode: rule\n").expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(
+            doc.as_mapping()
+                .unwrap()
+                .get(serde_yaml::Value::String("tcp-connect-timeout".into()))
+                .and_then(|v| v.as_i64()),
+            Some(10),
+            "iOS default DIRECT connect bound must be injected"
+        );
+    }
+
+    #[test]
+    fn prepare_preserves_user_tcp_connect_timeout() {
+        let out = prepare_ios_config("mode: rule\ntcp-connect-timeout: 42\n").expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(
+            doc.as_mapping()
+                .unwrap()
+                .get(serde_yaml::Value::String("tcp-connect-timeout".into()))
+                .and_then(|v| v.as_i64()),
+            Some(42),
+            "a user/subscription-set value must win over the injected default"
+        );
     }
 
     #[test]
