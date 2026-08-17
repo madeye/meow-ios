@@ -317,6 +317,34 @@ int meow_tun_set_dial_deadline_ms(int ms);
 int meow_tun_dial_deadline_ms(void);
 
 /**
+ * Set the TCP first-payload wait budget, in milliseconds. lwIP completes
+ * the local 3-way handshake on its own, so without this gate every SYN
+ * entering the TUN created a real meow connection (SOCKS5 CONNECT through
+ * the rule engine) even when the app never sent a byte — port probes,
+ * Safari preconnect, cancelled happy-eyeballs racers. With the gate,
+ * `dispatch_tcp` only dials meow once the app's first payload arrives; a
+ * flow that closes before sending data never creates an internal
+ * connection. If the budget elapses with the flow still open, the dial
+ * proceeds without a payload so server-speaks-first protocols (STARTTLS
+ * mail, FTP control) keep working.
+ *
+ * Default 1000 ms. Pass `0` to disable the gate (legacy dial-on-accept
+ * behaviour). Negative values are rejected.
+ *
+ * Takes effect on the next flow accepted; does not affect in-flight
+ * flows.
+ *
+ * Returns 0 on success, -1 on invalid input.
+ */
+int meow_tun_set_tcp_first_payload_wait_ms(int ms);
+
+/**
+ * Read the currently-configured TCP first-payload wait budget, in
+ * milliseconds. `0` means the gate is disabled.
+ */
+int meow_tun_tcp_first_payload_wait_ms(void);
+
+/**
  * Set the per-UDP-session first-reply deadline, in milliseconds. The
  * symmetric counterpart to `meow_tun_set_dial_deadline_ms` for the UDP
  * path — UDP doesn't connect, but iOS auto-bypass can silently drop

@@ -156,6 +156,47 @@ pub fn dial_deadline_ms() -> u64 {
     DIAL_DEADLINE_MS.load(Ordering::Relaxed)
 }
 
+// First-payload gate on the TCP dial. lwIP completes the local 3-way
+// handshake on its own (SYN in → SYN-ACK out), so *every* SYN that enters
+// the TUN used to produce a mixed-listener connect + SOCKS5 CONNECT — a
+// real meow connection through the rule engine — even when the app never
+// sent a byte. Bare probes are common on iOS: port scans, Safari
+// preconnect races, happy-eyeballs losers cancelled right after the
+// handshake, reachability checks. Each one showed up as a phantom entry in
+// the Connections UI and dialed a real upstream.
+//
+// `dispatch_tcp` therefore waits for the app's first payload bytes before
+// creating any internal connection. A flow that EOFs/RSTs before sending
+// data is dropped without meow ever seeing it. The wait is bounded: if the
+// budget elapses with the flow still open, we dial anyway with no initial
+// payload, because server-speaks-first protocols (SMTP / IMAP / POP3
+// STARTTLS, FTP control) send nothing until the upstream banner arrives —
+// an unbounded wait would deadlock them against the un-dialed upstream.
+//
+// 1 s default: probes and cancelled racers close within an RTT or two, so
+// they are reliably absorbed, while the worst case for a genuine
+// server-first flow is a one-second banner delay on rare, latency-tolerant
+// protocols. Tunable at runtime via [`set_tcp_first_payload_wait_ms`] /
+// `meow_tun_set_tcp_first_payload_wait_ms`; 0 restores the legacy
+// dial-on-accept behaviour.
+const TCP_FIRST_PAYLOAD_WAIT_MS_DEFAULT: u64 = 1_000;
+static TCP_FIRST_PAYLOAD_WAIT_MS: AtomicU64 = AtomicU64::new(TCP_FIRST_PAYLOAD_WAIT_MS_DEFAULT);
+
+/// Set the first-payload wait budget, in milliseconds. `0` disables the
+/// gate (legacy behaviour: dial the mixed listener as soon as lwIP
+/// accepts, even for flows that never send data). Returns true
+/// unconditionally.
+pub fn set_tcp_first_payload_wait_ms(ms: u64) -> bool {
+    TCP_FIRST_PAYLOAD_WAIT_MS.store(ms, Ordering::Relaxed);
+    true
+}
+
+/// Read the currently-configured first-payload wait budget, in
+/// milliseconds. `0` means the gate is disabled.
+pub fn tcp_first_payload_wait_ms() -> u64 {
+    TCP_FIRST_PAYLOAD_WAIT_MS.load(Ordering::Relaxed)
+}
+
 // Per-UDP-session first-reply deadline. The symmetric counterpart to
 // DIAL_DEADLINE_MS for the UDP path. UDP doesn't connect, so there's no
 // `TcpStream::connect` hang to bound — but iOS auto-bypass can silently
@@ -1224,6 +1265,24 @@ async fn dispatch_tcp(
         eof_fired: AtomicBool::new(false),
     };
 
+    // First-payload gate (see TCP_FIRST_PAYLOAD_WAIT_MS docs above): no
+    // internal meow connection exists yet at this point — a probe that
+    // closes without sending data returns here having cost only an lwIP
+    // pcb and this task.
+    let first_payload = match await_first_payload(
+        &mut local,
+        TCP_FIRST_PAYLOAD_WAIT_MS.load(Ordering::Relaxed),
+    )
+    .await
+    {
+        FirstPayload::Payload(buf) => Some(buf),
+        FirstPayload::DialWithout => None,
+        FirstPayload::Closed => {
+            trace!("tun2socks: {src} -> {dst} closed before first payload; skipping meow dial");
+            return;
+        }
+    };
+
     let mut proxy = match TcpStream::connect(mixed_addr).await {
         Ok(s) => s,
         Err(e) => {
@@ -1234,6 +1293,12 @@ async fn dispatch_tcp(
     if let Err(e) = socks5_connect(&mut proxy, dst).await {
         warn!("tun2socks: SOCKS5 CONNECT {src} -> {dst} failed: {e}");
         return;
+    }
+    if let Some(chunk) = first_payload {
+        if let Err(e) = proxy.write_all(&chunk).await {
+            warn!("tun2socks: forwarding first payload {src} -> {dst} failed: {e}");
+            return;
+        }
     }
 
     local
@@ -1269,6 +1334,49 @@ async fn dispatch_tcp(
                 src, dst, dial_deadline,
             );
         }
+    }
+}
+
+/// Outcome of the pre-dial first-payload wait. See
+/// `TCP_FIRST_PAYLOAD_WAIT_MS` for the rationale.
+enum FirstPayload {
+    /// The app sent data; forward this chunk right after SOCKS5 CONNECT
+    /// succeeds (the relay picks up anything beyond the first read).
+    Payload(Vec<u8>),
+    /// Dial without an initial payload: either the gate is disabled
+    /// (`wait_ms == 0`) or the budget elapsed with the flow still open —
+    /// the server-speaks-first fallback.
+    DialWithout,
+    /// The local endpoint EOF'd/RST'd before sending any payload (SYN
+    /// probe, cancelled happy-eyeballs racer). No meow connection should
+    /// be created.
+    Closed,
+}
+
+/// Wait up to `wait_ms` for the first payload bytes from the local
+/// netstack stream. Factored out of `dispatch_tcp` so unit tests can
+/// drive it with an in-memory duplex stream — see the
+/// `first_payload_*` tests at the bottom of this file.
+async fn await_first_payload<R: AsyncRead + Unpin>(local: &mut R, wait_ms: u64) -> FirstPayload {
+    if wait_ms == 0 {
+        return FirstPayload::DialWithout;
+    }
+    // 4 KiB covers typical first client messages (HTTP request line +
+    // headers, TLS ClientHello) in one read; anything larger simply
+    // continues through the relay once it starts.
+    let mut buf = vec![0u8; 4096];
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(wait_ms),
+        local.read(&mut buf),
+    )
+    .await
+    {
+        Ok(Ok(0)) | Ok(Err(_)) => FirstPayload::Closed,
+        Ok(Ok(n)) => {
+            buf.truncate(n);
+            FirstPayload::Payload(buf)
+        }
+        Err(_) => FirstPayload::DialWithout,
     }
 }
 
@@ -2783,6 +2891,69 @@ mod tests {
         assert!(set_tcp_idle_ttl_ms(42_000));
         assert_eq!(tcp_idle_ttl_ms(), 42_000);
         set_tcp_idle_ttl_ms(prev);
+    }
+
+    #[test]
+    fn tcp_first_payload_wait_setter_roundtrip() {
+        let prev = tcp_first_payload_wait_ms();
+        assert!(set_tcp_first_payload_wait_ms(0), "0 (disabled) is accepted");
+        assert_eq!(tcp_first_payload_wait_ms(), 0);
+        assert!(set_tcp_first_payload_wait_ms(2_500));
+        assert_eq!(tcp_first_payload_wait_ms(), 2_500);
+        set_tcp_first_payload_wait_ms(prev);
+    }
+
+    /// App sends data promptly → the gate hands back exactly those bytes
+    /// so `dispatch_tcp` can forward them after SOCKS5 CONNECT.
+    #[tokio::test(start_paused = true)]
+    async fn first_payload_returns_app_bytes() {
+        let (mut app, mut tun) = tokio::io::duplex(4096);
+        app.write_all(b"GET / HTTP/1.1\r\n").await.unwrap();
+        match await_first_payload(&mut tun, 1_000).await {
+            FirstPayload::Payload(buf) => assert_eq!(buf, b"GET / HTTP/1.1\r\n"),
+            _ => panic!("expected Payload"),
+        }
+    }
+
+    /// SYN-probe shape: local endpoint closes without ever sending a
+    /// byte. The gate must report Closed so no meow connection is
+    /// created.
+    #[tokio::test(start_paused = true)]
+    async fn first_payload_probe_close_skips_dial() {
+        let (app, mut tun) = tokio::io::duplex(4096);
+        drop(app);
+        assert!(matches!(
+            await_first_payload(&mut tun, 1_000).await,
+            FirstPayload::Closed
+        ));
+    }
+
+    /// Server-speaks-first fallback: the flow stays open but silent past
+    /// the budget → dial anyway, with no initial payload.
+    #[tokio::test(start_paused = true)]
+    async fn first_payload_timeout_dials_without_payload() {
+        let (_app, mut tun) = tokio::io::duplex(4096);
+        assert!(matches!(
+            await_first_payload(&mut tun, 1_000).await,
+            FirstPayload::DialWithout
+        ));
+    }
+
+    /// `0` opts out entirely: no read is attempted (pending app bytes are
+    /// left for the relay) and the dial proceeds immediately — the legacy
+    /// dial-on-accept pipeline.
+    #[tokio::test(start_paused = true)]
+    async fn first_payload_zero_budget_opts_out() {
+        let (mut app, mut tun) = tokio::io::duplex(4096);
+        app.write_all(b"hello").await.unwrap();
+        assert!(matches!(
+            await_first_payload(&mut tun, 0).await,
+            FirstPayload::DialWithout
+        ));
+        // The pending bytes were not consumed by the disabled gate.
+        let mut buf = [0u8; 5];
+        tun.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf, b"hello");
     }
 
     /// Tier 3 regression harness — see
