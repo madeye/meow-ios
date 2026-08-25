@@ -21,4 +21,4 @@ FOR TESTERS
   flow immediately in the morning.
 • IPv6 flip: on dual-stack Wi-Fi, disable IPv6 on the router; browsing
   should recover within seconds.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

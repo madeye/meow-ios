@@ -24,4 +24,4 @@
   会回退到 TCP HTTP/2（通常对用户透明）。
 
 请通过 TestFlight 反馈，或在此处提交 Issue：
-https://github.com/madeye/meow-ios/issues
+https://github.com/meow-rs/meow-ios/issues

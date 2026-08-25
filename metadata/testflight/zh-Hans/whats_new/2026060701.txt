@@ -24,4 +24,4 @@ Build 2026060701 (1.3.1)
   纯 IPv4 热点），浏览应在几秒内恢复。
 • QUIC 检查：纯 IPv4 网络开启 VPN 后，YouTube / Instagram
   视频应能流畅播放，无长时间卡顿。
-• 问题反馈：https://github.com/madeye/meow-ios/issues
+• 问题反馈：https://github.com/meow-rs/meow-ios/issues

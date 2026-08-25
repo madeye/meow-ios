@@ -25,4 +25,4 @@ meow 为一次性买断的付费应用，不含任何内购或订阅收费。本
 
 开源
 meow-ios 是开源软件。源代码、问题追踪与发布说明：
-https://github.com/madeye/meow-ios
+https://github.com/meow-rs/meow-ios

@@ -23,4 +23,4 @@ FOR TESTERS
 • Heavy-browsing memory test: open 10+ tabs simultaneously and
   confirm the VPN stays connected (no jetsam kill).
 • Verify geosite rules with keyword/regex patterns fire correctly.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

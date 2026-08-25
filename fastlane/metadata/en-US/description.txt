@@ -25,4 +25,4 @@ meow is a one-time purchase, with no in-app purchases and no subscription fees. 
 
 OPEN SOURCE
 meow-ios is open source. Source, issue tracker, and release notes:
-https://github.com/madeye/meow-ios
+https://github.com/meow-rs/meow-ios

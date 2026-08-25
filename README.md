@@ -22,7 +22,7 @@ branding. Since then, `main` also picked up a wake-from-idle reliability
 fix — after sleep/wake the tunnel probes its data path and only restarts
 when the probe fails — plus a meow-rs engine bump to 0.18.0 and a leading
 swipe menu for refreshing individual subscriptions. See the
-[release notes](https://github.com/madeye/meow-ios/releases) for earlier
+[release notes](https://github.com/meow-rs/meow-ios/releases) for earlier
 per-version changelogs.
 
 ## Status

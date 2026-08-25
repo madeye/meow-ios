@@ -47,4 +47,4 @@ FOR TESTERS
   GEOSITE,youtube,YouTube) and confirm the matching node is hit
   from the moment you tap Connect — previously the rule silently
   no-op'd until the geosite DB landed.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

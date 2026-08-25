@@ -15,4 +15,4 @@ FOR TESTERS
   YouTube, Instagram). Pages and media should load normally and stay
   routed through the proxy. If anything fails to resolve or appears to
   bypass the tunnel, please report it with the app and rough time.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

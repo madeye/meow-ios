@@ -59,4 +59,4 @@ If this policy changes, the updated text will be committed to this repository. T
 
 ## Contact
 
-Questions about this policy: open an issue at <https://github.com/madeye/meow-ios/issues> or email <max.c.lv@gmail.com>.
+Questions about this policy: open an issue at <https://github.com/meow-rs/meow-ios/issues> or email <max.c.lv@gmail.com>.

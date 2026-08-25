@@ -24,4 +24,4 @@ FOR TESTERS
   this could trigger a silent disconnect under burst load.
 • Verify GEOIP rules still fire correctly (the MMDB is now mmap'd
   instead of heap-loaded; functional behavior should be identical).
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

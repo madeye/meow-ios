@@ -30,4 +30,4 @@ Build 2026052901 (1.3.1)
   状态）。
 • 重度浏览：同时打开 10+ 个标签页；确认 VPN 保持连接（无 jetsam
   杀进程）。
-• 问题反馈：https://github.com/madeye/meow-ios/issues
+• 问题反馈：https://github.com/meow-rs/meow-ios/issues

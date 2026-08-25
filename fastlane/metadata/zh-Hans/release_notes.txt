@@ -5,4 +5,4 @@
 • 隧道会等应用发出第一个 TCP 数据包再建立代理连接，端口探测不再产生幽灵会话
 • 每个应用源端口共用一条 UDP ASSOCIATE，P2P/BitTorrent 集群不会再挤占 HTTPS
 
-问题与反馈：https://github.com/madeye/meow-ios/issues
+问题与反馈：https://github.com/meow-rs/meow-ios/issues

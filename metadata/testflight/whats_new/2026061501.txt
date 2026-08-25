@@ -16,4 +16,4 @@ FOR TESTERS
   especially QUIC-heavy apps (Xiaohongshu / RedNote). Traffic should
   never silently stall. If you ever have to toggle the VPN to restore
   traffic, please report it with roughly when it happened.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

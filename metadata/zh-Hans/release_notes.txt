@@ -8,4 +8,4 @@
 
 已知限制：隧道尚未转发非 DNS 的 UDP 流量，QUIC/HTTP3 会回退到 TCP HTTP/2（对用户通常是透明的）。正在修复。
 
-问题与反馈：https://github.com/madeye/meow-ios/issues
+问题与反馈：https://github.com/meow-rs/meow-ios/issues

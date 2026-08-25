@@ -15,4 +15,4 @@ FOR TESTERS
   videos — content should load normally over the proxy.
 • General browsing and streaming should be unaffected; please report any
   site or app that worked before but now stalls or fails to load.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

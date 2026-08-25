@@ -22,4 +22,4 @@ GeoIP 提取的 CN 段、以及 1.1.5 的所有行为均保持不变。
   DoT / DoH)。
 
 请通过 TestFlight 反馈或在以下地址提 issue:
-https://github.com/madeye/meow-ios/issues
+https://github.com/meow-rs/meow-ios/issues

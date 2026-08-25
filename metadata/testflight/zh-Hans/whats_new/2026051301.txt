@@ -47,4 +47,4 @@ Build 2026051301 (1.2.1)
    应无新的崩溃或 UI 卡顿。
 
 如有反馈请通过 TestFlight 或前往
-https://github.com/madeye/meow-ios/issues
+https://github.com/meow-rs/meow-ios/issues

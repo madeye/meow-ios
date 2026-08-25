@@ -1,1 +1,1 @@
-https://github.com/madeye/meow-ios/blob/main/PRIVACY.md
+https://github.com/meow-rs/meow-ios/blob/main/PRIVACY.md

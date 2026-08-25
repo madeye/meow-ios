@@ -40,4 +40,4 @@
 • GEOSITE 规则路由：从配置里挑一条（例如 GEOSITE,youtube,YouTube），
   确认点 Connect 之后立刻命中对应节点——此前该规则要等 geosite DB
   下载到位才生效。
-• 问题反馈：https://github.com/madeye/meow-ios/issues
+• 问题反馈：https://github.com/meow-rs/meow-ios/issues

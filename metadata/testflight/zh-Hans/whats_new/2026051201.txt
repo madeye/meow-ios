@@ -47,4 +47,4 @@ Build 2026051201 (1.2.0)
   YAML 的 dns: 段里指定 DNS。
 
 请通过 TestFlight 反馈或在以下地址提 issue:
-https://github.com/madeye/meow-ios/issues
+https://github.com/meow-rs/meow-ios/issues

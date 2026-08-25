@@ -59,4 +59,4 @@ Build 2026052103 (1.3.1)
   请通过 TestFlight 反馈提交,附设备型号和 iOS 版本。
   请说明时序:"启动瞬间崩" vs "首次连接尝试后崩" —— 它们
   指向不同的代码路径。
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

@@ -27,4 +27,4 @@ KNOWN LIMITATIONS
   upstreams by design — matches trust-china-dns upstream).
 
 Please send TestFlight feedback or open an issue at:
-https://github.com/madeye/meow-ios/issues
+https://github.com/meow-rs/meow-ios/issues

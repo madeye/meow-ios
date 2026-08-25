@@ -69,4 +69,4 @@ FOR TESTERS
   with the device model and iOS version. Include the timing:
   "instant on launch" vs "after first connect attempt" — they
   point at different code paths.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

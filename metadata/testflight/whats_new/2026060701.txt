@@ -26,4 +26,4 @@ FOR TESTERS
   hop to a v4-only AP); browsing should recover within seconds.
 • QUIC check: with the VPN up on an IPv4-only network, YouTube /
   Instagram video should stream without long stalls.
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

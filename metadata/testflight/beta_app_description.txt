@@ -6,4 +6,4 @@ Known limitation: non-DNS UDP traffic is not yet forwarded — QUIC/HTTP3 falls 
 
 The app does not collect analytics, subscription URLs, proxy credentials, configuration contents, DNS queries, or tunneled traffic.
 
-GitHub: https://github.com/madeye/meow-ios
+GitHub: https://github.com/meow-rs/meow-ios

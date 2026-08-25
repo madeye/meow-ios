@@ -17,4 +17,4 @@ KNOWN LIMITATIONS
 • Non-DNS UDP traffic is not forwarded yet. WireGuard outbounds will not pass traffic. QUIC / HTTP3 falls back to TCP HTTP/2 (usually transparent).
 
 Please send TestFlight feedback or open an issue at:
-https://github.com/madeye/meow-ios/issues
+https://github.com/meow-rs/meow-ios/issues

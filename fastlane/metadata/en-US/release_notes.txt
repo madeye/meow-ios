@@ -5,4 +5,4 @@
 • The tunnel waits for the app's first TCP payload before opening a proxy connection, so port probes no longer create phantom sessions
 • One UDP ASSOCIATE per app source port, so P2P/BitTorrent swarms no longer starve HTTPS
 
-Issues and feedback: https://github.com/madeye/meow-ios/issues
+Issues and feedback: https://github.com/meow-rs/meow-ios/issues

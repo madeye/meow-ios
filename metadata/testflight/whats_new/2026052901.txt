@@ -34,4 +34,4 @@ FOR TESTERS
   routes (no stale state).
 • Heavy browsing: open 10+ tabs simultaneously; confirm VPN stays
   connected (no jetsam kill).
-• Issues: https://github.com/madeye/meow-ios/issues
+• Issues: https://github.com/meow-rs/meow-ios/issues

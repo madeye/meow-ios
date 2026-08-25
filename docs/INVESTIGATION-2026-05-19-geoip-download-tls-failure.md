@@ -350,6 +350,6 @@ e442d7b  feat(geo): lazy-download GeoIP/ASN databases on connect
 ```
 
 No GitHub issue currently filed for this specific banner. `gh search`
-across `madeye/meow-ios` for `geoip OR jsdelivr OR "无法启动隧道" OR
+across `meow-rs/meow-ios` for `geoip OR jsdelivr OR "无法启动隧道" OR
 "Failed to download" OR TLS` returned only #112 (YAML import format,
 unrelated).
