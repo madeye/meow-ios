@@ -101,8 +101,89 @@ fn prepare_ios_config(yaml: &str) -> Result<String> {
         if !m.contains_key(&key) {
             m.insert(key, serde_yaml::Value::Number(10.into()));
         }
+        contain_provider_paths(m);
     }
     serde_yaml::to_string(&doc).context("serializing stripped config YAML")
+}
+
+/// Rewrite `rule-providers[*].path` / `proxy-providers[*].path` values that
+/// would escape the provider cache directory into a contained
+/// `./<basename>`.
+///
+/// meow-rs gained a `safe_path` containment guard (upstream #429): a provider
+/// `path:` that is absolute, or that lexically escapes the cache dir via
+/// `..`, is now a hard error out of `load_config` — which on iOS means
+/// `meow_engine_start` fails and the tunnel never comes up. That guard is
+/// correct (it closed an arbitrary-file-write), but it is a breaking change
+/// for a very common real-world config: a subscription or profile exported
+/// from a desktop client carries paths like
+/// `/Users/me/.config/meow/ruleset/cn.yaml`.
+///
+/// Rejecting those on iOS buys nothing. The App Group container is the only
+/// writable location in the sandbox, so a desktop absolute path could never
+/// have resolved here regardless — it is dead information, not user intent.
+/// Normalizing it to the basename inside the cache dir preserves the
+/// provider's function and keeps upstream's containment guarantee intact
+/// (we only ever write a contained relative path back).
+///
+/// Contained relative paths are left untouched, so configs authored for iOS
+/// keep their exact on-disk layout, subdirectories included.
+fn contain_provider_paths(root: &mut serde_yaml::Mapping) {
+    for section in ["rule-providers", "proxy-providers"] {
+        let Some(serde_yaml::Value::Mapping(providers)) =
+            root.get_mut(serde_yaml::Value::String(section.to_string()))
+        else {
+            continue;
+        };
+        for (name, entry) in providers.iter_mut() {
+            let Some(entry) = entry.as_mapping_mut() else {
+                continue;
+            };
+            let path_key = serde_yaml::Value::String("path".to_string());
+            let Some(current) = entry.get(&path_key).and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            let Some(safe) = contained_provider_path(current, name.as_str()) else {
+                continue;
+            };
+            tracing::warn!(
+                "prepare_ios_config: {section} '{}' path '{current}' escapes the provider \
+                 directory; rewriting to '{safe}' inside the App Group container",
+                name.as_str().unwrap_or("?"),
+            );
+            entry.insert(path_key, serde_yaml::Value::String(safe));
+        }
+    }
+}
+
+/// Return `Some(replacement)` when `path` would escape the provider cache
+/// directory, or `None` when it is already contained and must be left alone.
+///
+/// Lexical, not filesystem-based: the cache dir is the App Group container at
+/// runtime and does not exist during unit tests, so `canonicalize` is not
+/// available here. meow-rs re-checks the result against the real directory
+/// anyway — this pass only has to stop handing it a path it will reject.
+fn contained_provider_path(path: &str, name: Option<&str>) -> Option<String> {
+    use std::path::{Component, Path};
+
+    let p = Path::new(path);
+    let escapes = p.is_absolute()
+        || p.components()
+            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)));
+    if !escapes {
+        return None;
+    }
+
+    // Prefer the original file name so a rewritten provider keeps a
+    // recognizable on-disk identity; fall back to the provider's key when the
+    // path has no usable final component (`/`, `..`, …).
+    let basename = p
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty() && *s != ".." && *s != ".")
+        .or(name)
+        .unwrap_or("provider");
+    Some(format!("./{basename}"))
 }
 
 /// RAII handle that removes a file on drop. Used so the sibling
@@ -258,7 +339,20 @@ pub fn start(config_path: &str) -> Result<()> {
     // the upstream never resolves to a 28.x fake IP. Android installs the same
     // hook plus a `SocketProtector` via its JNI bridge; iOS needs only the hook
     // (the NE process's own sockets already bypass its tunnel).
-    meow_common::set_host_resolver(Arc::new(meow_dns::ResolverHostHook::new(resolver.clone())));
+    //
+    // `new_with_proxy_resolver` (meow-rs #420) honours
+    // `dns.proxy-server-nameserver` when set: proxy-server hostnames then
+    // resolve only through that dedicated resolver, matching mihomo. When
+    // unset, `proxy_resolver` is `None` and the hook uses the main resolver.
+    // Always install: iOS is a VPN platform and `meow_patch_config` pins
+    // `dns.enable: true`, so the stub-resolver-when-DNS-off desktop path
+    // does not apply.
+    meow_common::set_host_resolver(Arc::new(
+        meow_dns::ResolverHostHook::new_with_proxy_resolver(
+            resolver.clone(),
+            cfg.dns.proxy_resolver.clone(),
+        ),
+    ));
 
     let tunnel = Tunnel::new(resolver.clone());
     tunnel.set_mode(cfg.general.mode);
@@ -583,6 +677,199 @@ log-level: info
                 .and_then(|v| v.as_i64()),
             Some(42),
             "a user/subscription-set value must win over the injected default"
+        );
+    }
+
+    /// Helper: run `prepare_ios_config` over a one-provider config and return
+    /// the `path:` it emitted.
+    fn prepared_provider_path(section: &str, path: &str) -> String {
+        let yaml = format!(
+            "mode: rule\n{section}:\n  cn:\n    type: http\n    behavior: domain\n    \
+             url: https://example.test/cn.txt\n    path: {path}\n"
+        );
+        let out = prepare_ios_config(&yaml).expect("strip ok");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&out).unwrap();
+        doc.as_mapping()
+            .unwrap()
+            .get(serde_yaml::Value::String(section.into()))
+            .and_then(serde_yaml::Value::as_mapping)
+            .and_then(|m| m.get(serde_yaml::Value::String("cn".into())))
+            .and_then(serde_yaml::Value::as_mapping)
+            .and_then(|m| m.get(serde_yaml::Value::String("path".into())))
+            .and_then(serde_yaml::Value::as_str)
+            .expect("path key survives")
+            .to_string()
+    }
+
+    #[test]
+    fn contained_provider_paths_are_left_untouched() {
+        // Configs authored for iOS must keep their exact on-disk layout,
+        // subdirectories included — rewriting these would move the cache file
+        // out from under an already-populated container.
+        for path in ["./cn.txt", "cn.txt", "./ruleset/cn.txt", "ruleset/cn.txt"] {
+            assert_eq!(
+                prepared_provider_path("rule-providers", path),
+                path,
+                "contained path {path} must not be rewritten"
+            );
+        }
+    }
+
+    #[test]
+    fn escaping_provider_paths_are_contained() {
+        // Regression guard for the meow-rs #429 `safe_path` containment: these
+        // shapes hard-fail `load_config` (verified against the pinned engine),
+        // so `prepare_ios_config` has to normalize them or the tunnel never
+        // starts. A desktop-exported profile is the common source.
+        for section in ["rule-providers", "proxy-providers"] {
+            assert_eq!(
+                prepared_provider_path(section, "/Users/me/.config/meow/ruleset/cn.yaml"),
+                "./cn.yaml",
+                "{section}: an absolute desktop path must be contained by basename"
+            );
+            assert_eq!(
+                prepared_provider_path(section, "../../etc/cn.txt"),
+                "./cn.txt",
+                "{section}: a `..` escape must be contained by basename"
+            );
+        }
+    }
+
+    #[test]
+    fn escaping_provider_path_without_basename_falls_back_to_provider_name() {
+        assert_eq!(
+            prepared_provider_path("rule-providers", "/"),
+            "./cn",
+            "a path with no usable final component falls back to the provider key"
+        );
+    }
+
+    fn load_yaml_in_tempdir(yaml: &str) -> anyhow::Result<meow_config::Config> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let f = dir.path().join("effective-config.yaml");
+        std::fs::write(&f, yaml).unwrap();
+        crate::get_engine_runtime().block_on(meow_config::load_config(f.to_str().unwrap()))
+    }
+
+    fn assert_prepared_escaping_provider_loads(section: &str, yaml: &str) {
+        // End-to-end: the whole point of the rewrite is that the engine's own
+        // loader accepts the result. Runs the prepared YAML through
+        // `load_config` with a real cache dir, which is where meow-rs applies
+        // the containment check. #458 made proxy-provider escapes a hard
+        // rebuild failure (rule-provider parity), so both sections must pass.
+        let prepared = prepare_ios_config(yaml).expect("strip ok");
+        let res = load_yaml_in_tempdir(&prepared);
+        assert!(
+            res.is_ok(),
+            "prepared {section} config must clear the engine's provider-path containment, got: {:?}",
+            res.err()
+        );
+    }
+
+    #[test]
+    fn unprepared_escaping_rule_provider_path_is_rejected_by_engine() {
+        // Pins that 0.21.0 still hard-fails #429 containment — the rewrite
+        // in `prepare_ios_config` is load-bearing, not defensive.
+        let yaml = "mixed-port: 7890\nproxies:\n  - name: p1\n    type: direct\nrules:\n  \
+                    - MATCH,p1\nrule-providers:\n  cn:\n    type: http\n    behavior: domain\n    \
+                    url: https://example.test/cn.txt\n    path: /var/mobile/ruleset/cn.txt\n    \
+                    interval: 86400\n";
+        let Err(err) = load_yaml_in_tempdir(yaml) else {
+            panic!("escaping rule-provider path must fail load_config");
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("escapes"),
+            "engine must reject the unprepared path, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn unprepared_escaping_proxy_provider_path_is_rejected_by_engine() {
+        // #458: proxy-provider escapes fail the whole rebuild, not warn-skip.
+        let yaml = "mixed-port: 7890\nproxies:\n  - name: p1\n    type: direct\nrules:\n  \
+                    - MATCH,p1\nproxy-providers:\n  nodes:\n    type: http\n    \
+                    url: https://example.test/proxies.yaml\n    path: /Users/me/.config/meow/nodes.yaml\n    \
+                    interval: 86400\n";
+        let Err(err) = load_yaml_in_tempdir(yaml) else {
+            panic!("escaping proxy-provider path must fail load_config");
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("escapes"),
+            "engine must reject the unprepared path, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn prepared_escaping_provider_config_actually_loads() {
+        assert_prepared_escaping_provider_loads(
+            "rule-providers",
+            "mixed-port: 7890\nproxies:\n  - name: p1\n    type: direct\nrules:\n  \
+             - MATCH,p1\nrule-providers:\n  cn:\n    type: http\n    behavior: domain\n    \
+             url: https://example.test/cn.txt\n    path: /var/mobile/ruleset/cn.txt\n    \
+             interval: 86400\n",
+        );
+    }
+
+    #[test]
+    fn prepared_escaping_proxy_provider_config_actually_loads() {
+        // #458: proxy-provider containment violations now fail the whole
+        // rebuild, not warn-skip. A desktop-exported `path:` would take the
+        // tunnel down unless `prepare_ios_config` rewrites it first.
+        assert_prepared_escaping_provider_loads(
+            "proxy-providers",
+            "mixed-port: 7890\nproxies:\n  - name: p1\n    type: direct\nrules:\n  \
+             - MATCH,p1\nproxy-providers:\n  nodes:\n    type: http\n    \
+             url: https://example.test/proxies.yaml\n    path: /Users/me/.config/meow/nodes.yaml\n    \
+             interval: 86400\n",
+        );
+    }
+
+    #[test]
+    fn proxy_server_nameserver_builds_dedicated_resolver() {
+        // meow-rs #420: `dns.proxy-server-nameserver` produces a dedicated
+        // `proxy_resolver` that `start()` must hand to
+        // `ResolverHostHook::new_with_proxy_resolver`. If this goes `None`
+        // the hook silently falls back to the main resolver and the user's
+        // proxy-server nameservers are ignored.
+        let yaml = r#"
+mixed-port: 7890
+dns:
+  enable: true
+  nameserver: [8.8.8.8]
+  proxy-server-nameserver: [1.1.1.1]
+proxies:
+  - name: p1
+    type: direct
+rules:
+  - MATCH,p1
+"#;
+        let cfg = load_stripped_config_from_str(yaml).expect("config loads");
+        assert!(cfg.dns.enabled, "dns.enable: true must survive prepare");
+        assert!(
+            cfg.dns.proxy_resolver.is_some(),
+            "proxy-server-nameserver must produce a dedicated resolver"
+        );
+    }
+
+    #[test]
+    fn no_proxy_server_nameserver_leaves_proxy_resolver_none() {
+        let yaml = r#"
+mixed-port: 7890
+dns:
+  enable: true
+  nameserver: [8.8.8.8]
+proxies:
+  - name: p1
+    type: direct
+rules:
+  - MATCH,p1
+"#;
+        let cfg = load_stripped_config_from_str(yaml).expect("config loads");
+        assert!(
+            cfg.dns.proxy_resolver.is_none(),
+            "without proxy-server-nameserver the hook must use the main resolver"
         );
     }
 

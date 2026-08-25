@@ -68,12 +68,51 @@ lwip = "0.3"
 # to a release tag normally; bump deliberately rather than tracking main.
 # Each crate is a workspace member of madeye/meow-rs.
 #
-# HEAD: 041c986a (branch ios/connect-timeout-0.20.1 = 0.20.1 c5557577 + the
-# tcp-connect-timeout wiring, PR'd to main separately; keep the branch
-# alive — this Cargo pin is its only anchor, same pattern as the lwip
-# fork pin). Adds the global `tcp-connect-timeout:` (seconds) config
-# field wired into DirectAdapter::with_connect_timeout so a hung direct
-# dial errors instead of hanging; `prepare_ios_config` injects 10 s.
+# HEAD: ac3fcd8d — meow-rs v0.21.0. This retires the
+# `ios/connect-timeout-0.20.1` side branch: its one commit (the global
+# `tcp-connect-timeout:` field wired into DirectAdapter::with_connect_timeout,
+# which `prepare_ios_config` injects at 10 s) merged to main before 0.21.0,
+# so the release is a superset and the branch no longer needs to be kept
+# alive as a Cargo anchor.
+#
+# What the 0.20.1 → 0.21.0 range adds that this crate actually runs:
+# - sing-mux multiplexing (#412 series, #414–#418) plus Xray Mux.Cool,
+#   yamux, and h2mux. NOTE: `mux` is now in meow-proxy's *default*
+#   feature list, so it ships in the NE whether or not a profile uses it
+#   (h2 + yamux + tokio-util). Watch the 50 MB NE budget.
+# - Correctness fixes on paths this crate leans on: fake-IP lookup
+#   serialisation against a check-then-act double-allocate (#434/#436),
+#   fake-ip store compare-and-delete symmetry (#454), atomic UDP NAT-key
+#   claim with eviction gated on session identity (#432/#438 — same family
+#   as the project_udp_nat_dashmap_deadlock freeze), and h2 write-path
+#   partial-write / cancelled-datagram recovery (#423, #428, #441, #452).
+# - Hardening: REALITY pre-auth transcript cap + ordering (#430/#439),
+#   rule / proxy-provider path containment inside the cache dir
+#   (#429/#444, polish #458), direct HTTP fetch body caps for
+#   rule-provider and geodata (#431/#437), h2 bump to 0.4.16
+#   (RUSTSEC-2026-0258).
+#
+# BREAKING, and handled on our side: #429/#444/#458 turn an absolute or
+# `..`-escaping `rule-providers[*].path` / `proxy-providers[*].path` into a
+# hard `load_config` error — i.e. the tunnel would refuse to start on any
+# profile exported from a desktop client. `prepare_ios_config`
+# (engine.rs::contain_provider_paths) now rewrites those to `./<basename>`
+# inside the App Group container before the engine ever sees them; see
+# `escaping_provider_paths_are_contained` and
+# `prepared_escaping_provider_config_actually_loads`. We do not set
+# `SKIP_SAFE_PATH_CHECK` (the #458 mihomo-compat hatch) — rewriting keeps
+# the containment guarantee.
+# - DNS: proxy server hostnames now resolve through the configured DNS
+#   (#420). `engine::start` hands `dns.proxy_resolver` to
+#   `ResolverHostHook::new_with_proxy_resolver` so a
+#   `dns.proxy-server-nameserver` block is honoured instead of always
+#   going through the main resolver. Hosts-file domain aliases (#410).
+# - Interop: unquoted numeric `reality-opts.short-id` (#408/#446), XTLS
+#   Vision + mux gate narrowed to sing-mux so Mux.Cool is allowed
+#   (#424/#445).
+# - meow-rs vendored the madeye/lwip fork in-tree as `meow-lwip` (#409,
+#   #411), but only behind `listener-tun`, which this crate does not
+#   enable — so it does not collide with our own `lwip` patch below.
 #
 # Base 0.20.1 (c5557577) picked up the AnyTLS outbound + REALITY
 # rework (#377: REALITY moved in-tree onto rustls primitives so it no longer
@@ -91,7 +130,7 @@ lwip = "0.3"
 # VMess AEAD interop fix. meow-dns runs in fake-ip mode: the FFI config
 # parser pins `enhanced-mode: fake-ip` with `fake-ip-range: 28.0.0.0/8`
 # (the 2026-07-17 redir-host/DoT switch was reverted in PR #321).
-meow-common = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc" }
+meow-common = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e" }
 # `boring-tls` activates BoringSSL-backed TLS in meow-transport so ECH
 # (RFC 9460 SVCB / HTTPS ECHConfigList) and uTLS fingerprinting work for
 # proxy outbound. Without it, any proxy entry with `ech-opts:` set is
@@ -108,12 +147,12 @@ meow-common = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d283
 # the lwip tun2socks path; would drag netstack-smoltcp/tun-rs dead weight
 # into the NE binary) and `external-ui-download` (force-disabled at compile
 # time on iOS; would only add the zip crate).
-meow-config = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc", features = ["boring-tls", "anytls"] }
-meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc" }
-meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc" }
-meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc", default-features = false, features = ["listener-mixed"] }
-meow-api = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc" }
-meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "041c986a24d28316498de6ad01a4460ae62b42cc" }
+meow-config = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e", features = ["boring-tls", "anytls"] }
+meow-dns = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e" }
+meow-tunnel = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e" }
+meow-listener = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e", default-features = false, features = ["listener-mixed"] }
+meow-api = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e" }
+meow-proxy = { git = "https://github.com/madeye/meow-rs", rev = "ac3fcd8d77ce437749b5f5e504dee020e0d99e0e" }
 
 [build-dependencies]
 cbindgen = "0.28"
