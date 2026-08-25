@@ -1,10 +1,8 @@
-• 稳定性：隧道的 TCP/IP 引擎彻底重构，修复了偶发的"显示已连接但没有流量"卡死问题——尤其是手机过夜休眠后
-• 更智能的唤醒处理：唤醒后先检查数据通路的真实状态，只在确有必要时才重启
-• DNS：配置文件的 dns: 段（nameserver、fallback、fake-ip-filter、nameserver-policy）现在会被尊重
-• 配置变更即时热加载，尽可能不中断连接
-• 设置中新增应用图标选择页，附两款新图标
-• "订阅"统一更名为"配置"
-• 全局模式现在走配置的主出站节点
-• 配置链接使用纯 http:// 时会给出明确错误提示
+• 代理引擎升级到 meow-rs 0.21.0，新增多路复用（sing-mux、yamux、h2mux、Mux.Cool），并修复 fake-IP、UDP NAT 与 REALITY/h2 稳定性问题
+• 从桌面端导出、带绝对路径规则/代理提供者的配置现在可以在 iOS 上启动
+• 配置了 dns.proxy-server-nameserver 时会生效
+• 卡住的 DIRECT 连接会在 10 秒超时，而不再一直挂起
+• 隧道会等应用发出第一个 TCP 数据包再建立代理连接，端口探测不再产生幽灵会话
+• 每个应用源端口共用一条 UDP ASSOCIATE，P2P/BitTorrent 集群不会再挤占 HTTPS
 
 问题与反馈：https://github.com/madeye/meow-ios/issues

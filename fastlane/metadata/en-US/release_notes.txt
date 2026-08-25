@@ -1,10 +1,8 @@
-• Reliability: the tunnel's TCP/IP engine was reworked from the ground up, fixing rare "connected but no traffic" freezes — especially after the phone sleeps overnight
-• Smarter wake handling: after waking, the tunnel checks its actual data path and only restarts when truly needed
-• DNS: the dns: section of your config (nameserver, fallback, fake-ip-filter, nameserver-policy) is now respected
-• Config changes apply instantly with hot reload, without dropping the connection where possible
-• New App Icon picker in Settings, with two additional icons
-• "Subscriptions" are now called "Configs" throughout the app
-• Global mode now routes through your config's primary outbound
-• Clearer error when a config URL uses plain http:// instead of https://
+• Proxy engine updated to meow-rs 0.21.0, adding multiplexing (sing-mux, yamux, h2mux, Mux.Cool) plus fake-IP, UDP NAT, and REALITY/h2 reliability fixes
+• Desktop-exported configs with absolute rule- or proxy-provider paths now start on iOS
+• dns.proxy-server-nameserver is honoured when set
+• Hung DIRECT connections time out in 10 seconds instead of hanging
+• The tunnel waits for the app's first TCP payload before opening a proxy connection, so port probes no longer create phantom sessions
+• One UDP ASSOCIATE per app source port, so P2P/BitTorrent swarms no longer starve HTTPS
 
 Issues and feedback: https://github.com/madeye/meow-ios/issues

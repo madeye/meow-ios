@@ -1,0 +1,9 @@
+Build 2026082201 (1.6.0)
+
+• Proxy engine updated to meow-rs 0.21.0: multiplexing (sing-mux, yamux, h2mux, Mux.Cool), fake-IP race fixes, safer UDP NAT, and REALITY/h2 hardening.
+• Desktop-exported configs with absolute rule-/proxy-provider paths now start on iOS instead of failing to load.
+• dns.proxy-server-nameserver is honoured when set.
+• Hung DIRECT connections time out in 10s instead of hanging until the idle sweeper.
+• TCP: the tunnel waits for the app's first payload before opening a proxy connection, so port probes and cancelled preconnects no longer create phantom sessions.
+• UDP: one SOCKS5 ASSOCIATE per app source port (not per peer), so P2P/BitTorrent swarms no longer starve HTTPS.
+• Please test: import a desktop Clash/meow config that uses rule-providers; browse normally; try a mux-enabled node if your subscription has one; leave the VPN connected overnight.

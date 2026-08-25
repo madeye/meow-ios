@@ -1,0 +1,9 @@
+构建 2026082201 (1.6.0)
+
+• 代理引擎升级到 meow-rs 0.21.0：支持多路复用（sing-mux、yamux、h2mux、Mux.Cool），修复 fake-IP 竞态，UDP NAT 更安全，并加固 REALITY/h2。
+• 从桌面端导出、带绝对路径 rule-providers / proxy-providers 的配置现在可以在 iOS 上启动，不再加载失败。
+• 配置了 dns.proxy-server-nameserver 时会生效。
+• 卡住的 DIRECT 连接会在 10 秒超时，而不再等到空闲清理。
+• TCP：隧道会等应用发出第一个数据包再建立代理连接，端口探测和被取消的预连接不再产生幽灵会话。
+• UDP：每个应用源端口共用一条 SOCKS5 ASSOCIATE（不再按对端拆），P2P/BitTorrent 集群不会再挤占 HTTPS。
+• 请测试：导入带 rule-providers 的桌面 Clash/meow 配置；正常浏览；如果订阅里有 mux 节点请试连；让 VPN 保持连接过夜。
