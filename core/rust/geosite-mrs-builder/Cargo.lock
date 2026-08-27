@@ -454,8 +454,8 @@ dependencies = [
 
 [[package]]
 name = "meow-common"
-version = "0.21.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac3fcd8d77ce437749b5f5e504dee020e0d99e0e#ac3fcd8d77ce437749b5f5e504dee020e0d99e0e"
+version = "0.21.1"
+source = "git+https://github.com/madeye/meow-rs?rev=bc38424bcea5efad18b4dbb2ebd679f54fc68531#bc38424bcea5efad18b4dbb2ebd679f54fc68531"
 dependencies = [
  "async-trait",
  "bytes",
@@ -478,8 +478,8 @@ dependencies = [
 
 [[package]]
 name = "meow-rules"
-version = "0.21.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac3fcd8d77ce437749b5f5e504dee020e0d99e0e#ac3fcd8d77ce437749b5f5e504dee020e0d99e0e"
+version = "0.21.1"
+source = "git+https://github.com/madeye/meow-rs?rev=bc38424bcea5efad18b4dbb2ebd679f54fc68531#bc38424bcea5efad18b4dbb2ebd679f54fc68531"
 dependencies = [
  "ipnet",
  "iprange",
@@ -495,8 +495,8 @@ dependencies = [
 
 [[package]]
 name = "meow-trie"
-version = "0.21.0"
-source = "git+https://github.com/madeye/meow-rs?rev=ac3fcd8d77ce437749b5f5e504dee020e0d99e0e#ac3fcd8d77ce437749b5f5e504dee020e0d99e0e"
+version = "0.21.1"
+source = "git+https://github.com/madeye/meow-rs?rev=bc38424bcea5efad18b4dbb2ebd679f54fc68531#bc38424bcea5efad18b4dbb2ebd679f54fc68531"
 
 [[package]]
 name = "minimal-lexical"
