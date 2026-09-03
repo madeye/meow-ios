@@ -18,6 +18,7 @@ final class AppModel {
     let dailyTrafficAccumulator: DailyTrafficAccumulator
     let utilityTrafficChart: UtilityTrafficChartStore
     let utilityLogs: UtilityLogsStore
+    let appIconStore: AppIconStore
 
     /// Monotonically bumped each time `replaySelectedProxies()` finishes a pass
     /// (successful replay, probe-timeout giveup, or no-active-profile no-op).
@@ -54,6 +55,7 @@ final class AppModel {
         )
         utilityTrafficChart = UtilityTrafficChartStore()
         utilityLogs = UtilityLogsStore()
+        appIconStore = AppIconStore()
         ipcBridge.onTrafficDidUpdate = { [utilityTrafficChart] snapshot in
             utilityTrafficChart.ingest(snapshot)
         }

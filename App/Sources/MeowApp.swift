@@ -15,6 +15,7 @@ struct MeowApp: App {
                 .environment(appModel.ipcBridge)
                 .environment(appModel.utilityTrafficChart)
                 .environment(appModel.utilityLogs)
+                .environment(appModel.appIconStore)
                 .task { await appModel.bootstrap() }
         }
         .modelContainer(AppModelContainer.shared.container)

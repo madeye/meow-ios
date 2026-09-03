@@ -69,6 +69,29 @@ struct AppIconTests {
         }
     }
 
+    @MainActor
+    @Test
+    func `every case has a status-glyph image in both connection states`() {
+        // VpnStatusGlyph mirrors the installed icon; a missing asset would
+        // blank the Home tab's leading glyph and nothing else.
+        for icon in AppIcon.allCases {
+            for connected in [true, false] {
+                let name = icon.glyphAssetName(connected: connected)
+                #expect(UIImage(named: name) != nil, "missing \(name) for \(icon.rawValue)")
+            }
+        }
+    }
+
+    @Test
+    func `only the pre-masked primary mascot skips the glyph squircle`() {
+        // AppMark's squircle lives in its alpha channel; masking it a second
+        // time would clip the artwork instead of shaping it.
+        #expect(AppIcon.primary.glyphCornerRadiusRatio == 0)
+        for icon in AppIcon.allCases where icon != .primary {
+            #expect(icon.glyphCornerRadiusRatio == AppIcon.squircleRadiusRatio)
+        }
+    }
+
     @Test
     func `every alternate icon is registered in the processed Info plist`() throws {
         // actool copies ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES

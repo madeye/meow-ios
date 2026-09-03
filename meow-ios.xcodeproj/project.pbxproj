@@ -55,6 +55,7 @@
 		4A6D4B20B4094E334F26892F /* TunBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC654683AAE620AA9C1DCEBF /* TunBridgeTests.swift */; };
 		4AFF0859870D8941AC3CE716 /* MeowIPC in Frameworks */ = {isa = PBXBuildFile; productRef = BE92B6925662A398B4A18E9C /* MeowIPC */; };
 		4C1FB9714B9308B7577B9622 /* MeowModels in Frameworks */ = {isa = PBXBuildFile; productRef = 564BE37A8BC742522CCABC5E /* MeowModels */; };
+		4C2A8D51E6B90F73C1284DA6 /* AppIconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B4E9C77A0F3D5628E71A409 /* AppIconStore.swift */; };
 		4E0EE8ED5787010E844F6F87 /* ShadowsocksURIEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FF63D9219A475F002F2734 /* ShadowsocksURIEncoder.swift */; };
 		4E366621A02CAF97E4AA2EF2 /* RulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE160D91FCAFCD07383E8CB5 /* RulesTests.swift */; };
 		4F29B935B393F48182AC7CE4 /* MWIPCListener.m in Sources */ = {isa = PBXBuildFile; fileRef = 329B260F122D91D5DDB24C44 /* MWIPCListener.m */; };
@@ -104,6 +105,7 @@
 		997AE63C0D074EA6370C5DA8 /* SwiftDataTestContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7B8DF88EDD0D51301DD316 /* SwiftDataTestContainer.swift */; };
 		9ADDC891C0BCC6053E86E2E2 /* SubscriptionConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 601ADF66737508CC359C4936 /* SubscriptionConverter.swift */; };
 		9D59A8F980E180CECE858F27 /* DnsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E8157E43AE62A3A59DDD5C /* DnsTests.swift */; };
+		9D610FA34B8E27C5A6F0138B /* AppIconStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5F30B29C4A18D6F0537B12 /* AppIconStoreTests.swift */; };
 		9D8A3062281941D5B04CD09D /* YamlEditorFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BA2BC08659A01899A4DB2CC /* YamlEditorFlowTests.swift */; };
 		9DAD82C550F44D6A48D1675D /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 5E3965E4A9673CFDC438D5F0 /* Yams */; };
 		A0ACD40A0E0CF4DFABDA8903 /* ConnectionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC43530025FE948C50C6C78E /* ConnectionsTests.swift */; };
@@ -218,6 +220,7 @@
 		1509E80EF5E3A28E045FE8C9 /* GeoLite2-ASN.mmdb */ = {isa = PBXFileReference; path = "GeoLite2-ASN.mmdb"; sourceTree = "<group>"; };
 		1711243E170547D1DA68FCD6 /* RuleEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleEditorSheet.swift; sourceTree = "<group>"; };
 		1B3F7EB51045141F84569793 /* UtilitySessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilitySessionStore.swift; sourceTree = "<group>"; };
+		1B4E9C77A0F3D5628E71A409 /* AppIconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconStore.swift; sourceTree = "<group>"; };
 		1C50CF82F4373D42432869C5 /* MWPacketWriter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWPacketWriter.m; sourceTree = "<group>"; };
 		1CCF322677C8A124E9D9107D /* MWDiagnosticsRunner.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MWDiagnosticsRunner.m; sourceTree = "<group>"; };
 		1F7BB3C0C2648B6097E52E53 /* UtilityScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilityScreenTests.swift; sourceTree = "<group>"; };
@@ -275,6 +278,7 @@
 		797EA53C272DDA3EC6E73E6F /* MWDarwinBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MWDarwinBridge.h; sourceTree = "<group>"; };
 		7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoAssetStagerTests.swift; sourceTree = "<group>"; };
 		7D936CF5D2CCA1B2D180C2D6 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellTests.swift; sourceTree = "<group>"; };
+		7E5F30B29C4A18D6F0537B12 /* AppIconStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconStoreTests.swift; sourceTree = "<group>"; };
 		819D62E17DBC5BC82869FA81 /* URLProtocolStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolStub.swift; sourceTree = "<group>"; };
 		86AFFBA5F04A152705EE60CA /* AccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityTests.swift; sourceTree = "<group>"; };
 		8A1CBAFD55A777C3B13296E2 /* RulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesView.swift; sourceTree = "<group>"; };
@@ -508,6 +512,7 @@
 		546289FB1F7F3C7197D240BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				7E5F30B29C4A18D6F0537B12 /* AppIconStoreTests.swift */,
 				8B8C6076C2AFE3F87452DDEF /* DeepLinkImportConfirmationTests.swift */,
 				7D8C1AC6AD4590D6827E6188 /* GeoAssetStagerTests.swift */,
 				DF623F1E34B38A27E15C6B36 /* QRCodeRendererTests.swift */,
@@ -615,6 +620,7 @@
 			isa = PBXGroup;
 			children = (
 				6C69499C9815F48EC9AB924E /* AppIPCBridge.swift */,
+				1B4E9C77A0F3D5628E71A409 /* AppIconStore.swift */,
 				F582EC213C10F2BB97940B21 /* ClashConfigLinter.swift */,
 				664BEEB7B966973C3D0A5074 /* DailyTrafficAccumulator.swift */,
 				2583E90C66D44FFDC834DAB9 /* DeepLinkImportConfirmation.swift */,
@@ -1166,6 +1172,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9D610FA34B8E27C5A6F0138B /* AppIconStoreTests.swift in Sources */,
 				50F7C0F2F8B850202089F7AE /* AppIconTests.swift in Sources */,
 				F3F6C8C58BB119BAA42C632B /* ChinaDirectKeywordsTests.swift in Sources */,
 				A0ACD40A0E0CF4DFABDA8903 /* ConnectionsTests.swift in Sources */,
@@ -1213,6 +1220,7 @@
 				DCC6938C0A43984B033BCD68 /* AppIPCBridge.swift in Sources */,
 				4FF1E4C061CE8323A6C981D1 /* AppIcon.swift in Sources */,
 				1D0E4DFB12DCCF45036E06CA /* AppIconPickerView.swift in Sources */,
+				4C2A8D51E6B90F73C1284DA6 /* AppIconStore.swift in Sources */,
 				ADBD29F9A34A3AF34057D104 /* AppModel.swift in Sources */,
 				B2761759D155051F32B46F2D /* AppModelContainer.swift in Sources */,
 				A582A655A6EA5FF633395AD9 /* ChinaDirectKeywords.swift in Sources */,

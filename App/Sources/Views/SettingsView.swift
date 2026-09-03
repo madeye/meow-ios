@@ -3,16 +3,10 @@ import MeowModels
 import NetworkExtension
 import OSLog
 import SwiftUI
-import UIKit
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @State private var preferences: Preferences = .load(from: AppGroup.defaults)
-    /// Seeded from the live `UIApplication.alternateIconName` on appear, then
-    /// handed to `AppIconPickerView` as its selection. The picker owns both
-    /// reading the tap and applying the change; this only supplies the
-    /// starting value.
-    @State private var appIcon: AppIcon = .primary
     @State private var memoryMB: Int64?
     @State private var logExportDocument: LogExportDocument?
     @State private var showingLogExporter = false
@@ -22,6 +16,7 @@ struct SettingsView: View {
     #endif
     @Environment(VpnManager.self) private var vpnManager
     @Environment(AppIPCBridge.self) private var ipcBridge
+    @Environment(AppIconStore.self) private var appIconStore
 
     var body: some View {
         Form {
@@ -60,9 +55,9 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.picker.logLevel")
                 // Hidden where the platform can't switch icons (e.g. iPad
                 // apps running on macOS report supportsAlternateIcons=false).
-                if UIApplication.shared.supportsAlternateIcons {
+                if appIconStore.isSupported {
                     NavigationLink("settings.label.appIcon") {
-                        AppIconPickerView(selection: $appIcon)
+                        AppIconPickerView()
                     }
                     .accessibilityIdentifier("settings.nav.appIcon")
                     .accessibilityHint(Text("a11y.settings.appIcon.hint"))
@@ -155,7 +150,6 @@ struct SettingsView: View {
                 Task { await vpnManager.refresh() }
             }
             .task {
-                appIcon = AppIcon(alternateIconName: UIApplication.shared.alternateIconName)
                 await pollMemory()
             }
             .fileExporter(

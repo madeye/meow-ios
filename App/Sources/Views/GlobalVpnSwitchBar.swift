@@ -185,12 +185,29 @@ struct VpnStatusGlyph: View {
     let stage: VpnStage
     var size: CGFloat = 54
 
+    @Environment(AppIconStore.self) private var appIconStore
+
+    private var icon: AppIcon {
+        appIconStore.current
+    }
+
     var body: some View {
         ZStack {
-            Image(stage == .connected ? "AppMarkConnected" : "AppMark")
+            // Tracks the installed Home Screen icon: the glyph is the app's
+            // self-portrait, so leaving it on the default mascot after a
+            // switch in Settings read as a bug. The mask rounds the
+            // alternates' full-bleed artwork and is a no-op (radius 0) for the
+            // primary mascot, which is pre-masked.
+            Image(icon.glyphAssetName(connected: stage == .connected))
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: size * icon.glyphCornerRadiusRatio,
+                        style: .continuous,
+                    ),
+                )
         }
         .overlay(alignment: .bottomTrailing) {
             StageDot(stage: stage, size: max(8, size * 0.19))

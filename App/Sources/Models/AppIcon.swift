@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// The Home Screen icons the user can pick in Settings → App Icon. `primary`
@@ -20,6 +21,21 @@ enum AppIcon: String, CaseIterable, Identifiable {
     case sunset = "AppIconSunset"
     /// Black cat resting on a moonlit wall (`AppIconMidnight.appiconset`).
     case midnight = "AppIconMidnight"
+
+    /// Fraction of an icon's width that iOS rounds off when it masks artwork
+    /// for the Home Screen. The picker rows and the in-app status glyph both
+    /// mask with this, so an icon reads as the same shape wherever it appears.
+    static let squircleRadiusRatio: CGFloat = 0.22
+
+    /// Corner-radius fraction the status glyph masks this icon's artwork with.
+    ///
+    /// Zero for the primary mascot: its squircle is baked into the alpha
+    /// channel, and re-masking a shape that is already rounded would only
+    /// shave artwork off the corners. The alternates are full-bleed Home
+    /// Screen art, so the glyph has to round them itself.
+    var glyphCornerRadiusRatio: CGFloat {
+        self == .primary ? 0 : Self.squircleRadiusRatio
+    }
 
     var id: String {
         rawValue
@@ -50,5 +66,19 @@ enum AppIcon: String, CaseIterable, Identifiable {
     /// (an icon dropped in an app update) fall back to `.primary`.
     init(alternateIconName: String?) {
         self = alternateIconName.flatMap(AppIcon.init(rawValue:)) ?? .primary
+    }
+
+    /// Asset the in-app status glyph draws while this icon is installed.
+    ///
+    /// The primary icon ships a dedicated pair of transparent-cornered
+    /// mascots — `AppMarkConnected` hangs a paw over the wall while the tunnel
+    /// is up. The alternates exist only as full-bleed Home Screen art, so they
+    /// reuse the picker's preview and lean on the glyph's stage dot alone to
+    /// show connection state.
+    func glyphAssetName(connected: Bool) -> String {
+        switch self {
+        case .primary: connected ? "AppMarkConnected" : "AppMark"
+        case .leap, .sunset, .midnight: previewAssetName
+        }
     }
 }
