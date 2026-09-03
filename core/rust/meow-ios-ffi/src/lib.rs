@@ -765,6 +765,109 @@ fn primary_proxy_target(root: &serde_yaml::Mapping) -> Option<String> {
 /// The remaining members preserve mihomo's "GLOBAL lists everything" contract
 /// for external frontends. A config that declares its own `GLOBAL` is left
 /// alone.
+/// Port of a `dns.listen` value (`host:port`, IPv6 in brackets, or a bare
+/// port). Returns `None` for anything that does not end in a numeric port.
+fn parse_listen_port(listen: &str) -> Option<u16> {
+    let listen = listen.trim();
+    if listen.is_empty() {
+        return None;
+    }
+    if let Ok(addr) = listen.parse::<std::net::SocketAddr>() {
+        return Some(addr.port());
+    }
+    listen
+        .rsplit_once(':')
+        .map(|(_, port)| port)
+        .unwrap_or(listen)
+        .parse::<u16>()
+        .ok()
+}
+
+/// True when `host` names the local machine — the only hosts on which the
+/// config's own `dns.listen` socket could have been reachable.
+fn is_local_host(host: &str) -> bool {
+    let host = host.trim_matches(|c| c == '[' || c == ']');
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip.is_loopback() || ip.is_unspecified(),
+        Err(_) => false,
+    }
+}
+
+/// Rewrite one nameserver entry (`[scheme://]host:port[/path][#tag]`) whose
+/// `host:port` is the config's own listen socket on `user_port` so it targets
+/// the relocated listener on `127.0.0.1:{new_port}`. Everything else — other
+/// hosts, other ports, DoH/DoT URLs to real servers — is returned unchanged.
+fn rewrite_self_referential_nameserver(entry: &str, user_port: u16, new_port: u16) -> String {
+    let (scheme, rest) = match entry.split_once("://") {
+        Some((scheme, rest)) => (Some(scheme), rest),
+        None => (None, entry),
+    };
+    // Only plain/UDP/TCP entries can address the listener; DoH/DoT/QUIC
+    // schemes would need a TLS stack the listener does not have.
+    if !matches!(scheme, None | Some("udp") | Some("tcp")) {
+        return entry.to_string();
+    }
+    let (authority, suffix) = match rest.find(['/', '#', '?']) {
+        Some(idx) => rest.split_at(idx),
+        None => (rest, ""),
+    };
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) if !host.is_empty() => (host, port),
+        _ => return entry.to_string(),
+    };
+    let Ok(port) = port.parse::<u16>() else {
+        return entry.to_string();
+    };
+    if port != user_port || !is_local_host(host) {
+        return entry.to_string();
+    }
+    let scheme = scheme.map(|s| format!("{s}://")).unwrap_or_default();
+    format!("{scheme}127.0.0.1:{new_port}{suffix}")
+}
+
+/// Apply [`rewrite_self_referential_nameserver`] to every nameserver list in
+/// the `dns` block, plus the values of `nameserver-policy` (string or list).
+fn rewrite_self_referential_nameservers(
+    dns: &mut serde_yaml::Mapping,
+    user_port: u16,
+    new_port: u16,
+) {
+    fn rewrite_value(value: &mut serde_yaml::Value, user_port: u16, new_port: u16) {
+        match value {
+            serde_yaml::Value::String(entry) => {
+                *entry = rewrite_self_referential_nameserver(entry, user_port, new_port);
+            }
+            serde_yaml::Value::Sequence(list) => {
+                for item in list {
+                    rewrite_value(item, user_port, new_port);
+                }
+            }
+            _ => {}
+        }
+    }
+    for key in [
+        "nameserver",
+        "fallback",
+        "default-nameserver",
+        "proxy-server-nameserver",
+        "direct-nameserver",
+    ] {
+        if let Some(value) = dns.get_mut(serde_yaml::Value::String(key.into())) {
+            rewrite_value(value, user_port, new_port);
+        }
+    }
+    if let Some(serde_yaml::Value::Mapping(policy)) =
+        dns.get_mut(serde_yaml::Value::String("nameserver-policy".into()))
+    {
+        for (_, value) in policy.iter_mut() {
+            rewrite_value(value, user_port, new_port);
+        }
+    }
+}
+
 fn inject_global_selector(root: &mut serde_yaml::Mapping, primary: &str) {
     let groups = declared_names(root, "proxy-groups");
     let proxies = declared_names(root, "proxies");
@@ -904,6 +1007,21 @@ pub unsafe extern "C" fn meow_patch_config(
         Some(serde_yaml::Value::Mapping(user_dns)) => user_dns,
         _ => serde_yaml::Mapping::new(),
     };
+    // Some subscriptions (Nexitally, for one) point `proxy-server-nameserver`
+    // (or `nameserver`/`fallback`) at the config's own `dns.listen` socket,
+    // e.g. `udp://127.0.0.1:7874` with `listen: 127.0.0.1:7874`, so proxy
+    // server hostnames resolve through the listener and pick up its
+    // fake-ip-filter + upstream choice. We pin `listen` to our own port
+    // below, which would leave those entries dialing a closed socket — and
+    // the proxy-server resolver has no fallback, so every node fails with
+    // "no address for <server>". Re-point them at the relocated listener.
+    let user_listen_port = dns
+        .get("listen")
+        .and_then(serde_yaml::Value::as_str)
+        .and_then(parse_listen_port);
+    if let Some(user_port) = user_listen_port {
+        rewrite_self_referential_nameservers(&mut dns, user_port, dns_port as u16);
+    }
     for (k, v) in [
         ("enable", serde_yaml::Value::Bool(true)),
         (
@@ -1344,7 +1462,7 @@ pub extern "C" fn meow_resident_bytes() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::meow_patch_config;
+    use super::{meow_patch_config, parse_listen_port};
     use std::ffi::CString;
 
     fn patch_config(yaml: &str, mixed_port: i32, allow_lan: i32, dns_port: i32) -> String {
@@ -1378,6 +1496,115 @@ mod tests {
             .map(|b| b as u8)
             .collect::<Vec<_>>();
         String::from_utf8(bytes).expect("patched yaml is utf8")
+    }
+
+    #[test]
+    fn patch_config_repoints_nameservers_at_relocated_dns_listener() {
+        // Nexitally-style: proxy-server-nameserver dials the config's own
+        // listener. After we pin `listen` to our port the entry must follow.
+        let patched = patch_config(
+            r#"
+dns:
+  enable: true
+  listen: 127.0.0.1:7874
+  proxy-server-nameserver:
+    - udp://127.0.0.1:7874
+    - tcp://[::1]:7874#Proxies
+  default-nameserver:
+    - 223.5.5.5
+  nameserver:
+    - https://kfzzxcx.com:44443/dns-query/f2c7731d
+    - 127.0.0.1:7874
+    - 127.0.0.1:7875
+    - udp://10.0.0.1:7874
+    - https://127.0.0.1:7874/dns-query
+  fallback:
+    - localhost:7874
+  nameserver-policy:
+    "geosite:cn": udp://0.0.0.0:7874
+    "+.example.com": [127.0.0.1:7874, 1.1.1.1]
+proxies:
+  - {name: a, type: socks5, server: 127.0.0.1, port: 1}
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+        let dns = doc["dns"].as_mapping().expect("dns mapping");
+        assert_eq!(dns["listen"].as_str(), Some("127.0.0.1:1053"));
+        let list = |key: &str| -> Vec<String> {
+            dns[key]
+                .as_sequence()
+                .expect(key)
+                .iter()
+                .map(|v| v.as_str().expect("string entry").to_string())
+                .collect()
+        };
+        assert_eq!(
+            list("proxy-server-nameserver"),
+            vec!["udp://127.0.0.1:1053", "tcp://127.0.0.1:1053#Proxies"]
+        );
+        assert_eq!(list("default-nameserver"), vec!["223.5.5.5"]);
+        assert_eq!(
+            list("nameserver"),
+            vec![
+                "https://kfzzxcx.com:44443/dns-query/f2c7731d",
+                "127.0.0.1:1053",
+                "127.0.0.1:7875",
+                "udp://10.0.0.1:7874",
+                "https://127.0.0.1:7874/dns-query",
+                "119.29.29.29",
+                "223.5.5.5",
+            ]
+        );
+        assert_eq!(list("fallback"), vec!["127.0.0.1:1053"]);
+        let policy = dns["nameserver-policy"].as_mapping().expect("policy");
+        assert_eq!(policy["geosite:cn"].as_str(), Some("udp://127.0.0.1:1053"));
+        assert_eq!(
+            policy["+.example.com"]
+                .as_sequence()
+                .expect("list")
+                .iter()
+                .map(|v| v.as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["127.0.0.1:1053", "1.1.1.1"]
+        );
+    }
+
+    #[test]
+    fn patch_config_leaves_nameservers_alone_without_user_listen() {
+        let patched = patch_config(
+            r#"
+dns:
+  enable: true
+  proxy-server-nameserver:
+    - udp://127.0.0.1:7874
+rules:
+  - MATCH,DIRECT
+"#,
+            7890,
+            0,
+            1053,
+        );
+        let doc: serde_yaml::Value = serde_yaml::from_str(&patched).expect("patched yaml");
+        assert_eq!(
+            doc["dns"]["proxy-server-nameserver"][0].as_str(),
+            Some("udp://127.0.0.1:7874")
+        );
+    }
+
+    #[test]
+    fn parse_listen_port_accepts_common_forms() {
+        assert_eq!(parse_listen_port("127.0.0.1:7874"), Some(7874));
+        assert_eq!(parse_listen_port("0.0.0.0:53"), Some(53));
+        assert_eq!(parse_listen_port("[::]:1053"), Some(1053));
+        assert_eq!(parse_listen_port(":7874"), Some(7874));
+        assert_eq!(parse_listen_port("7874"), Some(7874));
+        assert_eq!(parse_listen_port(""), None);
+        assert_eq!(parse_listen_port("127.0.0.1"), None);
     }
 
     #[test]
