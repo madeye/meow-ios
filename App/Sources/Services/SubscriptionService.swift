@@ -132,17 +132,29 @@ final class SubscriptionService {
         try modelContext.save()
     }
 
-    /// Edit a profile's display name and update URL without touching its YAML
-    /// body. A changed URL takes effect on the next `refresh(_:)` — the stored
-    /// config is left as-is here. Attaching a URL to a previously local-only
-    /// import (empty `url`) promotes it to a refreshable subscription.
-    func updateInfo(_ profile: Profile, name: String, url: String) throws {
+    /// Edit a profile's display name, update URL, and auto-update cadence
+    /// without touching its YAML body. A changed URL takes effect on the next
+    /// `refresh(_:)` — the stored config is left as-is here. Attaching a URL to
+    /// a previously local-only import (empty `url`) promotes it to a
+    /// refreshable subscription.
+    ///
+    /// A cadence is only meaningful with a URL to fetch, so clearing the URL
+    /// also forces `.manual`: the editor hides the cadence picker for URL-less
+    /// profiles, and persisting a value the UI can't show would silently
+    /// resume that cadence if a URL were ever re-attached.
+    func updateInfo(
+        _ profile: Profile,
+        name: String,
+        url: String,
+        updateInterval: ProfileUpdateInterval,
+    ) throws {
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedURL.isEmpty {
             try Self.rejectPlainHTTP(trimmedURL)
         }
         profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.url = trimmedURL
+        profile.updateInterval = trimmedURL.isEmpty ? .manual : updateInterval
         try modelContext.save()
     }
 

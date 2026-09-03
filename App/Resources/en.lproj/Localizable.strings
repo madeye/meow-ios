@@ -76,6 +76,11 @@
 "subscriptions.editInfo.nav.title" = "Edit Config";
 "subscriptions.editInfo.button.save" = "Save";
 "subscriptions.editInfo.footer" = "Changes to the URL take effect on the next refresh.";
+"subscriptions.editInfo.updateInterval" = "Auto-update";
+"subscriptions.editInfo.updateInterval.footer" = "meow refetches this config when you open the app and the chosen interval has elapsed. Swipe a row either direction to update it right now.";
+"subscriptions.updateInterval.manual" = "Never";
+"subscriptions.updateInterval.daily" = "Every day";
+"subscriptions.updateInterval.weekly" = "Every week";
 "subscriptions.import.errorTitle" = "Couldn't import config";
 "subscriptions.row.updatedAgo %@" = "Updated %@ ago";
 "subscriptions.row.a11y.edit %@" = "Edit YAML for %@";
@@ -383,6 +388,7 @@
 "subscriptions.row.a11y.selectHint" = "Activates this config";
 "subscriptions.row.a11y.editHint" = "Opens YAML editor";
 "subscriptions.row.a11y.refreshHint" = "Fetches the latest config from the remote URL";
+"subscriptions.editInfo.a11y.updateIntervalHint" = "Chooses how often this config refetches itself";
 
 
 /* Accessibility — Traffic charts */

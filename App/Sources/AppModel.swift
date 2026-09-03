@@ -16,6 +16,7 @@ final class AppModel {
     let subscriptionService: SubscriptionService
     let ipcBridge: AppIPCBridge
     let dailyTrafficAccumulator: DailyTrafficAccumulator
+    let profileAutoUpdater: ProfileAutoUpdater
     let utilityTrafficChart: UtilityTrafficChartStore
     let utilityLogs: UtilityLogsStore
 
@@ -52,6 +53,10 @@ final class AppModel {
         dailyTrafficAccumulator = DailyTrafficAccumulator(
             modelContext: AppModelContainer.shared.container.mainContext,
         )
+        profileAutoUpdater = ProfileAutoUpdater(
+            modelContext: AppModelContainer.shared.container.mainContext,
+            service: subscriptionService,
+        )
         utilityTrafficChart = UtilityTrafficChartStore()
         utilityLogs = UtilityLogsStore()
         ipcBridge.onTrafficDidUpdate = { [utilityTrafficChart] snapshot in
@@ -83,6 +88,11 @@ final class AppModel {
         await vpnManager.refresh()
         ipcBridge.start()
         dailyTrafficAccumulator.start()
+        // Kicked off here as well as from the scene-phase observer in
+        // `MeowApp` so a cold launch runs its first due-check without waiting
+        // for a phase *change* — the initial `.active` never fires an
+        // `onChange`. `start()` is idempotent, so the two paths can't stack.
+        profileAutoUpdater.start()
         utilityLogs.startStreaming(api: meowAPI)
     }
 

@@ -82,6 +82,11 @@
 "subscriptions.editInfo.nav.title" = "编辑配置";
 "subscriptions.editInfo.button.save" = "保存";
 "subscriptions.editInfo.footer" = "网址的更改将在下次刷新时生效。";
+"subscriptions.editInfo.updateInterval" = "自动更新";
+"subscriptions.editInfo.updateInterval.footer" = "打开 app 时，若距上次更新已超过所选间隔，meow 会自动重新拉取此配置。左右滑动配置行可立即更新。";
+"subscriptions.updateInterval.manual" = "不自动更新";
+"subscriptions.updateInterval.daily" = "每天更新";
+"subscriptions.updateInterval.weekly" = "每周更新";
 "subscriptions.import.errorTitle" = "导入配置失败";
 "subscriptions.row.updatedAgo %@" = "%@前更新";
 "subscriptions.row.a11y.edit %@" = "编辑 %@ 的 YAML";
@@ -389,6 +394,7 @@
 "subscriptions.row.a11y.selectHint" = "激活此配置";
 "subscriptions.row.a11y.editHint" = "打开 YAML 编辑器";
 "subscriptions.row.a11y.refreshHint" = "从远程地址获取最新配置";
+"subscriptions.editInfo.a11y.updateIntervalHint" = "选择此配置自动重新拉取的频率";
 
 
 /* Accessibility — Traffic charts */

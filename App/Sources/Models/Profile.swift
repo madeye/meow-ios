@@ -19,6 +19,13 @@ final class Profile {
     /// JSON-encoded `[groupName: proxyName]` — last manual selections restored
     /// on reconnect.
     var selectedProxiesJSON: String
+    /// Raw `ProfileUpdateInterval` backing this profile's automatic-refresh
+    /// cadence. Stored as the enum's raw string rather than the enum itself so
+    /// an unrecognised value decodes to a fallback instead of failing the
+    /// store open — same reasoning as `selectedProxiesJSON`. The default value
+    /// is what lets SwiftData migrate existing stores in place: profiles that
+    /// predate the setting read back as `.manual`.
+    var updateIntervalRaw: String = ProfileUpdateInterval.fallback.rawValue
 
     init(
         id: UUID = UUID(),
@@ -31,6 +38,7 @@ final class Profile {
         txBytes: Int64 = 0,
         rxBytes: Int64 = 0,
         selectedProxiesJSON: String = "{}",
+        updateInterval: ProfileUpdateInterval = .fallback,
     ) {
         self.id = id
         self.name = name
@@ -42,6 +50,13 @@ final class Profile {
         self.txBytes = txBytes
         self.rxBytes = rxBytes
         self.selectedProxiesJSON = selectedProxiesJSON
+        updateIntervalRaw = updateInterval.rawValue
+    }
+
+    /// Typed view of `updateIntervalRaw`.
+    var updateInterval: ProfileUpdateInterval {
+        get { ProfileUpdateInterval(storedRawValue: updateIntervalRaw) }
+        set { updateIntervalRaw = newValue.rawValue }
     }
 
     var selectedProxies: [String: String] {

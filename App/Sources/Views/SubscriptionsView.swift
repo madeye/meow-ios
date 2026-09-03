@@ -39,12 +39,7 @@ struct SubscriptionsView: View {
                                         .accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(profile.name).font(.headline)
-                                        Text(
-                                            "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
-                                            comment: "Subscription row subtitle; %@ = relative time since last update",
-                                        )
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        rowSubtitle(profile)
                                     }
                                     Spacer(minLength: 0)
                                 }
@@ -123,7 +118,23 @@ struct SubscriptionsView: View {
                         .tint(AppTheme.accent)
                         .accessibilityIdentifier("subscriptions.row.editInfo")
                     }
+                    // Refresh is declared first so it — not Delete — is what a
+                    // full left-swipe triggers. Deleting the selected profile
+                    // also clears `config.yaml`, which is far too destructive
+                    // to sit behind an accidental flick; Delete stays one tap
+                    // away on a partial swipe.
                     .swipeActions(edge: .trailing) {
+                        if !profile.url.isEmpty {
+                            Button {
+                                Task { try? await service.refresh(profile) }
+                            } label: {
+                                Label("subscriptions.refresh.swipe", systemImage: "arrow.clockwise")
+                            }
+                            .tint(.blue)
+                            .accessibilityLabel(Text("subscriptions.row.a11y.refresh \(profile.name)"))
+                            .accessibilityHint(Text("subscriptions.row.a11y.refreshHint"))
+                            .accessibilityIdentifier("subscriptions.row.refreshTrailing")
+                        }
                         Button(role: .destructive) {
                             try? service.delete(profile)
                         } label: {
@@ -184,6 +195,28 @@ struct SubscriptionsView: View {
         } message: {
             Text(error ?? "")
         }
+    }
+
+    /// "Updated 3 min ago", plus a clock badge naming the cadence for a
+    /// profile that auto-updates — without it the setting is invisible outside
+    /// the edit sheet. URL-less profiles never auto-update (nothing to
+    /// refetch), so they never show the badge regardless of stored value.
+    private func rowSubtitle(_ profile: Profile) -> some View {
+        HStack(spacing: 6) {
+            Text(
+                "subscriptions.row.updatedAgo \(profile.lastUpdated, style: .relative)",
+                comment: "Subscription row subtitle; %@ = relative time since last update",
+            )
+            if profile.updateInterval != .manual, !profile.url.isEmpty {
+                Label(
+                    LocalizedStringKey(profile.updateInterval.titleKey),
+                    systemImage: "clock.arrow.circlepath",
+                )
+                .accessibilityIdentifier("subscriptions.row.autoUpdateBadge")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private var emptySubscriptionCard: some View {
@@ -270,7 +303,11 @@ struct SubscriptionsView: View {
         .accessibilityLabel(Text("subscriptions.toolbar.a11y.add"))
         .accessibilityIdentifier(identifier)
     }
+}
 
+// MARK: - File import
+
+extension SubscriptionsView {
     /// File picker accepts YAML proper plus `.txt` and unspecified data —
     /// iCloud Drive routinely serves Clash configs uploaded from desktops
     /// where the OS tagged them as `public.plain-text` or just `public.data`,
@@ -401,9 +438,10 @@ private struct AddSubscriptionSheet: View {
     }
 }
 
-/// Edits a subscription's name and update URL only — the YAML body is left
-/// untouched (that's what the pencil / `YamlEditorView` is for). A changed URL
-/// is picked up on the next refresh, not immediately. See issue #182.
+/// Edits a subscription's name, update URL, and auto-update cadence only — the
+/// YAML body is left untouched (that's what the pencil / `YamlEditorView` is
+/// for). A changed URL is picked up on the next refresh, not immediately. See
+/// issue #182.
 private struct EditSubscriptionInfoSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionService.self) private var service
@@ -411,12 +449,14 @@ private struct EditSubscriptionInfoSheet: View {
     @Binding var error: String?
     @State private var name: String
     @State private var url: String
+    @State private var updateInterval: ProfileUpdateInterval
 
     init(profile: Profile, error: Binding<String?>) {
         self.profile = profile
         _error = error
         _name = State(initialValue: profile.name)
         _url = State(initialValue: profile.url)
+        _updateInterval = State(initialValue: profile.updateInterval)
     }
 
     var body: some View {
@@ -433,6 +473,23 @@ private struct EditSubscriptionInfoSheet: View {
                 } footer: {
                     Text("subscriptions.editInfo.footer")
                 }
+                // A cadence needs a URL to fetch, so the picker follows what's
+                // typed in the field rather than what was saved: attaching a
+                // URL to a local import reveals it, clearing one hides it (and
+                // `updateInfo` forces `.manual` to match).
+                if !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Section {
+                        Picker("subscriptions.editInfo.updateInterval", selection: $updateInterval) {
+                            ForEach(ProfileUpdateInterval.allCases) { interval in
+                                Text(LocalizedStringKey(interval.titleKey)).tag(interval)
+                            }
+                        }
+                        .accessibilityIdentifier("subscriptions.editInfo.updateIntervalPicker")
+                        .accessibilityHint(Text("subscriptions.editInfo.a11y.updateIntervalHint"))
+                    } footer: {
+                        Text("subscriptions.editInfo.updateInterval.footer")
+                    }
+                }
             }
             .navigationTitle("subscriptions.editInfo.nav.title")
             .navigationBarTitleDisplayMode(.inline)
@@ -443,7 +500,12 @@ private struct EditSubscriptionInfoSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("subscriptions.editInfo.button.save") {
                         do {
-                            try service.updateInfo(profile, name: name, url: url)
+                            try service.updateInfo(
+                                profile,
+                                name: name,
+                                url: url,
+                                updateInterval: updateInterval,
+                            )
                             dismiss()
                         } catch {
                             self.error = error.localizedDescription

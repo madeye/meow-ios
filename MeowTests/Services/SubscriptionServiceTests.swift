@@ -69,7 +69,12 @@ struct SubscriptionServiceTests {
         context.insert(profile)
         try context.save()
 
-        try service.updateInfo(profile, name: "New Name", url: "https://example.com/b.yaml")
+        try service.updateInfo(
+            profile,
+            name: "New Name",
+            url: "https://example.com/b.yaml",
+            updateInterval: .manual,
+        )
 
         #expect(profile.name == "New Name")
         #expect(profile.url == "https://example.com/b.yaml")
@@ -93,11 +98,40 @@ struct SubscriptionServiceTests {
         try context.save()
 
         // Attaching a URL to a previously local-only import promotes it.
-        try service.updateInfo(profile, name: "  Trimmed  ", url: "  https://example.com/c.yaml  ")
+        try service.updateInfo(
+            profile,
+            name: "  Trimmed  ",
+            url: "  https://example.com/c.yaml  ",
+            updateInterval: .daily,
+        )
 
         #expect(profile.name == "Trimmed")
         #expect(profile.url == "https://example.com/c.yaml")
         #expect(profile.yamlContent == body)
+        #expect(profile.updateInterval == .daily)
+    }
+
+    @Test
+    @MainActor
+    func `updateInfo forces manual cadence when the URL is cleared`() throws {
+        let harness = try makeService()
+        let service = harness.service
+        let context = harness.context
+        let profile = Profile(
+            name: "Sub",
+            url: "https://example.com/a.yaml",
+            yamlContent: "proxies: []\n",
+            updateInterval: .weekly,
+        )
+        context.insert(profile)
+        try context.save()
+
+        // Cadence is meaningless without a URL to refetch, and the editor
+        // hides the picker in that state — so it must not survive the save.
+        try service.updateInfo(profile, name: "Sub", url: "  ", updateInterval: .weekly)
+
+        #expect(profile.url.isEmpty)
+        #expect(profile.updateInterval == .manual)
     }
 
     // MARK: - Plain-HTTP config URLs are rejected with an explanation (ATS blocks the fetch)
@@ -122,7 +156,12 @@ struct SubscriptionServiceTests {
         try harness.context.save()
 
         #expect(throws: SubscriptionError.insecureHTTPURL) {
-            try harness.service.updateInfo(profile, name: "New", url: "  HTTP://example.com/a.yaml ")
+            try harness.service.updateInfo(
+                profile,
+                name: "New",
+                url: "  HTTP://example.com/a.yaml ",
+                updateInterval: profile.updateInterval,
+            )
         }
         #expect(profile.name == "Old")
         #expect(profile.url == "https://example.com/a.yaml")
